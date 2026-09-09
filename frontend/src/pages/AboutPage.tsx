@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
-import { Mail, Phone, MapPin, Target, Eye, Heart } from 'lucide-react';
+import { Mail, Phone, MapPin, Target, Eye, Heart, Sparkles } from 'lucide-react';
 
 interface CompanyData {
   name: string; tagline: string; mission: string; vision: string; about: string;
@@ -97,25 +97,85 @@ const AboutPage: React.FC = () => {
             <p className="text-text-secondary leading-relaxed text-base">{c.about}</p>
           </div>
 
-          {/* Founders */}
-          <div className="mb-16">
-            <h2 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-8 text-center">
-              Meet Our <span className="text-gradient">Founders</span>
-            </h2>
-            <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-              {c.founders.map(founder => (
-                <div key={founder.name} className="card-soft p-6 text-center">
-                  <img
-                    src={founder.photo}
-                    alt={founder.name}
-                    className="w-24 h-24 rounded-full object-cover mx-auto mb-4 border-2 border-brand-primary/30 shadow-sm"
-                    onError={e => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(founder.name)}&background=6C63F2&color=fff&size=200`; }}
-                  />
-                  <h3 className="font-heading text-text-primary font-bold text-lg">{founder.name}</h3>
-                  <p className="text-brand-primary text-xs font-semibold mb-2">{founder.role}</p>
-                  <p className="text-text-secondary text-sm leading-relaxed">{founder.description}</p>
+          {/* Meet Our Founder & Mentor */}
+          <div className="mb-20">
+            <div className="text-center mb-10">
+              <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 mb-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Leadership & Vision</span>
+              </span>
+              <h2 className="font-heading font-black text-3xl md:text-4xl text-text-primary mb-3">
+                Meet Our <span className="text-gradient">Founder & Mentor</span>
+              </h2>
+              <p className="text-text-secondary text-sm md:text-base max-w-2xl mx-auto">
+                Shaping student-centric education with deep academic rigor, holistic mentorship, and accessible digital learning.
+              </p>
+            </div>
+
+            <div className="card-soft p-6 sm:p-8 lg:p-10 max-w-4xl mx-auto rounded-3xl border border-border-subtle shadow-soft hover:shadow-soft-hover transition-all">
+              <div className="grid md:grid-cols-12 gap-8 items-center">
+                {/* Founder Photo Column */}
+                <div className="md:col-span-5 flex flex-col items-center text-center">
+                  <div className="relative group">
+                    <div className="absolute -inset-1 bg-gradient-to-br from-brand-primary to-brand-secondary rounded-2xl blur-sm opacity-30 group-hover:opacity-50 transition duration-300" />
+                    <img
+                      src="/assets/team/mayur-raut.jpg"
+                      alt="Prof. Mayur Raut - Founder & Mentor"
+                      className="relative w-56 h-72 sm:w-64 sm:h-80 object-cover object-top rounded-2xl shadow-md border-2 border-white dark:border-[#2E2F4A]"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://ui-avatars.com/api/?name=Mayur+Raut&background=6C63F2&color=fff&size=400';
+                      }}
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <h3 className="font-heading text-xl font-bold text-text-primary">Prof. Mayur Raut</h3>
+                    <p className="text-brand-primary text-xs font-semibold uppercase tracking-wider mt-1">Founder & Mentor</p>
+                  </div>
                 </div>
-              ))}
+
+                {/* Founder Bio Column */}
+                <div className="md:col-span-7 space-y-5 text-left">
+                  <div>
+                    <span className="badge bg-surface-alt text-brand-primary border border-border-subtle text-xs font-semibold px-2.5 py-0.5 mb-2 inline-block">
+                      Academic Leadership & Pedagogy
+                    </span>
+                    <h4 className="font-heading text-2xl font-bold text-text-primary">
+                      Empowering Learners from Standard 1 to 10
+                    </h4>
+                  </div>
+
+                  <p className="text-text-secondary text-sm leading-relaxed">
+                    With years of dedicated academic mentorship and a deep passion for student-centric pedagogy, Prof. Mayur Raut conceptualized Learniq to bridge the divide between conventional schooling and modern digital learning.
+                  </p>
+
+                  <p className="text-text-secondary text-sm leading-relaxed">
+                    He guides the platform’s core educational framework, ensuring that lessons foster genuine conceptual clarity, analytical thinking, and lifelong curiosity. Under his mentorship, Learniq is built to deliver quality, supportive, and accessible education to every child across India.
+                  </p>
+
+                  {/* Pull-Quote */}
+                  <div className="bg-surface-alt/70 border-l-4 border-brand-primary p-4 rounded-r-2xl space-y-2">
+                    <p className="text-xs sm:text-sm italic text-text-primary font-medium leading-relaxed">
+                      “True education goes beyond textbooks and exams—it is about igniting genuine curiosity in a young mind and nurturing the confidence to question, understand, and grow.”
+                    </p>
+                    <p className="text-[11px] font-semibold text-brand-primary">
+                      — Prof. Mayur Raut
+                    </p>
+                  </div>
+
+                  {/* Highlight Badges */}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <span className="badge bg-brand-primary/10 text-brand-primary text-xs font-medium">
+                      Student-First Pedagogy
+                    </span>
+                    <span className="badge bg-accent-mint/15 text-accent-mint text-xs font-medium">
+                      Curriculum Innovation
+                    </span>
+                    <span className="badge bg-accent-sky/15 text-accent-sky text-xs font-medium">
+                      Holistic Mentorship
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
