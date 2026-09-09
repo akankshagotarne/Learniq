@@ -19,58 +19,43 @@ const createOrder = async (req, res) => {
   try {
     const { type, itemId } = req.body; // type: 'course' | 'lecture' | 'note'
 
-    let amount = 0;
+    let basePrice = 0;
     let item = null;
 
     if (type === 'course') {
       item = await Course.findById(itemId);
-      amount = item?.price || 0;
+      basePrice = item?.price || 0;
     } else if (type === 'lecture') {
       item = await Lecture.findById(itemId);
-      amount = item?.price || 0;
+      basePrice = item?.price || 0;
     }
 
     if (!item) return res.status(404).json({ success: false, message: 'Item not found.' });
-    if (amount === 0) return res.status(400).json({ success: false, message: 'This item is free.' });
+    if (basePrice === 0) return res.status(400).json({ success: false, message: 'This item is free.' });
+
+    // Apply 20% Learniq scholarship discount
+    const discount = Math.round(basePrice * 0.2);
+    const finalAmount = Math.max(1, basePrice - discount);
 
     const razorpay = getRazorpayInstance();
 
     if (!razorpay) {
-      // Demo mode: simulate order creation
-      const demoPayment = await Payment.create({
-        student: req.user._id,
-        [type]: itemId,
-        amount,
-        currency: 'INR',
-        razorpayOrderId: 'demo_order_' + Date.now(),
-        status: 'pending',
-        type,
-      });
-
-      return res.json({
-        success: true,
-        isDemoMode: true,
-        message: 'Demo mode: Razorpay not configured. Use RAZORPAY_KEY_ID in .env for real payments.',
-        order: {
-          id: demoPayment.razorpayOrderId,
-          amount: amount * 100,
-          currency: 'INR',
-          paymentId: demoPayment._id,
-        },
-        keyId: 'demo_key',
+      return res.status(503).json({
+        success: false,
+        message: 'Razorpay is not configured on the server. Please check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in server environment.',
       });
     }
 
     const order = await razorpay.orders.create({
-      amount: amount * 100, // paise
+      amount: Math.round(finalAmount * 100), // paise
       currency: 'INR',
-      notes: { student: req.user._id.toString(), type, itemId },
+      notes: { student: req.user._id.toString(), type, itemId: itemId.toString() },
     });
 
     const payment = await Payment.create({
       student: req.user._id,
       [type]: itemId,
-      amount,
+      amount: finalAmount,
       currency: 'INR',
       razorpayOrderId: order.id,
       status: 'pending',
@@ -84,41 +69,48 @@ const createOrder = async (req, res) => {
       keyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error creating payment order.' });
+    console.error('Error creating payment order:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error creating payment order.' });
   }
 };
 
 // POST /api/payments/verify
 const verifyPayment = async (req, res) => {
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentId, isDemoMode } = req.body;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentId } = req.body;
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !paymentId) {
+      return res.status(400).json({ success: false, message: 'Missing required payment verification details.' });
+    }
 
     const payment = await Payment.findById(paymentId);
     if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' });
 
-    if (isDemoMode || process.env.NODE_ENV === 'development') {
-      // Demo: mark as completed
-      payment.razorpayPaymentId = razorpayPaymentId || 'demo_payment_' + Date.now();
-      payment.status = 'completed';
-      await payment.save();
-    } else {
-      // Real verification
-      const expectedSignature = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-        .update(razorpayOrderId + '|' + razorpayPaymentId)
-        .digest('hex');
-
-      if (expectedSignature !== razorpaySignature) {
-        payment.status = 'failed';
-        await payment.save();
-        return res.status(400).json({ success: false, message: 'Payment verification failed.' });
-      }
-
-      payment.razorpayPaymentId = razorpayPaymentId;
-      payment.razorpaySignature = razorpaySignature;
-      payment.status = 'completed';
-      await payment.save();
+    if (payment.status === 'completed') {
+      return res.json({ success: true, message: 'Payment already verified.', payment });
     }
+
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      return res.status(500).json({ success: false, message: 'Razorpay secret key not configured on server.' });
+    }
+
+    // Cryptographic HMAC-SHA256 signature verification
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpaySignature) {
+      payment.status = 'failed';
+      await payment.save();
+      return res.status(400).json({ success: false, message: 'Payment verification failed: Invalid signature.' });
+    }
+
+    payment.razorpayPaymentId = razorpayPaymentId;
+    payment.razorpaySignature = razorpaySignature;
+    payment.status = 'completed';
+    await payment.save();
 
     // Grant access
     if (payment.type === 'course') {
@@ -138,6 +130,7 @@ const verifyPayment = async (req, res) => {
 
     res.json({ success: true, message: 'Payment verified and access granted!', payment });
   } catch (error) {
+    console.error('Payment verification error:', error);
     res.status(500).json({ success: false, message: 'Server error verifying payment.' });
   }
 };

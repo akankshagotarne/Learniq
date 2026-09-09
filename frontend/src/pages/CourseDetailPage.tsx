@@ -7,6 +7,7 @@ import api from '../services/api';
 import { Course, Lecture, Note } from '../types';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { loadRazorpayScript } from '../utils/razorpay';
 
 const getSubjectBadge = (subject: string) => {
   const lower = subject.toLowerCase();
@@ -54,9 +55,98 @@ const CourseDetailPage: React.FC = () => {
       } finally {
         setEnrolling(false);
       }
-    } else {
-      // Payment flow
-      navigate(`/payment?type=course&id=${id}&amount=${course?.price}`);
+      return;
+    }
+
+    // Real Razorpay Checkout flow for paid courses
+    setEnrolling(true);
+    try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        toast.error('Failed to load Razorpay payment gateway. Please check your internet connection.');
+        setEnrolling(false);
+        return;
+      }
+
+      const orderRes = await api.post('/payments/create-order', {
+        type: 'course',
+        itemId: id,
+      });
+
+      if (!orderRes.data.success || !orderRes.data.order) {
+        toast.error(orderRes.data.message || 'Failed to create payment order.');
+        setEnrolling(false);
+        return;
+      }
+
+      const { order, paymentId, keyId } = orderRes.data;
+
+      const options = {
+        key: keyId,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'Learniq',
+        description: `Enrollment: ${course?.title}`,
+        order_id: order.id,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#6C63F2',
+        },
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            toast.loading('Verifying payment with bank...', { id: 'verify-toast' });
+            const verifyRes = await api.post('/payments/verify', {
+              paymentId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+
+            if (verifyRes.data.success) {
+              toast.success('Payment verified successfully! 🎉', { id: 'verify-toast' });
+              setIsEnrolled(true);
+              navigate(`/payment?success=true&type=course&id=${id}&paymentId=${response.razorpay_payment_id}&txnId=${response.razorpay_order_id}&amount=${order.amount / 100}`);
+            } else {
+              toast.error(verifyRes.data.message || 'Payment signature verification failed.', { id: 'verify-toast' });
+            }
+          } catch (verifyErr: any) {
+            console.error('Verification error:', verifyErr);
+            toast.error(
+              verifyErr.response?.data?.message || 'Payment verification failed. Please contact support.',
+              { id: 'verify-toast' }
+            );
+          } finally {
+            setEnrolling(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setEnrolling(false);
+            toast('Payment cancelled. You have not been charged.');
+          },
+        },
+      };
+
+      const razorpayInstance = new (window as any).Razorpay(options);
+
+      razorpayInstance.on('payment.failed', function (response: any) {
+        console.error('Razorpay payment failed:', response.error);
+        toast.error(response.error?.description || 'Payment was declined or failed.');
+        setEnrolling(false);
+      });
+
+      razorpayInstance.open();
+    } catch (err: any) {
+      console.error('Order creation error:', err);
+      toast.error(err.response?.data?.message || 'Failed to start payment. Please try again.');
+      setEnrolling(false);
     }
   };
 

@@ -10,6 +10,7 @@ import Footer from '../components/layout/Footer';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { loadRazorpayScript } from '../utils/razorpay';
 
 const PaymentPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -40,12 +41,20 @@ const PaymentPage: React.FC = () => {
       return;
     }
 
+    if (searchParams.get('success') === 'true') {
+      setSuccessData({
+        paymentId: searchParams.get('paymentId') || 'pay_verified',
+        txnId: searchParams.get('txnId') || 'order_verified',
+        amount: Number(searchParams.get('amount')) || queryAmount,
+      });
+    }
+
     if (itemId) {
       api.get(`/courses/${itemId}`)
         .then(res => setItemDetails(res.data.course))
         .catch(() => {});
     }
-  }, [itemId, user, navigate, type, queryAmount]);
+  }, [itemId, user, navigate, type, queryAmount, searchParams]);
 
   const basePrice = itemDetails?.price || queryAmount;
   const discount = Math.round(basePrice * 0.2); // 20% Learniq scholarship discount
@@ -54,35 +63,110 @@ const PaymentPage: React.FC = () => {
   const handleProcessPayment = async () => {
     setLoading(true);
     try {
+      // 1. Ensure Razorpay Checkout.js is dynamically loaded
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        toast.error('Failed to load Razorpay payment gateway. Please check your network connection.');
+        setLoading(false);
+        return;
+      }
+
+      // 2. Request backend order creation
+      const targetItemId = itemId || (itemDetails ? itemDetails._id : null);
+      if (!targetItemId) {
+        toast.error('No course selected for enrollment.');
+        setLoading(false);
+        return;
+      }
+
       const orderRes = await api.post('/payments/create-order', {
         type,
-        itemId: itemId || (itemDetails ? itemDetails._id : 'demo_id'),
+        itemId: targetItemId,
       });
 
-      const { order, paymentId } = orderRes.data;
+      if (!orderRes.data.success || !orderRes.data.order) {
+        toast.error(orderRes.data.message || 'Unable to create payment order.');
+        setLoading(false);
+        return;
+      }
 
-      await new Promise(r => setTimeout(r, 1000));
+      const { order, paymentId, keyId } = orderRes.data;
 
-      const verifyRes = await api.post('/payments/verify', {
-        paymentId,
-        razorpayOrderId: order.id,
-        razorpayPaymentId: 'pay_' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-        isDemoMode: true,
+      // 3. Configure Razorpay Checkout options
+      const options = {
+        key: keyId,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'Learniq',
+        description: `Enrollment: ${itemDetails?.title || 'Course'}`,
+        order_id: order.id,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        notes: {
+          courseId: targetItemId,
+          studentId: user?._id || '',
+        },
+        theme: {
+          color: '#6C63F2',
+        },
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            toast.loading('Verifying payment securely with bank...', { id: 'verify-toast' });
+
+            // 4. Send signature to backend for cryptographic verification
+            const verifyRes = await api.post('/payments/verify', {
+              paymentId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+
+            if (verifyRes.data.success) {
+              toast.success('Payment verified successfully! 🎉', { id: 'verify-toast' });
+              setSuccessData({
+                paymentId: response.razorpay_payment_id,
+                txnId: response.razorpay_order_id,
+                amount: finalPrice,
+              });
+            } else {
+              toast.error(verifyRes.data.message || 'Payment signature verification failed.', { id: 'verify-toast' });
+            }
+          } catch (verifyErr: any) {
+            console.error('Verification error:', verifyErr);
+            toast.error(
+              verifyErr.response?.data?.message || 'Payment verification failed. Please contact support.',
+              { id: 'verify-toast' }
+            );
+          } finally {
+            setLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setLoading(false);
+            toast('Payment cancelled. You have not been charged.');
+          },
+        },
+      };
+
+      const razorpayInstance = new (window as any).Razorpay(options);
+
+      razorpayInstance.on('payment.failed', function (response: any) {
+        console.error('Razorpay payment failed:', response.error);
+        toast.error(response.error?.description || 'Payment was declined or failed.');
+        setLoading(false);
       });
 
-      setSuccessData({
-        paymentId: verifyRes.data.payment?._id || paymentId,
-        txnId: 'TXN_' + Date.now().toString().slice(-8),
-        amount: finalPrice,
-      });
-      toast.success('Payment completed successfully! 🎉');
+      razorpayInstance.open();
     } catch (err: any) {
-      setSuccessData({
-        paymentId: 'PAY_' + Date.now(),
-        txnId: 'TXN_' + Date.now().toString().slice(-8),
-        amount: finalPrice,
-      });
-    } finally {
+      console.error('Payment initialization error:', err);
+      toast.error(err.response?.data?.message || 'Failed to start payment. Please try again.');
       setLoading(false);
     }
   };

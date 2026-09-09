@@ -23,7 +23,10 @@ router.get('/student/progress', protect, userCtrl.getStudentProgress);
 
 // Payments
 router.post('/payments/create-order', protect, paymentCtrl.createOrder);
+router.post('/create-order', protect, paymentCtrl.createOrder);
 router.post('/payments/verify', protect, paymentCtrl.verifyPayment);
+router.post('/payments/verify-payment', protect, paymentCtrl.verifyPayment);
+router.post('/verify-payment', protect, paymentCtrl.verifyPayment);
 router.get('/payments/history', protect, paymentCtrl.getPaymentHistory);
 
 // Notifications
