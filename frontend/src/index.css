@@ -530,4 +530,14 @@
       padding-bottom: 6rem;
     }
   }
+
+  /* Live session video container */
+  .video-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    border-radius: 16px;
+    overflow: hidden;
+    background-color: #0D0E1A;
+  }
 }

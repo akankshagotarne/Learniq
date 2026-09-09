@@ -78,10 +78,12 @@ const setupSocket = (io) => {
     // ==================== WEBRTC SIGNALING ====================
 
     socket.on('webrtc-offer', ({ targetSocketId, offer }) => {
+      console.log(`[WebRTC] Offer relayed from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit('webrtc-offer', { fromSocketId: socket.id, offer });
     });
 
     socket.on('webrtc-answer', ({ targetSocketId, answer }) => {
+      console.log(`[WebRTC] Answer relayed from ${socket.id} to ${targetSocketId}`);
       io.to(targetSocketId).emit('webrtc-answer', { fromSocketId: socket.id, answer });
     });
 

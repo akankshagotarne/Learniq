@@ -22,13 +22,37 @@ const miscRoutes = require('./routes/misc');
 const app = express();
 const server = http.createServer(app);
 
+// Dynamic origin verification supporting Vercel and Render deployments
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  const cleanOrigin = origin.replace(/\/$/, '');
+  const configuredClient = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : null;
+  
+  if (configuredClient && cleanOrigin.toLowerCase() === configuredClient.toLowerCase()) {
+    return true;
+  }
+  if (['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://127.0.0.1:5173'].includes(cleanOrigin)) {
+    return true;
+  }
+  try {
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) {
+      return true;
+    }
+  } catch {}
+  return false;
+};
+
 // Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      callback(null, isOriginAllowed(origin) ? true : origin);
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  transports: ['websocket', 'polling'],
 });
 
 // Security
@@ -36,7 +60,9 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // CORS
 app.use(cors({
-  origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: (origin, callback) => {
+    callback(null, isOriginAllowed(origin) ? true : origin);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
