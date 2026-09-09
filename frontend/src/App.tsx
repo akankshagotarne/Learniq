@@ -85,9 +85,24 @@ const AppRoutes: React.FC = () => (
       <Route path="/courses/:id" element={<CourseDetailPage />} />
       <Route path="/live-sessions" element={<LiveSessionsListPage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
+
+      {/* Payment & Checkout route */}
+      <Route path="/payment" element={
+        <ProtectedRoute>
+          <PaymentPage />
+        </ProtectedRoute>
+      } />
+
+      {/* Course lecture player */}
+      <Route path="/courses/:courseId/lecture/:lectureId" element={
+        <ProtectedRoute>
+          <LecturePlayerPage />
+        </ProtectedRoute>
+      } />
 
       {/* Live session (all authenticated users) */}
       <Route path="/live/:code" element={
