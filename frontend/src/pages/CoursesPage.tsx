@@ -7,7 +7,7 @@ import api from '../services/api';
 import { Course } from '../types';
 import { useAuth } from '../context/AuthContext';
 
-const SUBJECTS = ['All', 'Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Environmental Studies'];
+const SUBJECTS = ['All', 'Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Hindi', 'History and Civics', 'Geography', 'Environmental Studies'];
 const STANDARDS = ['All', ...Array.from({ length: 10 }, (_, i) => String(i + 1))];
 
 const getSubjectBadge = (subject: string) => {

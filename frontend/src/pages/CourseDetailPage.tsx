@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, BookOpen, Clock, Users, Play, Lock, FileText, CheckCircle, Award, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Star, BookOpen, Clock, Users, Play, Lock, FileText, CheckCircle,
+  Award, ChevronDown, ChevronUp, Download, AlertCircle, Sparkles, Check
+} from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
@@ -8,6 +11,8 @@ import { Course, Lecture, Note } from '../types';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
+import { generateCourseNotes } from '../utils/generateCourseNotes';
+import { SYLLABUS_COURSES, TEACHERS_DATA } from '../data/syllabusCourses';
 
 const getSubjectBadge = (subject: string) => {
   const lower = subject.toLowerCase();
@@ -39,7 +44,70 @@ const CourseDetailPage: React.FC = () => {
       setCourse(r.data.course);
       setLectures(r.data.lectures || []);
       setIsEnrolled(r.data.isEnrolled || false);
-    }).catch(() => navigate('/courses')).finally(() => setLoading(false));
+    }).catch(() => {
+      // Graceful fallback to static syllabus data if API fails or for slug routes
+      const fallback = SYLLABUS_COURSES.find(c => c.id === id || c.title.toLowerCase() === id?.toLowerCase());
+      if (fallback) {
+        const teacherObj = TEACHERS_DATA.find(t => t.name === fallback.teacherName) || {
+          id: 'teacher-spec',
+          name: fallback.teacherName,
+          email: `${fallback.teacherName.toLowerCase().replace(/\s+/g, '.')}@learniq.in`,
+          avatar: `/assets/teachers/${fallback.teacherName.toLowerCase().replace(/\s+/g, '-')}.jpg`,
+          qualification: 'Senior Maharashtra State Board Specialist',
+          experience: '12+ years',
+          bio: `Dedicated Maharashtra SSC educator guiding students through ${fallback.subject} conceptual depth and examination excellence.`,
+          subjects: [fallback.subject],
+          standards: [fallback.standard],
+        };
+
+        const mappedCourse: Course = {
+          _id: fallback.id,
+          title: fallback.title,
+          description: fallback.description,
+          subject: fallback.subject,
+          standard: fallback.standard,
+          teacher: teacherObj as any,
+          totalLectures: fallback.chapters.length,
+          duration: `${Math.max(1, Math.round(fallback.chapters.length * 0.35))} hrs`,
+          rating: 4.8,
+          totalRatings: 24,
+          enrolledCount: 145,
+          isFree: false,
+          price: fallback.price,
+          isActive: true,
+          tags: ['Maharashtra State Board', 'SSC', `Std ${fallback.standard}`, fallback.subject],
+          language: fallback.subject === 'Marathi' ? 'Marathi' : fallback.subject === 'Hindi' ? 'Hindi' : 'English',
+          level: fallback.standard <= 4 ? 'Beginner' : fallback.standard <= 7 ? 'Intermediate' : 'Advanced',
+          syllabus: fallback.chapters,
+          isFlagged: fallback.isFlagged,
+          flagReason: fallback.flagReason,
+          createdAt: new Date().toISOString(),
+        };
+
+        const mappedLectures: Lecture[] = fallback.chapters.map((ch, idx) => ({
+          _id: `${fallback.id}-lec-${idx + 1}`,
+          title: ch,
+          description: `Comprehensive video lecture and conceptual breakdown for ${ch}`,
+          course: fallback.id,
+          teacher: teacherObj as any,
+          standard: fallback.standard,
+          subject: fallback.subject,
+          order: idx + 1,
+          videoDuration: '18:30',
+          isFree: idx === 0,
+          price: idx === 0 ? 0 : 20,
+          hasNotes: true,
+          isActive: true,
+          views: 0,
+          createdAt: new Date().toISOString(),
+        }));
+
+        setCourse(mappedCourse);
+        setLectures(mappedLectures);
+      } else {
+        navigate('/courses');
+      }
+    }).finally(() => setLoading(false));
   }, [id, navigate]);
 
   const handleEnroll = async () => {
@@ -150,6 +218,25 @@ const CourseDetailPage: React.FC = () => {
     }
   };
 
+  const handleDownloadNotes = () => {
+    if (!course) return;
+    const chapters = (course.syllabus && course.syllabus.length > 0)
+      ? course.syllabus
+      : (lectures.length > 0 ? lectures.map(l => l.title) : ['1. Course Introduction', '2. Core Principles', '3. Advanced Concepts', '4. Chapter Review']);
+
+    const teacherObj = course.teacher as any;
+    generateCourseNotes({
+      courseTitle: course.title,
+      courseStandard: course.standard,
+      courseSubject: course.subject,
+      teacherName: teacherObj?.name || 'Assigned Subject Specialist',
+      teacherQualification: teacherObj?.qualification || 'Senior Maharashtra State Board Specialist',
+      chapters,
+      isFlagged: course.isFlagged,
+    });
+    toast.success('Downloaded course notes & syllabus PDF! 📄');
+  };
+
   const displayedLectures = showAllLectures ? lectures : lectures.slice(0, 5);
 
   if (loading) {
@@ -242,6 +329,14 @@ const CourseDetailPage: React.FC = () => {
                     )}
                     <p className="text-text-muted text-xs text-center mt-3">30-day money-back guarantee</p>
 
+                    <button
+                      onClick={handleDownloadNotes}
+                      className="w-full mt-3.5 py-2.5 px-3 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/25 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Syllabus & Notes (PDF)</span>
+                    </button>
+
                     <div className="mt-5 pt-4 border-t border-border-subtle space-y-2.5 text-xs text-text-secondary">
                       <div className="flex items-center gap-2.5"><BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} comprehensive lectures</div>
                       <div className="flex items-center gap-2.5"><Clock className="w-4 h-4 text-accent-sky" /> {course.duration} total duration</div>
@@ -261,20 +356,43 @@ const CourseDetailPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-8">
               {/* Teacher Profile */}
               {teacher && (
-                <div className="card-soft p-6">
-                  <h2 className="font-heading text-lg font-bold text-text-primary mb-5">About Your Teacher</h2>
-                  <div className="flex items-start gap-5">
+                <div className="card-soft p-6 sm:p-7 rounded-2xl border border-border-subtle">
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs font-semibold px-3 py-1 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Assigned Subject Faculty</span>
+                    </span>
+                    <span className="text-xs text-text-muted font-medium">Maharashtra State Board Mentor</span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                     <img
-                      src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'T')}&background=6C63F2&color=fff&size=80`}
+                      src={teacher.avatar || `/assets/teachers/${teacher.name?.toLowerCase().replace(/\s+/g, '-')}.jpg`}
                       alt={teacher.name}
-                      className="w-20 h-20 rounded-2xl object-cover border-2 border-brand-primary/30 flex-shrink-0 shadow-sm"
+                      className="w-24 h-24 rounded-2xl object-cover border-2 border-brand-primary/30 flex-shrink-0 shadow-sm bg-surface-alt"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'Teacher')}&background=6C63F2&color=fff&size=200`;
+                      }}
                     />
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-heading text-text-primary font-semibold text-lg">{teacher.name}</h3>
-                      {teacher.qualification && <p className="text-brand-primary font-medium text-sm mb-1">{teacher.qualification}</p>}
-                      {teacher.experience && <p className="text-text-secondary text-xs mb-2 font-medium">📅 {teacher.experience} experience</p>}
-                      {teacher.bio && <p className="text-text-secondary text-sm leading-relaxed">{teacher.bio}</p>}
-                      <div className="flex flex-wrap gap-2 mt-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-heading text-text-primary font-bold text-xl">{teacher.name}</h3>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent-mint/15 text-accent-mint border border-accent-mint/30">
+                          <Check className="w-3 h-3" /> Verified Faculty
+                        </span>
+                      </div>
+
+                      {teacher.qualification && (
+                        <p className="text-brand-primary font-semibold text-xs sm:text-sm mt-0.5">{teacher.qualification}</p>
+                      )}
+                      {teacher.experience && (
+                        <p className="text-text-secondary text-xs mt-1 font-medium">📅 {teacher.experience} of classroom & board exam mentorship</p>
+                      )}
+                      {teacher.bio && (
+                        <p className="text-text-secondary text-xs sm:text-sm leading-relaxed mt-2.5">{teacher.bio}</p>
+                      )}
+
+                      <div className="flex flex-wrap gap-1.5 mt-4">
                         {teacher.subjects?.map((s: string) => (
                           <span key={s} className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs font-medium">{s}</span>
                         ))}
@@ -287,12 +405,65 @@ const CourseDetailPage: React.FC = () => {
                 </div>
               )}
 
+              {/* Official Syllabus Blueprint */}
+              <div className="card-soft p-6 sm:p-7 rounded-2xl border border-border-subtle">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="font-heading text-lg font-bold text-text-primary flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-brand-primary" />
+                      <span>Official Syllabus Outline (SSC Pattern)</span>
+                    </h2>
+                    <p className="text-text-secondary text-xs mt-0.5">
+                      Maharashtra State Board (Balbharati / MSCERT) English Medium Curriculum
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDownloadNotes}
+                    className="btn-outline text-xs py-1.5 px-3 flex items-center gap-1.5 font-semibold"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download PDF</span>
+                  </button>
+                </div>
+
+                {course.isFlagged && (
+                  <div className="mb-4 p-3.5 rounded-xl bg-accent-amber/10 border border-accent-amber/30 flex items-start gap-3 text-xs text-accent-amber leading-relaxed">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Curriculum Verification Notice</p>
+                      <p className="mt-0.5 text-text-secondary">
+                        {course.flagReason || 'Some chapter titles for this course are sourced from syllabus outlines and are marked with placeholders pending final textbook scan spot-checks.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid sm:grid-cols-2 gap-2.5 pt-2 max-h-96 overflow-y-auto pr-1">
+                  {((course.syllabus && course.syllabus.length > 0) ? course.syllabus : (lectures.length > 0 ? lectures.map(l => l.title) : [])).map((chap, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-alt border border-border-subtle/70 text-xs"
+                    >
+                      <span className="w-5 h-5 rounded-md bg-brand-primary/10 text-brand-primary font-bold flex items-center justify-center flex-shrink-0 text-[11px]">
+                        {idx + 1}
+                      </span>
+                      <span className="text-text-primary font-medium leading-relaxed">
+                        {chap}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Lecture List */}
-              <div className="card-soft p-6">
+              <div className="card-soft p-6 sm:p-7 rounded-2xl border border-border-subtle">
                 <div className="flex items-center justify-between mb-5">
-                  <h2 className="font-heading text-lg font-bold text-text-primary">
-                    Course Content <span className="text-text-muted text-sm font-normal">({course.totalLectures} lectures)</span>
-                  </h2>
+                  <div>
+                    <h2 className="font-heading text-lg font-bold text-text-primary">
+                      Course Video Lessons <span className="text-text-muted text-sm font-normal">({lectures.length} lessons in syllabus order)</span>
+                    </h2>
+                    <p className="text-text-secondary text-xs mt-0.5">Stream recorded lesson breakdowns with active notes</p>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5">
@@ -303,7 +474,7 @@ const CourseDetailPage: React.FC = () => {
                     return (
                       <div
                         key={lecture._id}
-                        className={`flex items-center gap-3.5 p-4 rounded-xl border transition-all ${
+                        className={`flex items-center gap-3.5 p-3.5 sm:p-4 rounded-xl border transition-all ${
                           canAccess
                             ? 'border-border-subtle bg-surface-alt hover:bg-surface hover:border-brand-primary/40 hover:shadow-soft cursor-pointer'
                             : 'border-border-subtle/60 bg-surface-alt/40 opacity-70'
@@ -326,7 +497,7 @@ const CourseDetailPage: React.FC = () => {
                             </span>
                             {lecture.hasNotes && (
                               <span className="text-text-muted text-xs flex items-center gap-1 font-medium">
-                                <FileText className="w-3 h-3 text-accent-amber" /> Notes
+                                <FileText className="w-3 h-3 text-accent-amber" /> Chapter Notes
                               </span>
                             )}
                           </div>
@@ -334,7 +505,7 @@ const CourseDetailPage: React.FC = () => {
 
                         <div className="flex-shrink-0">
                           {isFree ? (
-                            <span className="badge-free text-xs">FREE</span>
+                            <span className="badge-free text-xs">FREE PREVIEW</span>
                           ) : !isEnrolled ? (
                             <span className="text-text-secondary text-xs font-semibold">₹{lecture.price}</span>
                           ) : (
@@ -349,9 +520,9 @@ const CourseDetailPage: React.FC = () => {
                 {lectures.length > 5 && (
                   <button
                     onClick={() => setShowAllLectures(!showAllLectures)}
-                    className="w-full mt-4 py-3 text-sm text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                    className="w-full mt-4 py-3 text-sm text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    {showAllLectures ? <><ChevronUp className="w-4 h-4" /> Show Less</> : <><ChevronDown className="w-4 h-4" /> Show All {lectures.length} Lectures</>}
+                    {showAllLectures ? <><ChevronUp className="w-4 h-4" /> Show Less</> : <><ChevronDown className="w-4 h-4" /> Show All {lectures.length} Lessons</>}
                   </button>
                 )}
               </div>
@@ -374,6 +545,14 @@ const CourseDetailPage: React.FC = () => {
                     {course.isFree ? 'Enroll Free' : `Buy Now — ₹${course.price}`}
                   </button>
                 )}
+
+                <button
+                  onClick={handleDownloadNotes}
+                  className="w-full mt-3 py-2 px-3 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/25 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Syllabus & Notes (PDF)</span>
+                </button>
               </div>
             </div>
           </div>

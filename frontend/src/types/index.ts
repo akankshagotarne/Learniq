@@ -39,6 +39,10 @@ export interface Course {
   tags: string[];
   language: string;
   level: string;
+  syllabus?: string[];
+  notesUrl?: string;
+  isFlagged?: boolean;
+  flagReason?: string;
   createdAt: string;
 }
 
@@ -58,8 +62,8 @@ export interface Lecture {
   price: number;
   hasNotes: boolean;
   isActive: boolean;
-  views: number;
-  createdAt: string;
+  views?: number;
+  createdAt?: string;
 }
 
 export interface Question {

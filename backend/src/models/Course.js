@@ -18,6 +18,10 @@ const courseSchema = new mongoose.Schema({
   tags: [{ type: String }],
   language: { type: String, default: 'English' },
   level: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], default: 'Beginner' },
+  syllabus: [{ type: String }],
+  notesUrl: { type: String, default: null },
+  isFlagged: { type: Boolean, default: false },
+  flagReason: { type: String, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Course', courseSchema);
