@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
+const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -30,15 +31,12 @@ const io = new Server(server, {
   },
 });
 
-// Connect DB
-connectDB();
-
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // CORS
 app.use(cors({
-  origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:3000'],
+  origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -62,9 +60,14 @@ if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 // Static files (uploads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check
+// Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'Learniq API is running!', timestamp: new Date() });
+  const isConnected = mongoose.connection.readyState === 1;
+  res.json({
+    success: true,
+    server: 'running',
+    database: isConnected ? 'connected' : 'disconnected',
+  });
 });
 
 // Routes
@@ -92,10 +95,41 @@ app.use((err, req, res, next) => {
 setupSocket(io);
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Learniq server running on port ${PORT}`);
-  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+
+// Cleanly handle port conflicts (EADDRINUSE)
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`\n==================================================`);
+    console.log(`⚠️  Backend is already running on port ${PORT}.`);
+    console.log(`==================================================`);
+    console.log(`An active instance of the Learniq backend is already running on port ${PORT}.`);
+    console.log(`You do not need to start another backend instance.`);
+    console.log(`\nTo stop the existing backend process if you wish to restart:`);
+    console.log(`  PowerShell: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force`);
+    console.log(`  Or run:     npx kill-port ${PORT}`);
+    console.log(`==================================================\n`);
+    process.exit(0);
+  } else {
+    console.error('❌ Server startup error:', err.message);
+    process.exit(1);
+  }
 });
+
+// Connect to MongoDB first, then start listening
+const startServer = async () => {
+  try {
+    await connectDB();
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+    });
+  } catch (error) {
+    console.error('Startup error:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 module.exports = { app, server };
