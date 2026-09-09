@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,51 +8,76 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#f0f4ff',
-          100: '#e0e9ff',
-          200: '#c7d6ff',
-          300: '#a5b8fd',
-          400: '#8191f9',
-          500: '#6C63FF',
-          600: '#5a48f5',
-          700: '#4d38df',
-          800: '#3f2fb5',
-          900: '#352c8f',
+        // Spec design system tokens
+        page: 'var(--bg-page)',
+        surface: 'var(--bg-surface)',
+        'surface-alt': 'var(--bg-surface-alt)',
+        border: {
+          subtle: 'var(--border-subtle)',
         },
-        secondary: {
-          50: '#fff0f6',
-          100: '#ffe4ef',
-          200: '#ffcce0',
-          300: '#ffa3c5',
-          400: '#ff6fa3',
-          500: '#FF6584',
-          600: '#f53060',
-          700: '#d91e47',
-          800: '#b51a3f',
-          900: '#981a3a',
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+        },
+        brand: {
+          primary: 'var(--brand-primary)',
+          'primary-hover': 'var(--brand-primary-hover)',
+          secondary: 'var(--brand-secondary)',
         },
         accent: {
-          50: '#f0fdf7',
-          100: '#dcfce9',
-          200: '#bbf7d5',
-          300: '#86efb8',
-          400: '#4ade90',
-          500: '#22c566',
-          600: '#16a34a',
-          700: '#15803d',
+          mint: 'var(--accent-mint)',
+          amber: 'var(--accent-amber)',
+          sky: 'var(--accent-sky)',
+          lilac: 'var(--accent-lilac)',
+        },
+        // Harmonized color scales
+        primary: {
+          50: '#f4f3ff',
+          100: '#ebe9fe',
+          200: '#d9d6fe',
+          300: '#bdb6fd',
+          400: '#9b8ffb',
+          500: '#6C63F2', // Soft indigo / periwinkle
+          600: '#5A52E0',
+          700: '#4c42c9',
+          800: '#3f36a5',
+          900: '#352e84',
+        },
+        secondary: {
+          50: '#fff1f4',
+          100: '#ffe4ea',
+          200: '#ffccd8',
+          300: '#ffa2b8',
+          400: '#ff8fa3', // Soft coral-pink
+          500: '#f8587d',
+          600: '#e53664',
+          700: '#c1234f',
+          800: '#a12046',
+          900: '#871f3e',
         },
         dark: {
-          900: '#0a0a0f',
-          800: '#12121a',
-          700: '#1a1a2e',
-          600: '#16213e',
-          500: '#1f2440',
+          900: '#12121F',
+          800: '#1B1C2E',
+          700: '#242540',
+          600: '#2E2F4A',
+          500: '#3B3D5E',
         },
       },
       fontFamily: {
+        heading: ['Poppins', 'system-ui', 'sans-serif'],
+        display: ['Poppins', 'system-ui', 'sans-serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        card: '16px',
+        pill: '9999px',
+        panel: '20px',
+      },
+      boxShadow: {
+        soft: 'var(--shadow-soft)',
+        'soft-hover': 'var(--shadow-soft-hover)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
@@ -71,11 +97,6 @@ export default {
         shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
         float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
         scoreReveal: { '0%': { transform: 'scale(0) rotateY(180deg)', opacity: '0' }, '100%': { transform: 'scale(1) rotateY(0)', opacity: '1' } },
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'hero-gradient': 'linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%)',
-        'card-gradient': 'linear-gradient(135deg, rgba(108,99,255,0.1) 0%, rgba(255,101,132,0.05) 100%)',
       },
     },
   },

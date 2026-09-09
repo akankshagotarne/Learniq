@@ -306,38 +306,39 @@ const LiveSessionPage: React.FC = () => {
     if (pos === 0) return 'text-yellow-400';
     if (pos === 1) return 'text-gray-300';
     if (pos === 2) return 'text-amber-600';
-    return 'text-white/40';
+    return 'text-text-muted';
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center">
+      <div className="min-h-screen bg-page flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white/60">Joining live session...</p>
+          <div className="w-16 h-16 border-4 border-brand-primary/30 border-t-brand-primary rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-secondary text-sm font-medium">Joining live session...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 flex flex-col">
+    <div className="min-h-screen bg-page text-text-primary flex flex-col transition-colors">
       {/* Header */}
-      <div className="bg-dark-800 border-b border-white/10 px-4 py-3 flex items-center justify-between">
+      <div className="bg-surface border-b border-border-subtle px-4 py-3 flex items-center justify-between transition-colors">
         <div className="flex items-center gap-3">
           <div className="live-dot" />
           <div>
-            <h1 className="text-white font-semibold text-sm">{session?.title}</h1>
-            <p className="text-white/40 text-xs">{session?.subject} • Std {session?.standard}</p>
+            <h1 className="font-heading text-text-primary font-semibold text-sm">{session?.title}</h1>
+            <p className="text-text-muted text-xs">{session?.subject} • Std {session?.standard}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 rounded-lg">
-            <Users className="w-3.5 h-3.5 text-white/50" />
-            <span className="text-white/50 text-xs">{participants.length}</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-surface-alt border border-border-subtle rounded-xl">
+            <Users className="w-3.5 h-3.5 text-brand-primary" />
+            <span className="text-text-secondary text-xs font-semibold">{participants.length}</span>
           </div>
           <button onClick={() => { cleanup(); navigate('/live-sessions'); }}
-            className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-all">
+            className="p-2 bg-[#FFE4EC] text-[#E1447A] hover:bg-[#FFD1DC] rounded-xl transition-all shadow-xs"
+            title="Leave Session">
             <PhoneOff className="w-4 h-4" />
           </button>
         </div>
@@ -345,19 +346,19 @@ const LiveSessionPage: React.FC = () => {
 
       {/* Permission Request Banner */}
       {permRequest && (
-        <div className="bg-primary-900/50 border-b border-primary-500/30 px-4 py-3 flex items-center justify-between animate-slide-down">
-          <p className="text-white text-sm">
-            <strong>{permRequest.from}</strong> is requesting to enable your <strong>{permRequest.type}</strong>.
+        <div className="bg-brand-primary/10 border-b border-brand-primary/20 px-4 py-3 flex items-center justify-between animate-slide-down">
+          <p className="text-text-primary text-sm">
+            <strong className="text-brand-primary">{permRequest.from}</strong> is requesting to enable your <strong>{permRequest.type}</strong>.
           </p>
           <div className="flex gap-2">
             <button onClick={() => {
               socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: true });
               setPermRequest(null);
-            }} className="px-3 py-1 bg-accent-500 text-white text-sm rounded-lg">Allow</button>
+            }} className="btn-primary px-3 py-1 text-xs">Allow</button>
             <button onClick={() => {
               socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: false });
               setPermRequest(null);
-            }} className="px-3 py-1 bg-red-500/20 text-red-400 text-sm rounded-lg">Decline</button>
+            }} className="px-3 py-1 bg-surface-alt border border-border-subtle text-text-secondary text-xs rounded-xl hover:bg-surface">Decline</button>
           </div>
         </div>
       )}
@@ -369,14 +370,14 @@ const LiveSessionPage: React.FC = () => {
           {view === 'session' && (
             <>
               {/* Main Video */}
-              <div className="video-container w-full max-w-3xl mx-auto">
+              <div className="video-container w-full max-w-3xl mx-auto shadow-soft">
                 {!isCamOn && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark-800">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0D0E1A]">
                     <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mb-3">
-                      <VideoOff className="w-8 h-8 text-white/30" />
+                      <VideoOff className="w-8 h-8 text-white/40" />
                     </div>
-                    <p className="text-white/40 text-sm">Camera is off</p>
-                    <p className="text-white/30 text-xs mt-1">Click the camera button below to enable</p>
+                    <p className="text-white/70 text-sm font-medium">Camera is off</p>
+                    <p className="text-white/40 text-xs mt-1">Click the camera button below to enable</p>
                   </div>
                 )}
                 <video ref={localVideoRef} autoPlay muted playsInline
@@ -384,15 +385,15 @@ const LiveSessionPage: React.FC = () => {
 
                 {/* Teacher info overlay */}
                 {session?.teacher && (
-                  <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-dark-900/80 backdrop-blur px-3 py-2 rounded-xl">
+                  <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10">
                     <img
-                      src={(session.teacher as any).avatar || `https://ui-avatars.com/api/?name=T&background=6C63FF&color=fff&size=32`}
+                      src={(session.teacher as any).avatar || `https://ui-avatars.com/api/?name=T&background=6C63F2&color=fff&size=32`}
                       alt="Teacher"
-                      className="w-7 h-7 rounded-full object-cover"
+                      className="w-7 h-7 rounded-full object-cover border border-white/20"
                     />
                     <div>
-                      <p className="text-white text-xs font-medium">{(session.teacher as any).name}</p>
-                      <p className="text-white/40 text-xs">Teacher</p>
+                      <p className="text-white text-xs font-semibold">{(session.teacher as any).name}</p>
+                      <p className="text-white/60 text-[10px]">Instructor</p>
                     </div>
                   </div>
                 )}
@@ -401,17 +402,17 @@ const LiveSessionPage: React.FC = () => {
               {/* Participants */}
               {participants.length > 0 && (
                 <div className="max-w-3xl mx-auto w-full">
-                  <p className="text-white/40 text-xs mb-2">Participants ({participants.length})</p>
+                  <p className="text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Participants ({participants.length})</p>
                   <div className="flex gap-2 flex-wrap">
                     {participants.map(p => (
-                      <div key={p.socketId} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 rounded-lg">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-xs font-bold text-white">
+                      <div key={p.socketId} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface border border-border-subtle rounded-xl shadow-xs">
+                        <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-xs font-bold">
                           {p.name?.[0] || '?'}
                         </div>
-                        <span className="text-white/70 text-xs">{p.name}</span>
-                        {p.isMicOn && <Mic className="w-3 h-3 text-accent-400" />}
-                        {p.isCameraOn && <Video className="w-3 h-3 text-primary-400" />}
-                        {p.isTeacher && <Crown className="w-3 h-3 text-yellow-400" />}
+                        <span className="text-text-primary text-xs font-medium">{p.name}</span>
+                        {p.isMicOn && <Mic className="w-3 h-3 text-accent-mint" />}
+                        {p.isCameraOn && <Video className="w-3 h-3 text-brand-primary" />}
+                        {p.isTeacher && <Crown className="w-3 h-3 text-accent-amber" />}
                       </div>
                     ))}
                   </div>
@@ -423,10 +424,10 @@ const LiveSessionPage: React.FC = () => {
           {/* Quiz View */}
           {view === 'quiz' && activeQuiz && (
             <div className="max-w-2xl mx-auto w-full animate-slide-up">
-              <div className="glass-card p-6">
+              <div className="card-soft p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-white font-bold text-lg">📝 {activeQuiz.title}</h2>
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono font-bold ${quizTimeLeft < 60 ? 'bg-red-500/20 text-red-400' : 'bg-primary-500/20 text-primary-400'}`}>
+                  <h2 className="font-heading text-text-primary font-bold text-lg">📝 {activeQuiz.title}</h2>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono font-bold text-sm ${quizTimeLeft < 60 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-brand-primary/10 text-brand-primary'}`}>
                     <Clock className="w-4 h-4" />
                     {formatTime(quizTimeLeft)}
                   </div>
@@ -435,34 +436,38 @@ const LiveSessionPage: React.FC = () => {
                 {quizSubmitted && quizResult ? (
                   <div className="text-center py-8 animate-bounce-in">
                     <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl
-                      ${quizResult.percentage >= 60 ? 'bg-accent-500/20' : 'bg-red-500/20'}`}>
+                      ${quizResult.percentage >= 60 ? 'bg-accent-mint/20' : 'bg-[#FFE4EC]'}`}>
                       {quizResult.percentage >= 60 ? '🎉' : '📚'}
                     </div>
-                    <p className="text-3xl font-bold text-white mb-2">{quizResult.score}/{quizResult.totalMarks}</p>
-                    <p className={`text-xl font-semibold mb-2 ${quizResult.percentage >= 60 ? 'text-accent-400' : 'text-red-400'}`}>
+                    <p className="text-3xl font-heading font-bold text-text-primary mb-2">{quizResult.score}/{quizResult.totalMarks}</p>
+                    <p className={`text-xl font-semibold mb-2 ${quizResult.percentage >= 60 ? 'text-[#16A34A] dark:text-[#4ADE9A]' : 'text-[#E1447A]'}`}>
                       {quizResult.percentage}%
                     </p>
-                    <p className="text-white/50 text-sm">
+                    <p className="text-text-secondary text-sm font-medium">
                       {quizResult.percentage >= 80 ? 'Excellent! 🏆' : quizResult.percentage >= 60 ? 'Good job! 👍' : 'Keep practicing! 💪'}
                     </p>
-                    <p className="text-white/30 text-xs mt-3">Waiting for quiz to end and leaderboard...</p>
+                    <p className="text-text-muted text-xs mt-3">Waiting for quiz to end and leaderboard...</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     {(activeQuiz.questions as Question[]).map((q, qi) => (
                       <div key={qi} className="animate-slide-up" style={{ animationDelay: `${qi * 0.1}s` }}>
-                        <p className="text-white font-medium mb-3">
-                          <span className="text-primary-400 mr-2">Q{qi + 1}.</span>{q.question}
-                          <span className="text-white/30 text-xs ml-2">({q.marks} mark{q.marks > 1 ? 's' : ''})</span>
+                        <p className="text-text-primary font-medium mb-3">
+                          <span className="text-brand-primary font-bold mr-2">Q{qi + 1}.</span>{q.question}
+                          <span className="text-text-muted text-xs ml-2 font-normal">({q.marks} mark{q.marks > 1 ? 's' : ''})</span>
                         </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {q.options.map((opt, oi) => (
                             <button
                               key={oi}
                               onClick={() => setSelectedAnswers(prev => ({ ...prev, [qi]: oi }))}
-                              className={`quiz-option text-left ${selectedAnswers[qi] === oi ? 'selected' : ''}`}
+                              className={`p-3 rounded-xl border text-left text-xs font-medium transition-all ${
+                                selectedAnswers[qi] === oi
+                                  ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold shadow-xs'
+                                  : 'bg-surface-alt border-border-subtle text-text-secondary hover:bg-surface hover:text-text-primary'
+                              }`}
                             >
-                              <span className="font-bold text-primary-400 mr-2">{['A', 'B', 'C', 'D'][oi]}.</span>
+                              <span className="font-bold text-brand-primary mr-2">{['A', 'B', 'C', 'D'][oi]}.</span>
                               {opt}
                             </button>
                           ))}
@@ -486,49 +491,50 @@ const LiveSessionPage: React.FC = () => {
           {/* Leaderboard View */}
           {view === 'leaderboard' && (
             <div className="max-w-xl mx-auto w-full animate-slide-up">
-              <div className="glass-card p-6 glow-primary">
+              <div className="card-soft p-6 shadow-soft">
                 <div className="text-center mb-6">
                   <div className="text-4xl mb-2">🏆</div>
-                  <h2 className="font-display font-black text-2xl text-white">Live Quiz Results!</h2>
-                  <p className="text-white/40 text-sm">Final Leaderboard</p>
+                  <h2 className="font-heading font-black text-2xl text-text-primary">Live Quiz Results!</h2>
+                  <p className="text-text-secondary text-sm">Final Session Leaderboard</p>
                 </div>
 
                 <div className="space-y-3">
                   {leaderboard.map((entry, i) => (
                     <div
                       key={entry.studentId}
-                      className={`leaderboard-item flex items-center gap-3 p-4 rounded-xl border transition-all
-                        ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/30' :
-                          i === 1 ? 'bg-gray-500/10 border-gray-500/20' :
-                          i === 2 ? 'bg-amber-700/10 border-amber-700/20' :
-                          'bg-white/5 border-white/10'}`}
+                      className={`leaderboard-item flex items-center gap-3.5 p-4 rounded-xl border transition-all ${
+                        i === 0 ? 'bg-[#FEF3C7]/40 dark:bg-[#3D2C0C]/30 border-[#FDE68A]' :
+                        i === 1 ? 'bg-surface-alt border-border-subtle' :
+                        i === 2 ? 'bg-[#FFE4EC]/40 dark:bg-[#3D1825]/30 border-[#FF8FA3]/30' :
+                        'bg-surface border-border-subtle'
+                      }`}
                       style={{ animationDelay: `${i * 0.15}s` }}
                     >
                       <span className={`text-2xl font-black ${getMedalColor(i)} w-8 text-center`}>
                         {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                       </span>
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
                         {entry.studentName?.[0] || '?'}
                       </div>
                       <div className="flex-1">
-                        <p className={`font-semibold ${entry.studentId === user?._id ? 'text-primary-300' : 'text-white'}`}>
+                        <p className={`font-semibold text-sm ${entry.studentId === user?._id ? 'text-brand-primary font-bold' : 'text-text-primary'}`}>
                           {entry.studentName} {entry.studentId === user?._id && '(You)'}
                         </p>
                       </div>
                       <div className="text-right score-count" style={{ animationDelay: `${i * 0.15 + 0.3}s` }}>
-                        <p className={`font-bold text-lg ${i === 0 ? 'text-yellow-400' : 'text-white'}`}>
+                        <p className="font-heading font-bold text-base text-text-primary">
                           {entry.score}/{entry.totalMarks}
                         </p>
-                        <p className="text-white/40 text-xs">{entry.percentage}%</p>
+                        <p className="text-text-muted text-xs font-medium">{entry.percentage}%</p>
                       </div>
                     </div>
                   ))}
                   {leaderboard.length === 0 && (
-                    <p className="text-white/40 text-center py-8">No submissions yet.</p>
+                    <p className="text-text-muted text-center py-8 text-sm">No submissions recorded yet.</p>
                   )}
                 </div>
 
-                <p className="text-white/30 text-xs text-center mt-4">Returning to live class in 30 seconds...</p>
+                <p className="text-text-muted text-xs text-center mt-4">Returning to live class in 30 seconds...</p>
               </div>
             </div>
           )}
@@ -536,45 +542,45 @@ const LiveSessionPage: React.FC = () => {
 
         {/* Chat Panel */}
         {showChat && (
-          <div className="w-72 bg-dark-800 border-l border-white/10 flex flex-col flex-shrink-0">
-            <div className="p-3 border-b border-white/10 flex items-center justify-between">
+          <div className="w-72 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 transition-colors">
+            <div className="p-3 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-white/50" />
-                <span className="text-white text-sm font-medium">Live Chat</span>
+                <MessageSquare className="w-4 h-4 text-brand-primary" />
+                <span className="font-heading text-text-primary text-sm font-semibold">Live Chat</span>
               </div>
-              <button onClick={() => setShowChat(false)} className="text-white/40 hover:text-white transition-all">
+              <button onClick={() => setShowChat(false)} className="text-text-muted hover:text-text-primary transition-all">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {messages.map((msg, i) => (
-                <div key={i} className={`${msg.senderRole === 'teacher' ? 'bg-primary-500/10 border border-primary-500/20' : 'bg-white/5'} rounded-xl p-2.5`}>
+                <div key={i} className={`${msg.senderRole === 'teacher' ? 'bg-brand-primary/10 border border-brand-primary/20' : 'bg-surface-alt border border-border-subtle'} rounded-xl p-2.5`}>
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`text-xs font-semibold ${msg.senderRole === 'teacher' ? 'text-primary-300' : 'text-white/70'}`}>
+                    <span className={`text-xs font-semibold ${msg.senderRole === 'teacher' ? 'text-brand-primary' : 'text-text-primary'}`}>
                       {msg.senderName}
                     </span>
-                    {msg.senderRole === 'teacher' && <Crown className="w-3 h-3 text-yellow-400" />}
-                    <span className="text-white/20 text-xs ml-auto">
+                    {msg.senderRole === 'teacher' && <Crown className="w-3 h-3 text-accent-amber" />}
+                    <span className="text-text-muted text-[10px] ml-auto font-mono">
                       {new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-white/80 text-sm">{msg.message}</p>
+                  <p className="text-text-secondary text-xs leading-relaxed">{msg.message}</p>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
 
-            <div className="p-3 border-t border-white/10">
+            <div className="p-3 border-t border-border-subtle">
               <div className="flex gap-2">
                 <input
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') sendChat(); }}
                   placeholder="Type a message..."
-                  className="flex-1 input-field py-2 text-sm"
+                  className="flex-1 bg-surface-alt border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                 />
-                <button onClick={sendChat} className="p-2 bg-primary-500 hover:bg-primary-400 text-white rounded-lg transition-all">
+                <button onClick={sendChat} className="p-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl transition-all shadow-xs">
                   <Send className="w-4 h-4" />
                 </button>
               </div>
@@ -584,11 +590,11 @@ const LiveSessionPage: React.FC = () => {
       </div>
 
       {/* Controls */}
-      <div className="bg-dark-800 border-t border-white/10 px-4 py-3">
+      <div className="bg-surface border-t border-border-subtle px-4 py-3 transition-colors">
         <div className="flex items-center justify-center gap-4">
           <button
             onClick={() => toggleMic()}
-            className={`p-3 rounded-xl transition-all ${isMicOn ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'bg-white/5 text-white/40 border border-white/10 hover:text-white'}`}
+            className={`p-3 rounded-xl transition-all shadow-xs ${isMicOn ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}
             title={isMicOn ? 'Mute microphone' : 'Enable microphone'}
           >
             {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
@@ -596,7 +602,7 @@ const LiveSessionPage: React.FC = () => {
 
           <button
             onClick={() => toggleCamera()}
-            className={`p-3 rounded-xl transition-all ${isCamOn ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'bg-white/5 text-white/40 border border-white/10 hover:text-white'}`}
+            className={`p-3 rounded-xl transition-all shadow-xs ${isCamOn ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}
             title={isCamOn ? 'Turn off camera' : 'Enable camera'}
           >
             {isCamOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
@@ -604,18 +610,24 @@ const LiveSessionPage: React.FC = () => {
 
           <button
             onClick={() => setShowChat(!showChat)}
-            className={`p-3 rounded-xl transition-all ${showChat ? 'bg-primary-500/20 text-primary-400' : 'bg-white/5 text-white/40 hover:text-white'} border border-white/10`}
-            title="Toggle chat"
+            className={`p-3 rounded-xl transition-all shadow-xs ${showChat ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}
+            title="Toggle Live Chat"
           >
             <MessageSquare className="w-5 h-5" />
           </button>
 
-          {view === 'leaderboard' && (
-            <button onClick={() => setView('session')} className="p-3 rounded-xl bg-white/5 text-white/40 hover:text-white border border-white/10">
-              <Trophy className="w-5 h-5" />
+          {isTeacher && (
+            <button
+              onClick={() => {
+                if (activeQuiz) socket.emit('launch-quiz', { sessionCode: code, quizId: activeQuiz._id, durationSeconds: 60 });
+                else toast('Select a quiz first');
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-95 flex items-center gap-1.5"
+            >
+              <Trophy className="w-4 h-4" />
+              <span>Launch Quiz</span>
             </button>
           )}
-
           <button
             onClick={() => { cleanup(); navigate('/live-sessions'); }}
             className="p-3 bg-red-500 hover:bg-red-400 text-white rounded-xl transition-all ml-4"
@@ -625,7 +637,7 @@ const LiveSessionPage: React.FC = () => {
           </button>
         </div>
 
-        <p className="text-center text-white/20 text-xs mt-2">
+        <p className="text-center text-text-muted text-xs mt-2">
           {isCamOn || isMicOn ? 'Camera/mic active — visible to all participants' : 'Camera and mic are off'}
         </p>
       </div>

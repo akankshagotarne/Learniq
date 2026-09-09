@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 // Eager loaded (critical path)
 import LoginPage from './pages/LoginPage';
@@ -33,10 +34,10 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
-  <div className="min-h-screen bg-dark-900 flex items-center justify-center">
+  <div className="min-h-screen bg-page flex items-center justify-center">
     <div className="text-center">
-      <div className="w-12 h-12 border-3 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto mb-3" />
-      <p className="text-white/40 text-sm">Loading...</p>
+      <div className="w-12 h-12 border-3 border-brand-primary/30 border-t-brand-primary rounded-full animate-spin mx-auto mb-3" />
+      <p className="text-text-muted text-sm">Loading...</p>
     </div>
   </div>
 );
@@ -138,11 +139,11 @@ const AppRoutes: React.FC = () => (
 
       {/* Catch-all */}
       <Route path="*" element={
-        <div className="min-h-screen bg-dark-900 flex items-center justify-center text-center p-4">
+        <div className="min-h-screen bg-page flex items-center justify-center text-center p-4">
           <div>
             <p className="text-8xl font-black gradient-text mb-4">404</p>
-            <h1 className="text-2xl font-bold text-white mb-2">Page Not Found</h1>
-            <p className="text-white/50 mb-6">The page you're looking for doesn't exist.</p>
+            <h1 className="text-2xl font-bold text-text-primary mb-2">Page Not Found</h1>
+            <p className="text-text-secondary mb-6">The page you're looking for doesn't exist.</p>
             <a href="/" className="btn-primary">Go Home</a>
           </div>
         </div>
@@ -154,29 +155,32 @@ const AppRoutes: React.FC = () => (
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-        <Toaster
-          position="top-right"
-          gutter={12}
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#1a1a2e',
-              color: '#fff',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              fontSize: '14px',
-            },
-            success: {
-              iconTheme: { primary: '#22c566', secondary: '#fff' },
-            },
-            error: {
-              iconTheme: { primary: '#ef4444', secondary: '#fff' },
-            },
-          }}
-        />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+          <Toaster
+            position="top-right"
+            gutter={12}
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                boxShadow: 'var(--shadow-soft)',
+              },
+              success: {
+                iconTheme: { primary: '#4ADE9A', secondary: '#fff' },
+              },
+              error: {
+                iconTheme: { primary: '#FF8FA3', secondary: '#fff' },
+              },
+            }}
+          />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

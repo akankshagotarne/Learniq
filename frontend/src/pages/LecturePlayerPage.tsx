@@ -144,13 +144,13 @@ const LecturePlayerPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-900 text-white">
+      <div className="min-h-screen bg-page text-text-primary">
         <Navbar />
         <div className="pt-24 page-container py-12">
-          <div className="skeleton h-96 rounded-2xl mb-8" />
+          <div className="card-soft h-96 rounded-2xl mb-8 animate-pulse bg-surface-alt" />
           <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 skeleton h-64 rounded-2xl" />
-            <div className="skeleton h-64 rounded-2xl" />
+            <div className="lg:col-span-2 card-soft h-64 rounded-2xl animate-pulse bg-surface-alt" />
+            <div className="card-soft h-64 rounded-2xl animate-pulse bg-surface-alt" />
           </div>
         </div>
       </div>
@@ -160,26 +160,26 @@ const LecturePlayerPage: React.FC = () => {
   if (!currentLecture || !course) return null;
 
   return (
-    <div className="min-h-screen bg-dark-950 text-white flex flex-col">
+    <div className="min-h-screen bg-page text-text-primary flex flex-col transition-colors">
       <Navbar />
 
       <main className="flex-1 pt-16 flex flex-col">
         {/* Top Header Bar */}
-        <div className="bg-dark-900 border-b border-white/10 px-4 py-3 flex items-center justify-between gap-4">
+        <div className="bg-surface border-b border-border-subtle px-4 py-3 flex items-center justify-between gap-4 transition-colors">
           <div className="flex items-center gap-3">
             <Link
               to={`/courses/${course._id}`}
-              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors flex items-center gap-1 text-xs"
+              className="p-2 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1 text-xs font-medium"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Back to Course</span>
             </Link>
-            <div className="hidden sm:block h-4 w-px bg-white/10" />
+            <div className="hidden sm:block h-4 w-px bg-border-subtle" />
             <div>
-              <span className="text-xs text-primary-400 font-medium">
+              <span className="text-xs text-brand-primary font-semibold">
                 Std {course.standard} • {course.subject}
               </span>
-              <h1 className="text-sm font-semibold text-white truncate max-w-md sm:max-w-xl">
+              <h1 className="text-sm font-heading font-semibold text-text-primary truncate max-w-md sm:max-w-xl">
                 {currentLecture.title}
               </h1>
             </div>
@@ -189,10 +189,10 @@ const LecturePlayerPage: React.FC = () => {
             <button
               onClick={handleMarkComplete}
               disabled={completing || completedLectures.includes(currentLecture._id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
                 completedLectures.includes(currentLecture._id)
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-primary-600 hover:bg-primary-500 text-white shadow-lg shadow-primary-500/20'
+                  ? 'bg-[#DCFCE7] dark:bg-[#153428] text-[#16A34A] dark:text-[#4ADE9A] border border-[#86EFAC] dark:border-[#16A34A]/40'
+                  : 'btn-primary'
               }`}
             >
               <CheckCircle className="w-3.5 h-3.5" />
@@ -204,29 +204,29 @@ const LecturePlayerPage: React.FC = () => {
         {/* Main Grid: Video + Playlist */}
         <div className="flex-1 grid lg:grid-cols-12 gap-0">
           {/* Left / Center: Video and Tabs */}
-          <div className="lg:col-span-8 xl:col-span-9 flex flex-col bg-black/60 border-r border-white/10">
-            {/* Video Container */}
-            <div className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden group">
+          <div className="lg:col-span-8 xl:col-span-9 flex flex-col bg-page border-r border-border-subtle">
+            {/* Video Container - Focused player viewport */}
+            <div className="relative aspect-video w-full bg-[#0D0E1A] flex items-center justify-center overflow-hidden group">
               {/* Dynamic Video Player Simulation */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
 
               {/* Decorative Animated Learning Canvas / Video Screen */}
-              <div className="w-full h-full relative flex items-center justify-center bg-gradient-to-br from-dark-900 via-dark-800 to-primary-950/40">
+              <div className="w-full h-full relative flex items-center justify-center bg-gradient-to-br from-[#121224] via-[#1A1A33] to-[#251E40]">
                 <div className="text-center p-6 z-10">
-                  <div className="w-20 h-20 rounded-full bg-primary-600/30 border border-primary-400/30 flex items-center justify-center mx-auto mb-4 backdrop-blur-md group-hover:scale-110 transition-transform shadow-2xl shadow-primary-500/30 cursor-pointer"
+                  <div className="w-20 h-20 rounded-full bg-brand-primary/30 border border-brand-primary/40 flex items-center justify-center mx-auto mb-4 backdrop-blur-md group-hover:scale-110 transition-transform shadow-2xl shadow-brand-primary/30 cursor-pointer"
                        onClick={() => setIsPlaying(!isPlaying)}>
                     {isPlaying ? (
-                      <Pause className="w-8 h-8 text-primary-300" />
+                      <Pause className="w-8 h-8 text-white" />
                     ) : (
-                      <Play className="w-8 h-8 text-primary-300 ml-1 fill-primary-300" />
+                      <Play className="w-8 h-8 text-white ml-1 fill-white" />
                     )}
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-1">{currentLecture.title}</h3>
-                  <p className="text-xs text-white/50">{course.subject} • Lecture {currentIndex + 1} of {lectures.length}</p>
+                  <h3 className="text-lg font-heading font-bold text-white mb-1">{currentLecture.title}</h3>
+                  <p className="text-xs text-white/60 font-medium">{course.subject} • Lecture {currentIndex + 1} of {lectures.length}</p>
                 </div>
 
                 {/* Ambient Glow */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-primary/15 rounded-full blur-3xl pointer-events-none" />
               </div>
 
               {/* Player Controls Bar */}
@@ -241,7 +241,7 @@ const LecturePlayerPage: React.FC = () => {
                   }}
                 >
                   <div 
-                    className="h-full bg-gradient-to-r from-primary-500 to-accent-400 rounded-full relative" 
+                    className="h-full bg-gradient-to-r from-brand-primary to-brand-secondary rounded-full relative" 
                     style={{ width: `${videoProgress}%` }}
                   >
                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow" />
@@ -249,7 +249,7 @@ const LecturePlayerPage: React.FC = () => {
                 </div>
 
                 {/* Bottom Row Controls */}
-                <div className="flex items-center justify-between text-white/80 text-xs">
+                <div className="flex items-center justify-between text-white/90 text-xs">
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={() => setIsPlaying(!isPlaying)} 
@@ -264,10 +264,10 @@ const LecturePlayerPage: React.FC = () => {
                       className="p-1.5 hover:text-white transition-colors"
                       title={isMuted ? 'Unmute' : 'Mute'}
                     >
-                      {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+                      {isMuted ? <VolumeX className="w-4 h-4 text-brand-secondary" /> : <Volume2 className="w-4 h-4" />}
                     </button>
 
-                    <span>12:45 / {currentLecture.videoDuration || '25:00'}</span>
+                    <span className="font-mono">12:45 / {currentLecture.videoDuration || '25:00'}</span>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -278,7 +278,7 @@ const LecturePlayerPage: React.FC = () => {
                         const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
                         setPlaybackSpeed(next);
                       }}
-                      className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded font-semibold text-[11px] transition-colors"
+                      className="px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded-md font-semibold text-[11px] transition-colors"
                     >
                       {playbackSpeed}x
                     </button>
@@ -296,11 +296,11 @@ const LecturePlayerPage: React.FC = () => {
             </div>
 
             {/* Navigation Buttons: Previous / Next */}
-            <div className="bg-dark-900 border-b border-white/10 px-6 py-3 flex items-center justify-between">
+            <div className="bg-surface border-b border-border-subtle px-6 py-3 flex items-center justify-between transition-colors">
               {prevLecture ? (
                 <Link
                   to={`/courses/${courseId}/lecture/${prevLecture._id}`}
-                  className="flex items-center gap-2 text-xs text-white/70 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/5"
+                  className="flex items-center gap-2 text-xs text-text-secondary hover:text-text-primary transition-colors bg-surface-alt hover:bg-surface px-3.5 py-1.5 rounded-xl border border-border-subtle font-medium shadow-xs"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   <span>Previous: {prevLecture.title}</span>
@@ -310,18 +310,18 @@ const LecturePlayerPage: React.FC = () => {
               {nextLecture ? (
                 <Link
                   to={`/courses/${courseId}/lecture/${nextLecture._id}`}
-                  className="flex items-center gap-2 text-xs text-primary-400 hover:text-primary-300 font-medium transition-colors bg-primary-500/10 hover:bg-primary-500/20 px-3 py-1.5 rounded-lg border border-primary-500/20"
+                  className="flex items-center gap-2 text-xs text-brand-primary hover:text-brand-primary-hover font-semibold transition-colors bg-brand-primary/10 hover:bg-brand-primary/15 px-3.5 py-1.5 rounded-xl border border-brand-primary/20 shadow-xs"
                 >
                   <span>Next: {nextLecture.title}</span>
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               ) : (
-                <span className="text-xs text-white/40">You've reached the final lecture in this course!</span>
+                <span className="text-xs text-text-muted font-medium">You've reached the final lecture in this course! 🎉</span>
               )}
             </div>
 
             {/* Tab Navigation */}
-            <div className="bg-dark-900/80 border-b border-white/10 px-6 flex items-center gap-4 overflow-x-auto">
+            <div className="bg-surface border-b border-border-subtle px-6 flex items-center gap-6 overflow-x-auto transition-colors">
               {[
                 { id: 'overview', label: 'Overview', icon: BookOpen },
                 { id: 'notes', label: 'Notes & Resources', icon: FileText },
@@ -336,8 +336,8 @@ const LecturePlayerPage: React.FC = () => {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`py-3.5 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-2 transition-all whitespace-nowrap ${
                       isActive
-                        ? 'border-primary-500 text-primary-400'
-                        : 'border-transparent text-white/60 hover:text-white hover:border-white/20'
+                        ? 'border-brand-primary text-brand-primary font-semibold'
+                        : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-subtle'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -348,51 +348,51 @@ const LecturePlayerPage: React.FC = () => {
             </div>
 
             {/* Tab Contents */}
-            <div className="p-6 overflow-y-auto flex-1 bg-dark-900/40">
+            <div className="p-6 overflow-y-auto flex-1 bg-page">
               {/* 1. OVERVIEW */}
               {activeTab === 'overview' && (
                 <div className="max-w-3xl space-y-6">
                   <div>
-                    <h2 className="text-xl font-bold text-white mb-2">{currentLecture.title}</h2>
-                    <p className="text-white/60 text-sm leading-relaxed">
+                    <h2 className="font-heading font-bold text-xl text-text-primary mb-2">{currentLecture.title}</h2>
+                    <p className="text-text-secondary text-sm leading-relaxed">
                       {currentLecture.description || 
                         `In this comprehensive session on ${currentLecture.subject}, students in Standard ${course.standard} will master fundamental concepts, problem solving tactics, and exam patterns with crystal clear practical examples.`
                       }
                     </p>
                   </div>
 
-                  <div className="glass-card p-4 rounded-xl border border-white/10 space-y-3">
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-primary-400" /> What you will learn
+                  <div className="card-soft p-5 rounded-card space-y-3">
+                    <h3 className="font-heading text-sm font-semibold text-text-primary flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-brand-primary" /> What you will learn
                     </h3>
-                    <ul className="grid sm:grid-cols-2 gap-2 text-xs text-white/70">
+                    <ul className="grid sm:grid-cols-2 gap-2.5 text-xs text-text-secondary">
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Step-by-step conceptual derivation
+                        <Check className="w-4 h-4 text-accent-mint" /> Step-by-step conceptual derivation
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Solved NCERT / State board examples
+                        <Check className="w-4 h-4 text-accent-mint" /> Solved NCERT / State board examples
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Memorization tips & shortcut formulas
+                        <Check className="w-4 h-4 text-accent-mint" /> Memorization tips & shortcut formulas
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Practice quiz & exam model questions
+                        <Check className="w-4 h-4 text-accent-mint" /> Practice quiz & exam model questions
                       </li>
                     </ul>
                   </div>
 
                   {/* Teacher summary */}
                   {course.teacher && (
-                    <div className="flex items-center gap-3 p-4 bg-white/5 rounded-xl border border-white/5">
+                    <div className="card-soft p-4 flex items-center gap-3.5">
                       <img
-                        src={(course.teacher as any).avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent((course.teacher as any).name || 'Teacher')}&background=6C63FF&color=fff`}
+                        src={(course.teacher as any).avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent((course.teacher as any).name || 'Teacher')}&background=6C63F2&color=fff`}
                         alt="Teacher"
-                        className="w-12 h-12 rounded-full object-cover border border-primary-500/30"
+                        className="w-12 h-12 rounded-full object-cover border border-brand-primary/30 shadow-xs"
                       />
                       <div>
-                        <p className="text-xs text-primary-400 font-medium">Instructor</p>
-                        <h4 className="text-sm font-semibold text-white">{(course.teacher as any).name}</h4>
-                        <p className="text-xs text-white/50 line-clamp-1">{(course.teacher as any).bio}</p>
+                        <p className="text-xs text-brand-primary font-semibold">Instructor</p>
+                        <h4 className="font-heading text-sm font-semibold text-text-primary">{(course.teacher as any).name}</h4>
+                        <p className="text-xs text-text-secondary line-clamp-1">{(course.teacher as any).bio}</p>
                       </div>
                     </div>
                   )}
@@ -404,8 +404,8 @@ const LecturePlayerPage: React.FC = () => {
                 <div className="max-w-3xl space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-white">Lecture Notes & Handouts</h3>
-                      <p className="text-xs text-white/50">Comprehensive summary designed for quick exam revision.</p>
+                      <h3 className="font-heading text-lg font-bold text-text-primary">Lecture Notes & Handouts</h3>
+                      <p className="text-xs text-text-secondary">Comprehensive summary designed for quick exam revision.</p>
                     </div>
                     <button 
                       onClick={() => toast.success('Notes downloaded successfully as PDF!')}
@@ -416,37 +416,37 @@ const LecturePlayerPage: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="glass-card p-6 rounded-2xl border border-white/10 space-y-4 font-mono text-xs text-white/80 bg-dark-950/60 leading-relaxed">
-                    <div className="border-b border-white/10 pb-3">
-                      <p className="text-primary-400 font-semibold text-sm">{course.subject} — Standard {course.standard}</p>
-                      <p className="text-white text-base font-bold font-sans mt-1">{currentLecture.title}</p>
+                  <div className="card-soft p-6 rounded-card space-y-4 font-mono text-xs text-text-primary leading-relaxed">
+                    <div className="border-b border-border-subtle pb-3">
+                      <p className="text-brand-primary font-semibold text-sm">{course.subject} — Standard {course.standard}</p>
+                      <p className="text-text-primary text-base font-bold font-heading mt-1">{currentLecture.title}</p>
                     </div>
 
                     <div>
-                      <h4 className="text-white font-bold font-sans text-sm mb-2 text-primary-300">1. Key Terminology</h4>
-                      <p className="text-white/70">
+                      <h4 className="text-text-primary font-bold font-heading text-sm mb-2 text-brand-primary">1. Key Terminology</h4>
+                      <p className="text-text-secondary">
                         • Fundamental definitions establish the exact parameters of the subject. Always write units with numerical answers.
                       </p>
-                      <p className="text-white/70 mt-1">
+                      <p className="text-text-secondary mt-1">
                         • Formula Sheet: Verify sign conventions (+/-) before substituting numerical values into equations.
                       </p>
                     </div>
 
                     <div>
-                      <h4 className="text-white font-bold font-sans text-sm mb-2 text-primary-300">2. Important Formulae</h4>
-                      <div className="bg-white/5 p-3 rounded-lg border border-white/5 space-y-1">
-                        <p className="text-accent-300">Equation 1: S = u*t + 0.5*a*t²</p>
-                        <p className="text-accent-300">Equation 2: v² = u² + 2*a*S</p>
-                        <p className="text-accent-300">Equation 3: v = u + a*t</p>
+                      <h4 className="text-text-primary font-bold font-heading text-sm mb-2 text-brand-primary">2. Important Formulae</h4>
+                      <div className="bg-surface-alt p-3 rounded-lg border border-border-subtle space-y-1">
+                        <p className="text-brand-primary font-semibold">Equation 1: S = u*t + 0.5*a*t²</p>
+                        <p className="text-brand-primary font-semibold">Equation 2: v² = u² + 2*a*S</p>
+                        <p className="text-brand-primary font-semibold">Equation 3: v = u + a*t</p>
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="text-white font-bold font-sans text-sm mb-2 text-primary-300">3. Examination Tips</h4>
-                      <p className="text-white/70">
+                      <h4 className="text-text-primary font-bold font-heading text-sm mb-2 text-brand-primary">3. Examination Tips</h4>
+                      <p className="text-text-secondary">
                         • Allocate 2 minutes to read questions thoroughly during board examinations.
                       </p>
-                      <p className="text-white/70 mt-1">
+                      <p className="text-text-secondary mt-1">
                         • Draw neat labelled diagrams wherever applicable for maximum credit.
                       </p>
                     </div>
@@ -459,11 +459,11 @@ const LecturePlayerPage: React.FC = () => {
                 <div className="max-w-3xl space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-white">Lecture Practice Quiz</h3>
-                      <p className="text-xs text-white/50">Test your comprehension immediately after watching the lecture.</p>
+                      <h3 className="font-heading text-lg font-bold text-text-primary">Lecture Practice Quiz</h3>
+                      <p className="text-xs text-text-secondary">Test your comprehension immediately after watching the lecture.</p>
                     </div>
                     {quizSubmitted && (
-                      <span className="badge-primary text-sm px-3 py-1">
+                      <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-sm px-3 py-1 font-semibold">
                         Score: {quizScore} Points
                       </span>
                     )}
@@ -474,19 +474,18 @@ const LecturePlayerPage: React.FC = () => {
                       {quiz.questions.map((q: any, qIdx: number) => {
                         const isAnswered = selectedAnswers[qIdx] !== undefined;
                         const isCorrect = quizSubmitted && selectedAnswers[qIdx] === q.correctAnswer;
-                        const isWrong = quizSubmitted && isAnswered && selectedAnswers[qIdx] !== q.correctAnswer;
 
                         return (
                           <div 
                             key={qIdx} 
-                            className={`p-5 rounded-xl border transition-all ${
+                            className={`p-5 rounded-card border transition-all ${
                               quizSubmitted 
-                                ? (isCorrect ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30')
-                                : 'bg-white/5 border-white/10'
+                                ? (isCorrect ? 'bg-[#DCFCE7]/60 dark:bg-[#153428]/40 border-[#86EFAC]' : 'bg-[#FFE4EC]/60 dark:bg-[#3D1825]/40 border-[#FF8FA3]')
+                                : 'card-soft'
                             }`}
                           >
-                            <p className="text-sm font-semibold text-white mb-3 flex items-start gap-2">
-                              <span className="px-2 py-0.5 rounded bg-white/10 text-xs text-primary-300 font-mono">Q{qIdx + 1}</span>
+                            <p className="text-sm font-semibold text-text-primary mb-3 flex items-start gap-2">
+                              <span className="px-2 py-0.5 rounded bg-surface-alt border border-border-subtle text-xs text-brand-primary font-mono font-bold">Q{qIdx + 1}</span>
                               <span>{q.question}</span>
                             </p>
 
@@ -499,16 +498,16 @@ const LecturePlayerPage: React.FC = () => {
                                   <label
                                     key={optIdx}
                                     onClick={() => handleQuizOption(qIdx, optIdx)}
-                                    className={`flex items-center gap-3 p-3 rounded-lg border text-xs cursor-pointer transition-all ${
+                                    className={`flex items-center gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-all ${
                                       isRightAnswer
-                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-medium'
+                                        ? 'bg-[#DCFCE7] dark:bg-[#153428] border-[#86EFAC] text-[#16A34A] dark:text-[#4ADE9A] font-semibold'
                                         : isSelected
-                                          ? 'bg-primary-500/20 border-primary-500 text-white'
-                                          : 'bg-white/[0.02] border-white/5 text-white/70 hover:bg-white/5'
+                                          ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold'
+                                          : 'bg-surface border-border-subtle text-text-secondary hover:bg-surface-alt hover:text-text-primary'
                                     }`}
                                   >
                                     <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                      isSelected ? 'border-primary-400 bg-primary-500' : 'border-white/30'
+                                      isSelected ? 'border-brand-primary bg-brand-primary' : 'border-border-subtle'
                                     }`}>
                                       {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                                     </div>
@@ -519,8 +518,8 @@ const LecturePlayerPage: React.FC = () => {
                             </div>
 
                             {quizSubmitted && q.explanation && (
-                              <div className="mt-3 p-3 rounded-lg bg-white/5 text-xs text-white/70 border border-white/5">
-                                <span className="font-bold text-primary-400">Explanation: </span>
+                              <div className="mt-3 p-3 rounded-xl bg-surface-alt text-xs text-text-secondary border border-border-subtle">
+                                <span className="font-bold text-brand-primary">Explanation: </span>
                                 {q.explanation}
                               </div>
                             )}
@@ -550,9 +549,9 @@ const LecturePlayerPage: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-12 glass-card p-8 rounded-2xl">
-                      <HelpCircle className="w-12 h-12 text-white/30 mx-auto mb-3" />
-                      <p className="text-white/60 text-sm">Practice questions are generated based on your standard curriculum.</p>
+                    <div className="text-center py-12 card-soft p-8 rounded-card">
+                      <HelpCircle className="w-12 h-12 text-text-muted mx-auto mb-3" />
+                      <p className="text-text-secondary text-sm">Practice questions are generated based on your standard curriculum.</p>
                       <button 
                         onClick={() => {
                           setQuiz({
@@ -588,8 +587,8 @@ const LecturePlayerPage: React.FC = () => {
               {activeTab === 'flashcards' && (
                 <div className="max-w-2xl mx-auto space-y-6">
                   <div className="text-center">
-                    <h3 className="text-lg font-bold text-white">Active Recall Flashcards</h3>
-                    <p className="text-xs text-white/50">Click the card to flip between Question and Answer.</p>
+                    <h3 className="font-heading text-lg font-bold text-text-primary">Active Recall Flashcards</h3>
+                    <p className="text-xs text-text-secondary">Click the card to flip between Question and Answer.</p>
                   </div>
 
                   {/* 3D Flip Card */}
@@ -597,31 +596,31 @@ const LecturePlayerPage: React.FC = () => {
                     onClick={() => setIsFlipped(!isFlipped)}
                     className="relative w-full h-64 cursor-pointer perspective-1000 group"
                   >
-                    <div className={`w-full h-full rounded-2xl transition-all duration-500 transform-gpu p-8 flex flex-col justify-between border shadow-2xl ${
+                    <div className={`w-full h-full rounded-2xl transition-all duration-500 transform-gpu p-8 flex flex-col justify-between border shadow-soft hover:shadow-soft-hover ${
                       isFlipped
-                        ? 'bg-gradient-to-br from-primary-900/60 to-purple-900/60 border-primary-500/40 text-white'
-                        : 'bg-dark-800 border-white/10 text-white'
+                        ? 'bg-gradient-to-br from-[#EDE9FE] to-surface border-brand-primary/40 text-text-primary dark:from-[#28214C] dark:to-surface'
+                        : 'bg-surface border-border-subtle text-text-primary'
                     }`}>
-                      <div className="flex items-center justify-between text-xs text-white/40">
-                        <span className="badge bg-white/10 text-white/60">Card {currentCardIndex + 1} of {flashcards.length}</span>
-                        <span className="text-primary-400 font-medium">Click to flip 🔄</span>
+                      <div className="flex items-center justify-between text-xs text-text-muted">
+                        <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">Card {currentCardIndex + 1} of {flashcards.length}</span>
+                        <span className="text-brand-primary font-medium">Click to flip 🔄</span>
                       </div>
 
                       <div className="text-center my-auto">
-                        <p className="text-xs text-primary-400 uppercase tracking-wider font-semibold mb-2">
+                        <p className="text-xs text-brand-primary uppercase tracking-wider font-semibold mb-2">
                           {isFlipped ? 'Answer & Explanation' : 'Concept / Question'}
                         </p>
-                        <p className="text-base sm:text-lg font-bold leading-snug">
+                        <p className="font-heading text-base sm:text-lg font-bold leading-snug text-text-primary">
                           {isFlipped ? flashcards[currentCardIndex].answer : flashcards[currentCardIndex].question}
                         </p>
                         {!isFlipped && flashcards[currentCardIndex].hint && (
-                          <p className="text-xs text-white/40 mt-3 italic">
+                          <p className="text-xs text-text-muted mt-3 italic">
                             Hint: {flashcards[currentCardIndex].hint}
                           </p>
                         )}
                       </div>
 
-                      <div className="text-center text-[11px] text-white/30">
+                      <div className="text-center text-[11px] text-text-muted font-medium">
                         Learniq Smart Flashcards
                       </div>
                     </div>
@@ -640,7 +639,7 @@ const LecturePlayerPage: React.FC = () => {
                       <span>Previous</span>
                     </button>
 
-                    <span className="text-xs text-white/40 font-mono">
+                    <span className="text-xs text-text-secondary font-mono font-medium">
                       {currentCardIndex + 1} / {flashcards.length}
                     </span>
 
@@ -661,21 +660,21 @@ const LecturePlayerPage: React.FC = () => {
           </div>
 
           {/* Right: Course Playlist Sidebar */}
-          <div className="lg:col-span-4 xl:col-span-3 bg-dark-900 flex flex-col h-full border-t lg:border-t-0">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+          <div className="lg:col-span-4 xl:col-span-3 bg-surface flex flex-col h-full border-t lg:border-t-0 border-border-subtle transition-colors">
+            <div className="p-4 border-b border-border-subtle flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-white">Course Syllabus</h3>
-                <p className="text-xs text-white/50">{lectures.length} Lectures • Standard {course.standard}</p>
+                <h3 className="font-heading text-sm font-bold text-text-primary">Course Syllabus</h3>
+                <p className="text-xs text-text-secondary font-medium">{lectures.length} Lectures • Standard {course.standard}</p>
               </div>
               <div className="text-right">
-                <span className="text-xs font-semibold text-emerald-400">
+                <span className="text-xs font-semibold text-accent-mint">
                   {completedLectures.length}/{lectures.length} Completed
                 </span>
               </div>
             </div>
 
             {/* Lecture list */}
-            <div className="overflow-y-auto flex-1 divide-y divide-white/5">
+            <div className="overflow-y-auto flex-1 divide-y divide-border-subtle">
               {lectures.map((item, idx) => {
                 const isSelected = item._id === currentLecture._id;
                 const isCompleted = completedLectures.includes(item._id);
@@ -686,17 +685,17 @@ const LecturePlayerPage: React.FC = () => {
                     to={`/courses/${courseId}/lecture/${item._id}`}
                     className={`p-4 flex items-start gap-3 transition-all block ${
                       isSelected
-                        ? 'bg-primary-500/15 border-l-4 border-primary-500'
-                        : 'hover:bg-white/[0.03]'
+                        ? 'bg-brand-primary/10 border-l-4 border-brand-primary text-brand-primary'
+                        : 'hover:bg-surface-alt'
                     }`}
                   >
                     <div className="mt-0.5 flex-shrink-0">
                       {isCompleted ? (
-                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        <CheckCircle className="w-4 h-4 text-accent-mint" />
                       ) : isSelected ? (
-                        <Play className="w-4 h-4 text-primary-400 fill-primary-400" />
+                        <Play className="w-4 h-4 text-brand-primary fill-brand-primary" />
                       ) : (
-                        <div className="w-4 h-4 rounded-full border border-white/30 text-[10px] flex items-center justify-center text-white/50">
+                        <div className="w-4 h-4 rounded-full border border-border-subtle text-[10px] flex items-center justify-center text-text-muted font-medium">
                           {idx + 1}
                         </div>
                       )}
@@ -704,12 +703,12 @@ const LecturePlayerPage: React.FC = () => {
 
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs font-medium line-clamp-2 ${
-                        isSelected ? 'text-white font-bold' : 'text-white/80'
+                        isSelected ? 'text-brand-primary font-bold' : 'text-text-primary'
                       }`}>
                         {item.title}
                       </p>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-white/40">
-                        <Clock className="w-3 h-3" />
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-text-secondary">
+                        <Clock className="w-3 h-3 text-text-muted" />
                         <span>{item.videoDuration || '20:00'}</span>
                         {item.isFree && <span className="badge-free text-[9px] px-1 py-0">FREE</span>}
                       </div>
@@ -726,3 +725,4 @@ const LecturePlayerPage: React.FC = () => {
 };
 
 export default LecturePlayerPage;
+

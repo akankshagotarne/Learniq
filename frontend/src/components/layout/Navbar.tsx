@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Search, Menu, X, ChevronDown, LogOut, User, Settings, BookOpen, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
+import ThemeToggle from '../ui/ThemeToggle';
 import api from '../../services/api';
 import { Notification } from '../../types';
 
@@ -47,11 +48,14 @@ const Navbar: React.FC = () => {
     { label: 'Courses', href: '/courses', icon: BookOpen },
     { label: 'Live Classes', href: '/live-sessions', icon: null },
     { label: 'About', href: '/about', icon: null },
+    { label: 'Contact', href: '/contact', icon: null },
   ];
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      isScrolled ? 'bg-dark-800/90 backdrop-blur-xl border-b border-white/10 shadow-lg' : 'bg-transparent'
+      isScrolled
+        ? 'bg-white/95 dark:bg-[#1B1C2E]/95 backdrop-blur-xl border-b border-[#E7E7F2] dark:border-[#2E2F4A] shadow-[0_4px_20px_rgba(34,36,58,0.06)]'
+        : 'bg-white/80 dark:bg-[#12121F]/80 backdrop-blur-md border-b border-[#E7E7F2]/60 dark:border-[#2E2F4A]/40'
     }`}>
       <div className="page-container">
         <div className="flex items-center justify-between h-16">
@@ -64,7 +68,7 @@ const Navbar: React.FC = () => {
               <Link
                 key={link.label}
                 to={link.href}
-                className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg text-sm font-medium transition-all duration-200"
+                className="px-4 py-2 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl text-sm font-medium transition-all duration-200"
               >
                 {link.label}
               </Link>
@@ -76,17 +80,20 @@ const Navbar: React.FC = () => {
             {/* Search */}
             <form onSubmit={handleSearch} className="hidden md:flex items-center">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A3C0]" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search courses..."
-                  className="pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-white placeholder-white/40
-                    focus:outline-none focus:ring-1 focus:ring-primary-500/50 focus:border-primary-500/50 w-48 focus:w-64 transition-all"
+                  className="pl-9 pr-4 py-2 bg-[#F1F1FA] dark:bg-[#242540] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-full text-sm text-[#22243A] dark:text-[#F4F4FA] placeholder-[#A0A3C0]
+                    focus:outline-none focus:bg-white dark:focus:bg-[#1B1C2E] focus:border-[#6C63F2] focus:ring-2 focus:ring-[#6C63F2]/20 w-44 focus:w-60 transition-all"
                 />
               </div>
             </form>
+
+            {/* Theme Toggle Button */}
+            <ThemeToggle />
 
             {user ? (
               <>
@@ -94,30 +101,32 @@ const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => { setShowNotifs(!showNotifs); setIsProfileOpen(false); }}
-                    className="relative p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                    className="relative p-2 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+                    aria-label="Notifications"
                   >
                     <Bell className="w-5 h-5" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-secondary-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
+                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#FF8FA3] rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </button>
 
                   {showNotifs && (
-                    <div className="absolute right-0 top-12 w-80 glass-card py-2 shadow-2xl animate-slide-down z-50">
-                      <div className="px-4 py-2 border-b border-white/10">
-                        <p className="text-sm font-semibold text-white">Notifications</p>
+                    <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
+                      <div className="px-4 py-2 border-b border-[#E7E7F2] dark:border-[#2E2F4A] flex items-center justify-between">
+                        <p className="text-sm font-semibold text-[#22243A] dark:text-[#F4F4FA]">Notifications</p>
+                        {unreadCount > 0 && <span className="badge-primary text-[10px]">{unreadCount} new</span>}
                       </div>
-                      <div className="max-h-80 overflow-y-auto">
+                      <div className="max-h-80 overflow-y-auto divide-y divide-[#E7E7F2] dark:divide-[#2E2F4A]">
                         {notifications.length === 0 ? (
-                          <p className="text-white/40 text-sm text-center py-6">No notifications</p>
+                          <p className="text-[#A0A3C0] text-sm text-center py-6">No notifications</p>
                         ) : (
                           notifications.slice(0, 10).map(n => (
-                            <div key={n._id} className={`px-4 py-3 hover:bg-white/5 cursor-pointer transition-all ${!n.isRead ? 'bg-primary-500/5' : ''}`}>
-                              <p className="text-sm font-medium text-white">{n.title}</p>
-                              <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{n.message}</p>
-                              <p className="text-xs text-white/30 mt-1">{new Date(n.createdAt).toLocaleDateString()}</p>
+                            <div key={n._id} className={`px-4 py-3 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] cursor-pointer transition-all ${!n.isRead ? 'bg-[#EDE9FE]/40 dark:bg-[#6C63F2]/10' : ''}`}>
+                              <p className="text-sm font-medium text-[#22243A] dark:text-[#F4F4FA]">{n.title}</p>
+                              <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] mt-0.5 line-clamp-2">{n.message}</p>
+                              <p className="text-[10px] text-[#A0A3C0] mt-1">{new Date(n.createdAt).toLocaleDateString()}</p>
                             </div>
                           ))
                         )}
@@ -130,40 +139,40 @@ const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => { setIsProfileOpen(!isProfileOpen); setShowNotifs(false); }}
-                    className="flex items-center gap-2 p-1.5 hover:bg-white/10 rounded-full transition-all"
+                    className="flex items-center gap-2 p-1.5 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
                   >
                     <img
-                      src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6C63FF&color=fff&size=40`}
+                      src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6C63F2&color=fff&size=40`}
                       alt={user.name}
-                      className="w-8 h-8 rounded-full object-cover border border-white/20"
+                      className="w-8 h-8 rounded-full object-cover border border-[#E7E7F2] dark:border-[#2E2F4A]"
                     />
-                    <ChevronDown className="w-4 h-4 text-white/50 hidden sm:block" />
+                    <ChevronDown className="w-4 h-4 text-[#6B6E8C] hidden sm:block" />
                   </button>
 
                   {isProfileOpen && (
-                    <div className="absolute right-0 top-12 w-56 glass-card py-2 shadow-2xl animate-slide-down z-50">
-                      <div className="px-4 py-3 border-b border-white/10">
-                        <p className="text-sm font-semibold text-white">{user.name}</p>
-                        <p className="text-xs text-white/50 capitalize">{user.role}</p>
+                    <div className="absolute right-0 top-12 w-56 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
+                      <div className="px-4 py-3 border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
+                        <p className="text-sm font-semibold text-[#22243A] dark:text-[#F4F4FA]">{user.name}</p>
+                        <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] capitalize">{user.role}</p>
                       </div>
                       <Link
                         to={getDashboardPath()}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] transition-all"
                         onClick={() => setIsProfileOpen(false)}
                       >
-                        <User className="w-4 h-4" /> Dashboard
+                        <User className="w-4 h-4 text-[#6C63F2]" /> Dashboard
                       </Link>
                       <Link
-                        to="/profile"
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                        to="/student/standard"
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] transition-all"
                         onClick={() => setIsProfileOpen(false)}
                       >
-                        <Settings className="w-4 h-4" /> Profile Settings
+                        <Settings className="w-4 h-4 text-[#6C63F2]" /> Change Standard
                       </Link>
-                      <hr className="border-white/10 my-1" />
+                      <hr className="border-[#E7E7F2] dark:border-[#2E2F4A] my-1" />
                       <button
                         onClick={logout}
-                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#E1447A] hover:bg-[#FFE4EC] dark:hover:bg-[#E1447A]/10 transition-all font-medium"
                       >
                         <LogOut className="w-4 h-4" /> Logout
                       </button>
@@ -172,19 +181,19 @@ const Navbar: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="flex items-center gap-3">
-                <Link to="/login" className="text-sm font-medium text-white/70 hover:text-white px-4 py-2 transition-all">
+              <div className="flex items-center gap-2">
+                <Link to="/login" className="text-sm font-medium text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] px-3.5 py-2 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all">
                   Log In
                 </Link>
-                <Link to="/register" className="btn-primary text-sm py-2 px-5">
+                <Link to="/register" className="btn-primary text-sm py-2 px-4 shadow-sm">
                   Get Started
                 </Link>
               </div>
             )}
 
-            {/* Mobile menu */}
+            {/* Mobile menu button */}
             <button
-              className="lg:hidden p-2 text-white/70 hover:text-white transition-all"
+              className="lg:hidden p-2 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] rounded-xl transition-all"
               onClick={() => setIsMobileOpen(!isMobileOpen)}
             >
               {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -194,25 +203,25 @@ const Navbar: React.FC = () => {
 
         {/* Mobile Menu */}
         {isMobileOpen && (
-          <div className="lg:hidden glass-card mx-0 mt-2 mb-4 py-4 animate-slide-down">
+          <div className="lg:hidden bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl mx-0 mt-2 mb-4 p-4 shadow-xl animate-slide-down">
             {navLinks.map(link => (
               <Link
                 key={link.label}
                 to={link.href}
-                className="flex items-center gap-2 px-5 py-3 text-white/70 hover:text-white hover:bg-white/10 transition-all text-sm"
+                className="flex items-center gap-2.5 px-4 py-2.5 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all text-sm font-medium"
                 onClick={() => setIsMobileOpen(false)}
               >
                 {link.label}
               </Link>
             ))}
-            <div className="px-5 pt-3 border-t border-white/10 mt-2">
+            <div className="pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">
               <form onSubmit={handleSearch} className="flex gap-2">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search courses..."
-                  className="input-field text-sm py-2"
+                  className="input-field text-sm py-2 flex-1"
                 />
                 <button type="submit" className="btn-primary py-2 px-3"><Search className="w-4 h-4" /></button>
               </form>

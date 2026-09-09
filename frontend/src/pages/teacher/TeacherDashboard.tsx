@@ -32,44 +32,48 @@ const TeacherDashboard: React.FC = () => {
   }, []);
 
   const statCards = [
-    { label: 'My Courses', value: courses.length, icon: BookOpen, color: 'text-primary-400', bg: 'bg-primary-500/10 border-primary-500/20', href: '/teacher/courses' },
-    { label: 'Students', value: stats.students, icon: Users, color: 'text-accent-400', bg: 'bg-accent-500/10 border-accent-500/20', href: '/teacher/students' },
-    { label: 'Quizzes', value: stats.quizzes, icon: HelpCircle, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20', href: '/teacher/quizzes' },
-    { label: 'Assignments', value: stats.assignments, icon: BarChart2, color: 'text-secondary-400', bg: 'bg-secondary-500/10 border-secondary-500/20', href: '/teacher/assignments' },
+    { label: 'My Courses', value: courses.length, icon: BookOpen, iconBg: 'bg-[#EDE9FE] text-[#6C63F2]', href: '/teacher/courses' },
+    { label: 'Students Enrolled', value: stats.students, icon: Users, iconBg: 'bg-[#DCFCE7] text-[#16A34A]', href: '/teacher/students' },
+    { label: 'Quizzes Created', value: stats.quizzes, icon: HelpCircle, iconBg: 'bg-[#FEF3C7] text-[#D97706]', href: '/teacher/quizzes' },
+    { label: 'Assignments', value: stats.assignments, icon: BarChart2, iconBg: 'bg-[#FFE4EC] text-[#E1447A]', href: '/teacher/assignments' },
   ];
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-page">
       <Sidebar />
       <main className="flex-1 ml-16 md:ml-64 transition-all duration-300">
-        <div className="p-6 lg:p-8">
-          <div className="flex items-center justify-between mb-8">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
-              <h1 className="font-display font-bold text-2xl text-white">
+              <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">
                 Teacher Dashboard
               </h1>
-              <p className="text-white/50 text-sm mt-1">Hello, {user?.name?.split(' ')[0]}! Here's your teaching overview.</p>
+              <p className="text-text-secondary text-sm mt-1">Hello, {user?.name?.split(' ')[0]}! Here's your teaching overview.</p>
             </div>
             <div className="flex gap-3">
               <Link to="/teacher/courses" className="btn-primary text-sm py-2 flex items-center gap-2">
                 <Plus className="w-4 h-4" /> New Course
               </Link>
-              <Link to="/teacher/live" className="btn-secondary text-sm py-2 flex items-center gap-2">
-                <Radio className="w-4 h-4" /> Start Live
+              <Link to="/teacher/live" className="btn-outline text-sm py-2 flex items-center gap-2">
+                <Radio className="w-4 h-4 text-brand-primary" /> Start Live
               </Link>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {statCards.map(({ label, value, icon: Icon, color, bg, href }) => (
-              <Link key={label} to={href} className={`glass-card p-5 border ${bg} hover:-translate-y-0.5 transition-all`}>
-                <div className="flex items-center justify-between mb-2">
-                  <Icon className={`w-5 h-5 ${color}`} />
-                  <ChevronRight className="w-4 h-4 text-white/20" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            {statCards.map(({ label, value, icon: Icon, iconBg, href }) => (
+              <Link key={label} to={href} className="card-soft p-5 hover:-translate-y-0.5 transition-all flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-text-muted" />
                 </div>
-                <p className={`text-2xl font-bold ${color}`}>{loading ? '...' : value}</p>
-                <p className="text-white/50 text-xs mt-1">{label}</p>
+                <div>
+                  <p className="text-2xl font-bold font-heading text-text-primary">{loading ? '...' : value}</p>
+                  <p className="text-text-secondary text-xs mt-1 font-medium">{label}</p>
+                </div>
               </Link>
             ))}
           </div>
@@ -78,21 +82,21 @@ const TeacherDashboard: React.FC = () => {
             {/* My Courses */}
             <div className="lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white font-semibold">My Courses</h2>
-                <Link to="/teacher/courses" className="text-primary-400 text-sm hover:text-primary-300">View All</Link>
+                <h2 className="text-text-primary font-heading font-semibold text-lg">My Courses</h2>
+                <Link to="/teacher/courses" className="text-brand-primary text-sm font-medium hover:text-brand-primary-hover">View All</Link>
               </div>
               <div className="space-y-3">
                 {loading ? (
-                  [...Array(3)].map((_, i) => <div key={i} className="skeleton h-20 rounded-xl" />)
+                  [...Array(3)].map((_, i) => <div key={i} className="skeleton h-20 rounded-card" />)
                 ) : courses.length === 0 ? (
-                  <div className="glass-card p-8 text-center">
-                    <BookOpen className="w-10 h-10 text-white/20 mx-auto mb-3" />
-                    <p className="text-white/40 text-sm">No courses yet.</p>
+                  <div className="card-soft p-8 text-center">
+                    <BookOpen className="w-10 h-10 text-text-muted mx-auto mb-3" />
+                    <p className="text-text-secondary text-sm">No courses yet.</p>
                     <Link to="/teacher/courses" className="btn-primary mt-4 inline-block text-sm">Create Course</Link>
                   </div>
                 ) : (
                   courses.slice(0, 5).map(c => (
-                    <div key={c._id} className="glass-card p-4 flex items-center gap-4 hover:bg-white/10 transition-all">
+                    <div key={c._id} className="card-soft p-4 flex items-center gap-4 hover:bg-surface-alt transition-all">
                       <img
                         src={c.thumbnail || `https://picsum.photos/seed/${c.subject}/64/64`}
                         alt={c.title}
@@ -100,14 +104,14 @@ const TeacherDashboard: React.FC = () => {
                         onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/64/64'; }}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium text-sm truncate">{c.title}</p>
-                        <p className="text-white/40 text-xs mt-0.5">{c.subject} • Std {c.standard} • {c.totalLectures} lectures</p>
+                        <p className="text-text-primary font-semibold text-sm truncate font-heading">{c.title}</p>
+                        <p className="text-text-secondary text-xs mt-0.5">{c.subject} • Std {c.standard} • {c.totalLectures} lectures</p>
                         <div className="flex items-center gap-1 mt-1">
-                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                          <span className="text-xs text-white/40">{c.rating} • {c.enrolledCount} students</span>
+                          <Star className="w-3 h-3 text-accent-amber fill-accent-amber" />
+                          <span className="text-xs text-text-secondary font-medium">{c.rating} • {c.enrolledCount} students</span>
                         </div>
                       </div>
-                      <Link to={`/courses/${c._id}`} className="text-white/30 hover:text-primary-400 transition-colors">
+                      <Link to={`/courses/${c._id}`} className="text-text-muted hover:text-brand-primary transition-colors p-2">
                         <ChevronRight className="w-5 h-5" />
                       </Link>
                     </div>
@@ -119,40 +123,40 @@ const TeacherDashboard: React.FC = () => {
             {/* Live Sessions */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white font-semibold">Live Sessions</h2>
-                <Link to="/teacher/live" className="text-primary-400 text-sm hover:text-primary-300">Manage</Link>
+                <h2 className="text-text-primary font-heading font-semibold text-lg">Live Sessions</h2>
+                <Link to="/teacher/live" className="text-brand-primary text-sm font-medium hover:text-brand-primary-hover">Manage</Link>
               </div>
               <div className="space-y-3">
                 {loading ? (
-                  [...Array(3)].map((_, i) => <div key={i} className="skeleton h-20 rounded-xl" />)
+                  [...Array(3)].map((_, i) => <div key={i} className="skeleton h-20 rounded-card" />)
                 ) : sessions.length === 0 ? (
-                  <div className="glass-card p-6 text-center">
-                    <Radio className="w-8 h-8 text-white/20 mx-auto mb-2" />
-                    <p className="text-white/40 text-sm">No sessions yet.</p>
-                    <Link to="/teacher/live" className="btn-secondary mt-3 inline-block text-xs py-2">Start Live</Link>
+                  <div className="card-soft p-6 text-center">
+                    <Radio className="w-8 h-8 text-text-muted mx-auto mb-2" />
+                    <p className="text-text-secondary text-sm">No sessions yet.</p>
+                    <Link to="/teacher/live" className="btn-outline mt-3 inline-block text-xs py-2">Start Live</Link>
                   </div>
                 ) : (
                   sessions.slice(0, 4).map(s => (
-                    <div key={s._id} className="glass-card p-4">
+                    <div key={s._id} className="card-soft p-4">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-white font-medium text-sm">{s.title}</p>
+                        <p className="text-text-primary font-semibold text-sm truncate font-heading">{s.title}</p>
                         {s.status === 'live' ? (
                           <span className="badge-live text-xs">LIVE</span>
                         ) : s.status === 'scheduled' ? (
-                          <span className="badge bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs">Scheduled</span>
+                          <span className="badge-subject-live text-xs">Scheduled</span>
                         ) : (
-                          <span className="badge bg-white/10 text-white/40 text-xs">Ended</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-text-muted">Ended</span>
                         )}
                       </div>
-                      <p className="text-white/40 text-xs">{s.subject} • Std {s.standard}</p>
-                      <p className="text-white/30 text-xs mt-1">
+                      <p className="text-text-secondary text-xs">{s.subject} • Std {s.standard}</p>
+                      <p className="text-text-muted text-xs mt-1">
                         {s.scheduledAt ? new Date(s.scheduledAt).toLocaleDateString('en-IN') : ''} •{' '}
-                        Code: <span className="font-mono text-primary-400">{s.sessionCode}</span>
+                        Code: <span className="font-mono text-brand-primary font-semibold">{s.sessionCode}</span>
                       </p>
                     </div>
                   ))
                 )}
-                <Link to="/teacher/live" className="btn-secondary text-xs py-2 w-full text-center block">
+                <Link to="/teacher/live" className="btn-outline text-xs py-2.5 w-full text-center block">
                   + Create New Session
                 </Link>
               </div>

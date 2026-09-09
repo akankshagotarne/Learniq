@@ -4,11 +4,31 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Learniq - India's interactive EdTech platform. Join live classes, watch recorded lectures, take quizzes, and track your progress for Standards 1-10." />
+    <meta name="description" content="Learniq - India's modern, friendly EdTech platform. Join live classes, watch recorded lectures, take quizzes, and track your progress for Standards 1-10." />
     <meta name="keywords" content="learniq, online classes, live tuition, educational platform, standard 1-10, India edtech" />
     <meta property="og:title" content="Learniq - Learn Smarter. Grow Better." />
     <meta property="og:description" content="Join live classes with expert teachers. Standard 1-10 content for all subjects." />
-    <meta name="theme-color" content="#6C63FF" />
+    <meta name="theme-color" content="#6C63F2" />
+    
+    <!-- Google Fonts: Poppins (headings) & Inter (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Anti-flicker Theme Initialization (Light by default) -->
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('learniq-theme') || 'light';
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    
     <title>Learniq — Learn Smarter. Grow Better.</title>
   </head>
   <body>

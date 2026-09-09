@@ -8,6 +8,20 @@ import { Course, Lecture, Note } from '../types';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
+const getSubjectBadge = (subject: string) => {
+  const lower = subject.toLowerCase();
+  if (lower.includes('marathi') || lower.includes('english') || lower.includes('language') || lower.includes('hindi')) {
+    return 'badge-subject-languages';
+  }
+  if (lower.includes('science') || lower.includes('environ') || lower.includes('evs')) {
+    return 'badge-subject-science';
+  }
+  if (lower.includes('math')) {
+    return 'badge-subject-math';
+  }
+  return 'bg-[#EDE9FE] text-[#6C63F2] dark:bg-[#2E2856] dark:text-[#B69CF2]';
+};
+
 const CourseDetailPage: React.FC = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -50,15 +64,15 @@ const CourseDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-page">
         <Navbar />
-        <div className="pt-20 page-container py-8">
-          <div className="skeleton h-64 rounded-2xl mb-8" />
+        <div className="pt-24 page-container py-8">
+          <div className="card-soft h-64 rounded-2xl mb-8 animate-pulse bg-surface-alt" />
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
-              {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
+              {[...Array(5)].map((_, i) => <div key={i} className="card-soft h-16 rounded-xl animate-pulse bg-surface-alt" />)}
             </div>
-            <div className="skeleton h-80 rounded-2xl" />
+            <div className="card-soft h-80 rounded-2xl animate-pulse bg-surface-alt" />
           </div>
         </div>
       </div>
@@ -70,55 +84,55 @@ const CourseDetailPage: React.FC = () => {
   const teacher = course.teacher as any;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-page flex flex-col">
       <Navbar />
-      <div className="pt-20 bg-dark-900 min-h-screen">
+      <div className="pt-20 flex-1">
         {/* Hero */}
-        <div className="bg-dark-800 border-b border-white/10 py-10">
+        <div className="bg-surface border-b border-border-subtle py-10 transition-colors">
           <div className="page-container">
             <div className="grid lg:grid-cols-3 gap-8 items-start">
               <div className="lg:col-span-2">
                 <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="badge-primary">{course.subject}</span>
-                  <span className="badge bg-dark-700/60 text-white/60">Standard {course.standard}</span>
-                  <span className="badge bg-dark-700/60 text-white/60">{course.level}</span>
+                  <span className={`badge ${getSubjectBadge(course.subject)} font-medium`}>{course.subject}</span>
+                  <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">Standard {course.standard}</span>
+                  <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">{course.level}</span>
                   {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
                 </div>
-                <h1 className="font-display font-bold text-2xl md:text-3xl text-white mb-4">{course.title}</h1>
-                <p className="text-white/60 text-sm leading-relaxed mb-6">{course.description}</p>
+                <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-4 leading-tight">{course.title}</h1>
+                <p className="text-text-secondary text-sm leading-relaxed mb-6">{course.description}</p>
 
-                <div className="flex flex-wrap items-center gap-6 text-sm">
+                <div className="flex flex-wrap items-center gap-6 text-sm text-text-secondary">
+                  <div className="flex items-center gap-1.5 font-semibold text-text-primary">
+                    <Star className="w-4 h-4 text-accent-amber fill-accent-amber" />
+                    <span>{course.rating || '4.8'}</span>
+                    <span className="text-text-muted font-normal">({course.totalRatings || 24} ratings)</span>
+                  </div>
                   <div className="flex items-center gap-1.5">
-                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    <span className="text-white font-semibold">{course.rating}</span>
-                    <span className="text-white/40">({course.totalRatings} ratings)</span>
+                    <Users className="w-4 h-4 text-accent-mint" /> {course.enrolledCount} students
                   </div>
-                  <div className="flex items-center gap-1.5 text-white/60">
-                    <Users className="w-4 h-4" /> {course.enrolledCount} students
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} lectures
                   </div>
-                  <div className="flex items-center gap-1.5 text-white/60">
-                    <BookOpen className="w-4 h-4" /> {course.totalLectures} lectures
-                  </div>
-                  <div className="flex items-center gap-1.5 text-white/60">
-                    <Clock className="w-4 h-4" /> {course.duration}
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-accent-sky" /> {course.duration}
                   </div>
                 </div>
               </div>
 
               {/* Course Card - desktop */}
               <div className="hidden lg:block">
-                <div className="glass-card overflow-hidden sticky top-24">
+                <div className="bg-surface border border-border-subtle rounded-card overflow-hidden shadow-soft sticky top-24 transition-colors">
                   <img
                     src={course.thumbnail || `https://picsum.photos/seed/${course.subject}/400/225`}
                     alt={course.title}
                     className="w-full aspect-video object-cover"
                     onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/400/225'; }}
                   />
-                  <div className="p-5">
+                  <div className="p-6">
                     {course.isFree ? (
-                      <p className="text-2xl font-bold text-accent-400 mb-4">Free</p>
+                      <p className="text-2xl font-heading font-bold text-accent-mint mb-4">Free</p>
                     ) : (
-                      <p className="text-2xl font-bold text-white mb-4">₹{course.price}</p>
+                      <p className="text-2xl font-heading font-bold text-text-primary mb-4">₹{course.price}</p>
                     )}
 
                     {isEnrolled ? (
@@ -136,13 +150,13 @@ const CourseDetailPage: React.FC = () => {
                         )}
                       </button>
                     )}
-                    <p className="text-white/30 text-xs text-center mt-3">30-day money-back guarantee</p>
+                    <p className="text-text-muted text-xs text-center mt-3">30-day money-back guarantee</p>
 
-                    <div className="mt-4 space-y-2 text-sm text-white/50">
-                      <div className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> {course.totalLectures} lectures</div>
-                      <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> {course.duration} total</div>
-                      <div className="flex items-center gap-2"><FileText className="w-4 h-4" /> Downloadable notes</div>
-                      <div className="flex items-center gap-2"><Award className="w-4 h-4" /> Certificate on completion</div>
+                    <div className="mt-5 pt-4 border-t border-border-subtle space-y-2.5 text-xs text-text-secondary">
+                      <div className="flex items-center gap-2.5"><BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} comprehensive lectures</div>
+                      <div className="flex items-center gap-2.5"><Clock className="w-4 h-4 text-accent-sky" /> {course.duration} total duration</div>
+                      <div className="flex items-center gap-2.5"><FileText className="w-4 h-4 text-accent-amber" /> Downloadable notes & summaries</div>
+                      <div className="flex items-center gap-2.5"><Award className="w-4 h-4 text-accent-mint" /> Certificate on completion</div>
                     </div>
                   </div>
                 </div>
@@ -157,22 +171,26 @@ const CourseDetailPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-8">
               {/* Teacher Profile */}
               {teacher && (
-                <div className="glass-card p-6">
-                  <h2 className="text-lg font-bold text-white mb-5">About Your Teacher</h2>
-                  <div className="flex items-start gap-4">
+                <div className="card-soft p-6">
+                  <h2 className="font-heading text-lg font-bold text-text-primary mb-5">About Your Teacher</h2>
+                  <div className="flex items-start gap-5">
                     <img
-                      src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'T')}&background=6C63FF&color=fff&size=80`}
+                      src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'T')}&background=6C63F2&color=fff&size=80`}
                       alt={teacher.name}
-                      className="w-20 h-20 rounded-2xl object-cover border-2 border-primary-500/30 flex-shrink-0"
+                      className="w-20 h-20 rounded-2xl object-cover border-2 border-brand-primary/30 flex-shrink-0 shadow-sm"
                     />
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-semibold text-lg">{teacher.name}</h3>
-                      {teacher.qualification && <p className="text-primary-400 text-sm mb-1">{teacher.qualification}</p>}
-                      {teacher.experience && <p className="text-white/50 text-sm mb-2">📅 {teacher.experience} experience</p>}
-                      {teacher.bio && <p className="text-white/60 text-sm leading-relaxed">{teacher.bio}</p>}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {teacher.subjects?.map((s: string) => <span key={s} className="badge-primary text-xs">{s}</span>)}
-                        {teacher.standards?.map((s: number) => <span key={s} className="badge bg-white/10 text-white/50 text-xs">Std {s}</span>)}
+                      <h3 className="font-heading text-text-primary font-semibold text-lg">{teacher.name}</h3>
+                      {teacher.qualification && <p className="text-brand-primary font-medium text-sm mb-1">{teacher.qualification}</p>}
+                      {teacher.experience && <p className="text-text-secondary text-xs mb-2 font-medium">📅 {teacher.experience} experience</p>}
+                      {teacher.bio && <p className="text-text-secondary text-sm leading-relaxed">{teacher.bio}</p>}
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        {teacher.subjects?.map((s: string) => (
+                          <span key={s} className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs font-medium">{s}</span>
+                        ))}
+                        {teacher.standards?.map((s: number) => (
+                          <span key={s} className="badge bg-surface-alt border border-border-subtle text-text-secondary text-xs font-medium">Std {s}</span>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -180,33 +198,47 @@ const CourseDetailPage: React.FC = () => {
               )}
 
               {/* Lecture List */}
-              <div className="glass-card p-6">
-                <h2 className="text-lg font-bold text-white mb-5">
-                  Course Content <span className="text-white/40 text-base font-normal">({course.totalLectures} lectures)</span>
-                </h2>
+              <div className="card-soft p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="font-heading text-lg font-bold text-text-primary">
+                    Course Content <span className="text-text-muted text-sm font-normal">({course.totalLectures} lectures)</span>
+                  </h2>
+                </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {displayedLectures.map((lecture, index) => {
                     const isFree = lecture.isFree;
                     const canAccess = isFree || isEnrolled || user?.role === 'teacher' || user?.role === 'admin';
 
                     return (
-                      <div key={lecture._id} className={`flex items-center gap-3 p-4 rounded-xl border transition-all
-                        ${canAccess ? 'border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer' : 'border-white/5 bg-white/[0.02] opacity-60'}`}
-                        onClick={() => canAccess && navigate(`/courses/${id}/lecture/${lecture._id}`)}>
-
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold
-                          ${isFree ? 'bg-accent-500/20 text-accent-400' : 'bg-white/10 text-white/60'}`}>
-                          {canAccess ? (isFree ? <Play className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />) : <Lock className="w-3.5 h-3.5" />}
+                      <div
+                        key={lecture._id}
+                        className={`flex items-center gap-3.5 p-4 rounded-xl border transition-all ${
+                          canAccess
+                            ? 'border-border-subtle bg-surface-alt hover:bg-surface hover:border-brand-primary/40 hover:shadow-soft cursor-pointer'
+                            : 'border-border-subtle/60 bg-surface-alt/40 opacity-70'
+                        }`}
+                        onClick={() => canAccess && navigate(`/courses/${id}/lecture/${lecture._id}`)}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-bold ${
+                          isFree
+                            ? 'bg-accent-mint/15 text-accent-mint'
+                            : 'bg-brand-primary/10 text-brand-primary'
+                        }`}>
+                          {canAccess ? <Play className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-text-muted" />}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{lecture.title}</p>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-white/40 text-xs flex items-center gap-1">
+                          <p className="text-sm font-medium text-text-primary truncate">{lecture.title}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-text-muted text-xs flex items-center gap-1 font-medium">
                               <Clock className="w-3 h-3" /> {lecture.videoDuration}
                             </span>
-                            {lecture.hasNotes && <span className="text-white/40 text-xs flex items-center gap-1"><FileText className="w-3 h-3" /> Notes</span>}
+                            {lecture.hasNotes && (
+                              <span className="text-text-muted text-xs flex items-center gap-1 font-medium">
+                                <FileText className="w-3 h-3 text-accent-amber" /> Notes
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -214,9 +246,9 @@ const CourseDetailPage: React.FC = () => {
                           {isFree ? (
                             <span className="badge-free text-xs">FREE</span>
                           ) : !isEnrolled ? (
-                            <span className="text-white/40 text-xs">₹{lecture.price}</span>
+                            <span className="text-text-secondary text-xs font-semibold">₹{lecture.price}</span>
                           ) : (
-                            <CheckCircle className="w-4 h-4 text-accent-400" />
+                            <CheckCircle className="w-4 h-4 text-accent-mint" />
                           )}
                         </div>
                       </div>
@@ -227,7 +259,7 @@ const CourseDetailPage: React.FC = () => {
                 {lectures.length > 5 && (
                   <button
                     onClick={() => setShowAllLectures(!showAllLectures)}
-                    className="w-full mt-4 py-3 text-sm text-primary-400 hover:text-primary-300 flex items-center justify-center gap-2 transition-colors"
+                    className="w-full mt-4 py-3 text-sm text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center justify-center gap-1.5 transition-colors"
                   >
                     {showAllLectures ? <><ChevronUp className="w-4 h-4" /> Show Less</> : <><ChevronDown className="w-4 h-4" /> Show All {lectures.length} Lectures</>}
                   </button>
@@ -237,14 +269,14 @@ const CourseDetailPage: React.FC = () => {
 
             {/* Mobile CTA */}
             <div className="lg:hidden">
-              <div className="glass-card p-5">
+              <div className="card-soft p-5">
                 {course.isFree ? (
-                  <p className="text-2xl font-bold text-accent-400 mb-4">Free</p>
+                  <p className="text-2xl font-heading font-bold text-accent-mint mb-4">Free</p>
                 ) : (
-                  <p className="text-2xl font-bold text-white mb-4">₹{course.price}</p>
+                  <p className="text-2xl font-heading font-bold text-text-primary mb-4">₹{course.price}</p>
                 )}
                 {isEnrolled ? (
-                  <Link to={`/courses/${id}/lecture/${lectures[0]?._id}`} className="btn-primary w-full text-center py-3 block text-center">
+                  <Link to={`/courses/${id}/lecture/${lectures[0]?._id}`} className="btn-primary w-full text-center py-3 block">
                     Continue Learning
                   </Link>
                 ) : (
@@ -263,3 +295,4 @@ const CourseDetailPage: React.FC = () => {
 };
 
 export default CourseDetailPage;
+

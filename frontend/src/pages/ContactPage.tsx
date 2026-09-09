@@ -61,63 +61,69 @@ const ContactPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white flex flex-col">
+    <div className="min-h-screen bg-page text-text-primary flex flex-col transition-colors">
       <Navbar />
 
       <main className="flex-1 pt-24 pb-16">
         {/* Header Hero */}
         <div className="page-container text-center max-w-3xl mb-16">
-          <span className="badge-primary text-xs mb-3 inline-block">24/7 Academic Support</span>
-          <h1 className="text-3xl sm:text-5xl font-display font-black text-white mb-4">
-            We’re Here to Help You <span className="gradient-text">Learn & Grow</span>
+          <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs mb-3 inline-block font-semibold px-3 py-1">
+            24/7 Academic Support
+          </span>
+          <h1 className="text-3xl sm:text-5xl font-heading font-black text-text-primary mb-4">
+            We’re Here to Help You <span className="text-gradient">Learn & Grow</span>
           </h1>
-          <p className="text-white/60 text-base sm:text-lg">
+          <p className="text-text-secondary text-base sm:text-lg">
             Have questions about courses, standard selection, live tuition, or teacher onboarding? Reach out to our team anytime.
           </p>
         </div>
 
         {/* Contact Info Cards */}
         <div className="page-container max-w-6xl mb-16">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
                 icon: Phone,
                 title: 'Call Support',
                 value: '+91 98765 43210',
                 sub: 'Mon - Sat: 9 AM - 8 PM',
-                action: 'tel:+919876543210'
+                action: 'tel:+919876543210',
+                chipBg: 'bg-[#4ADE9A]/15 text-[#4ADE9A]'
               },
               {
                 icon: Mail,
                 title: 'Email Us',
                 value: 'hello@learniq.in',
                 sub: 'Quick response in 2 hours',
-                action: 'mailto:hello@learniq.in'
+                action: 'mailto:hello@learniq.in',
+                chipBg: 'bg-[#6C63F2]/10 text-[#6C63F2]'
               },
               {
                 icon: MapPin,
                 title: 'Headquarters',
                 value: 'Baner Tech Hub',
                 sub: 'Pune, Maharashtra 411045',
-                action: 'https://maps.google.com'
+                action: 'https://maps.google.com',
+                chipBg: 'bg-[#FF8FA3]/15 text-[#FF8FA3]'
               },
               {
                 icon: Clock,
                 title: 'Doubt Hours',
                 value: 'Live 4 PM - 9 PM',
                 sub: 'Daily teacher helpdesk',
-                action: '/live-sessions'
+                action: '/live-sessions',
+                chipBg: 'bg-[#FFC24B]/15 text-[#FFC24B]'
               },
             ].map((card, i) => {
               const Icon = card.icon;
               return (
-                <div key={i} className="glass-card p-6 rounded-2xl border border-white/10 hover:border-primary-500/40 transition-all">
-                  <div className="w-10 h-10 rounded-xl bg-primary-500/20 text-primary-400 flex items-center justify-center mb-4">
+                <div key={i} className="card-soft p-6 rounded-card border border-border-subtle hover:shadow-soft-hover transition-all">
+                  <div className={`w-10 h-10 rounded-xl ${card.chipBg} flex items-center justify-center mb-4 shadow-xs`}>
                     <Icon className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-bold text-white mb-1">{card.title}</h3>
-                  <p className="text-sm font-semibold text-primary-300 mb-1">{card.value}</p>
-                  <p className="text-xs text-white/40">{card.sub}</p>
+                  <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">{card.title}</h3>
+                  <p className="font-heading text-sm font-bold text-text-primary mb-1">{card.value}</p>
+                  <p className="text-xs text-text-muted">{card.sub}</p>
                 </div>
               );
             })}
@@ -128,57 +134,57 @@ const ContactPage: React.FC = () => {
         <div className="page-container max-w-6xl grid lg:grid-cols-12 gap-10">
           {/* Left: Interactive Form */}
           <div className="lg:col-span-6">
-            <div className="glass-card p-8 rounded-3xl border border-white/10 shadow-2xl">
-              <h2 className="text-xl font-display font-bold text-white mb-2">Send Us a Message</h2>
-              <p className="text-xs text-white/50 mb-6">
+            <div className="card-soft p-8 rounded-card border border-border-subtle shadow-soft">
+              <h2 className="font-heading text-xl font-bold text-text-primary mb-2">Send Us a Message</h2>
+              <p className="text-xs text-text-secondary mb-6">
                 Fill out the form below and one of our academic counselors will get back to you right away.
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="text-xs text-white/70 block mb-1">Student / Parent Name</label>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1.5">Student / Parent Name</label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g. Priya Sharma"
-                    className="input-field text-sm"
+                    className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                   />
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-white/70 block mb-1">Email Address</label>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1.5">Email Address</label>
                     <input
                       type="email"
                       required
                       value={formData.email}
                       onChange={e => setFormData({ ...formData, email: e.target.value })}
                       placeholder="priya@example.com"
-                      className="input-field text-sm"
+                      className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-white/70 block mb-1">Phone / WhatsApp</label>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1.5">Phone / WhatsApp</label>
                     <input
                       type="tel"
                       required
                       value={formData.phone}
                       onChange={e => setFormData({ ...formData, phone: e.target.value })}
                       placeholder="+91 98765 00000"
-                      className="input-field text-sm"
+                      className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                     />
                   </div>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-white/70 block mb-1">Standard / Grade</label>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1.5">Standard / Grade</label>
                     <select
                       value={formData.standard}
                       onChange={e => setFormData({ ...formData, standard: e.target.value })}
-                      className="input-field text-sm"
+                      className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                     >
                       {Array.from({ length: 10 }, (_, i) => i + 1).map(std => (
                         <option key={std} value={std}>Standard {std}</option>
@@ -186,11 +192,11 @@ const ContactPage: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-white/70 block mb-1">Inquiry Purpose</label>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1.5">Inquiry Purpose</label>
                     <select
                       value={formData.category}
                       onChange={e => setFormData({ ...formData, category: e.target.value })}
-                      className="input-field text-sm"
+                      className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                     >
                       <option>Admissions & Guidance</option>
                       <option>Live Classes Question</option>
@@ -201,14 +207,14 @@ const ContactPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-xs text-white/70 block mb-1">Message / Question</label>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1.5">Message / Question</label>
                   <textarea
                     rows={4}
                     required
                     value={formData.message}
                     onChange={e => setFormData({ ...formData, message: e.target.value })}
                     placeholder="Tell us about the subject or questions you need help with..."
-                    className="input-field text-sm resize-none"
+                    className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 resize-none"
                   />
                 </div>
 
@@ -236,9 +242,11 @@ const ContactPage: React.FC = () => {
           {/* Right: FAQs */}
           <div className="lg:col-span-6 space-y-6">
             <div>
-              <span className="badge-primary text-xs mb-2 inline-block">Frequently Asked Questions</span>
-              <h2 className="text-xl font-display font-bold text-white mb-2">Got Questions? We’ve Got Answers</h2>
-              <p className="text-xs text-white/50">
+              <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs mb-2 inline-block font-semibold px-2.5 py-1">
+                Frequently Asked Questions
+              </span>
+              <h2 className="font-heading text-xl font-bold text-text-primary mb-2">Got Questions? We’ve Got Answers</h2>
+              <p className="text-xs text-text-secondary">
                 Everything you need to know about the Learniq interactive learning platform.
               </p>
             </div>
@@ -249,22 +257,22 @@ const ContactPage: React.FC = () => {
                 return (
                   <div
                     key={idx}
-                    className="glass-card rounded-2xl border border-white/10 overflow-hidden transition-all"
+                    className="card-soft rounded-card border border-border-subtle overflow-hidden transition-all shadow-xs"
                   >
                     <button
                       onClick={() => setOpenFaq(isOpen ? null : idx)}
-                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-sm font-semibold text-white hover:text-primary-300 transition-colors"
+                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-sm font-semibold text-text-primary hover:text-brand-primary transition-colors"
                     >
                       <span>{faq.q}</span>
                       {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                        <ChevronUp className="w-4 h-4 text-brand-primary flex-shrink-0" />
                       ) : (
-                        <ChevronDown className="w-4 h-4 text-white/40 flex-shrink-0" />
+                        <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0" />
                       )}
                     </button>
 
                     {isOpen && (
-                      <div className="px-4 pb-4 text-xs text-white/60 leading-relaxed border-t border-white/5 pt-3 animate-fade-in">
+                      <div className="px-4 pb-4 text-xs text-text-secondary leading-relaxed border-t border-border-subtle pt-3 animate-fade-in">
                         {faq.a}
                       </div>
                     )}
@@ -282,3 +290,4 @@ const ContactPage: React.FC = () => {
 };
 
 export default ContactPage;
+
