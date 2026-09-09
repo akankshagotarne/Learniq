@@ -11,8 +11,7 @@ const { Quiz, QuizAttempt } = require('../models/Quiz');
 const { Assignment, AssignmentSubmission } = require('../models/Assignment');
 const { LiveSession, LiveParticipant, LiveChatMessage } = require('../models/LiveSession');
 const { Enrollment, Payment, Notification, Progress, Badge, Company } = require('../models/index');
-
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/learniq';
+const connectDB = require('../config/db');
 
 // Demo video URLs using reliable public samples
 const DEMO_VIDEOS = [
@@ -79,8 +78,7 @@ const TEACHERS = [
 
 async function seedDatabase() {
   try {
-    await mongoose.connect(MONGO_URI);
-    console.log('✅ Connected to MongoDB');
+    await connectDB();
 
     // Clear existing data
     console.log('🗑️  Clearing existing data...');

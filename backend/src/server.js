@@ -9,7 +9,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 
-const connectDB = require('./config/database');
+const connectDB = require('./config/db');
 const setupSocket = require('./services/socketService');
 
 // Routes
