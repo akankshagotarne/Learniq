@@ -5,6 +5,7 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Course, LiveSession } from '../../types';
+import { getCourseThumbnail } from '../../utils/courseImage';
 
 const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -98,10 +99,10 @@ const TeacherDashboard: React.FC = () => {
                   courses.slice(0, 5).map(c => (
                     <div key={c._id} className="card-soft p-4 flex items-center gap-4 hover:bg-surface-alt transition-all">
                       <img
-                        src={c.thumbnail || `https://picsum.photos/seed/${c.subject}/64/64`}
+                        src={getCourseThumbnail(c)}
                         alt={c.title}
                         className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-                        onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/64/64'; }}
+                        onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(c); }}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-text-primary font-semibold text-sm truncate font-heading">{c.title}</p>

@@ -247,7 +247,7 @@ async function seedDatabase() {
           enrolledCount: Math.floor(Math.random() * 300) + 20,
           level: std <= 3 ? 'Beginner' : std <= 7 ? 'Intermediate' : 'Advanced',
           tags: [subject, `Standard ${std}`, 'Maharashtra Board'],
-          thumbnail: `https://picsum.photos/seed/${subject.replace(' ', '')}-${std}/400/225`,
+          thumbnail: teacher.avatar || '/assets/teachers/rohit-gupta.jpg',
         });
 
         allCourses.push({ course, teacher, std, subject, topics: data.topics });
@@ -271,7 +271,7 @@ async function seedDatabase() {
           order: i + 1,
           videoUrl: getVideo(i),
           videoDuration: `${Math.floor(Math.random() * 30 + 15)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-          thumbnail: `https://picsum.photos/seed/${subject}-${std}-${i}/320/180`,
+          thumbnail: null,
           isFree,
           price: isFree ? 0 : prices[Math.floor(Math.random() * prices.length)],
           hasNotes: true,

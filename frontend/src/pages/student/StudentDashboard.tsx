@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Course, Notification, LiveSession } from '../../types';
+import { getCourseThumbnail } from '../../utils/courseImage';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -160,10 +161,10 @@ const StudentDashboard: React.FC = () => {
                     >
                       <div className="aspect-video w-full overflow-hidden relative bg-[#F1F1FA] dark:bg-[#242540]">
                         <img
-                          src={course.thumbnail || `https://picsum.photos/seed/${course.subject}/320/180`}
+                          src={getCourseThumbnail(course)}
                           alt={course.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/320/180'; }}
+                          onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                         />
                         <div className="absolute top-3 left-3 flex gap-1.5">
                           <span className={`badge ${getSubjectBadgeClass(course.subject)} text-xs shadow-sm`}>

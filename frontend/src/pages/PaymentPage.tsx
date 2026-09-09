@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
 import { generateFeeReceipt } from '../utils/generateReceipt';
+import { getCourseThumbnail } from '../utils/courseImage';
 
 const PaymentPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -433,9 +434,10 @@ const PaymentPage: React.FC = () => {
                 {itemDetails && (
                   <div className="flex gap-3 pb-4 mb-4 border-b border-border-subtle">
                     <img
-                      src={itemDetails.thumbnail || 'https://picsum.photos/400/225'}
+                      src={getCourseThumbnail(itemDetails)}
                       alt={itemDetails.title}
                       className="w-20 h-14 rounded-lg object-cover flex-shrink-0"
+                      onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(itemDetails); }}
                     />
                     <div className="flex-1 min-w-0">
                       <h4 className="font-heading text-xs font-semibold text-text-primary line-clamp-2">{itemDetails.title}</h4>

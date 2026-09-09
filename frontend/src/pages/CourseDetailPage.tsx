@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
 import { generateCourseNotes } from '../utils/generateCourseNotes';
 import { SYLLABUS_COURSES, TEACHERS_DATA } from '../data/syllabusCourses';
+import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
 
 const getSubjectBadge = (subject: string) => {
   const lower = subject.toLowerCase();
@@ -300,10 +301,10 @@ const CourseDetailPage: React.FC = () => {
               <div className="hidden lg:block">
                 <div className="bg-surface border border-border-subtle rounded-card overflow-hidden shadow-soft sticky top-24 transition-colors">
                   <img
-                    src={course.thumbnail || `https://picsum.photos/seed/${course.subject}/400/225`}
+                    src={getCourseThumbnail(course)}
                     alt={course.title}
                     className="w-full aspect-video object-cover"
-                    onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/400/225'; }}
+                    onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                   />
                   <div className="p-6">
                     {course.isFree ? (
@@ -367,11 +368,11 @@ const CourseDetailPage: React.FC = () => {
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                     <img
-                      src={teacher.avatar || `/assets/teachers/${teacher.name?.toLowerCase().replace(/\s+/g, '-')}.jpg`}
+                      src={getTeacherPhoto(teacher, course.subject)}
                       alt={teacher.name}
                       className="w-24 h-24 rounded-2xl object-cover border-2 border-brand-primary/30 flex-shrink-0 shadow-sm bg-surface-alt"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'Teacher')}&background=6C63F2&color=fff&size=200`;
+                        (e.target as HTMLImageElement).src = getTeacherPhoto(null, course.subject);
                       }}
                     />
                     <div className="flex-1 min-w-0">

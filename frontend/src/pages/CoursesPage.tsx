@@ -6,6 +6,7 @@ import Footer from '../components/layout/Footer';
 import api from '../services/api';
 import { Course } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
 
 const SUBJECTS = ['All', 'Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Hindi', 'History and Civics', 'Geography', 'Environmental Studies'];
 const STANDARDS = ['All', ...Array.from({ length: 10 }, (_, i) => String(i + 1))];
@@ -199,10 +200,10 @@ const CoursesPage: React.FC = () => {
                     <Link key={course._id} to={`/courses/${course._id}`} className="course-card group">
                       <div className="relative overflow-hidden rounded-t-[15px]">
                         <img
-                          src={course.thumbnail || `https://picsum.photos/seed/${course.subject}-${course.standard}/400/225`}
+                          src={getCourseThumbnail(course)}
                           alt={course.title}
                           className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500"
-                          onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/400/225'; }}
+                          onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                         <div className="absolute top-3 left-3 flex gap-2">
@@ -223,9 +224,10 @@ const CoursesPage: React.FC = () => {
                         {course.teacher && (
                           <div className="flex items-center gap-2 mb-4">
                             <img
-                              src={(course.teacher as any).avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent((course.teacher as any).name || 'T')}&background=6C63F2&color=fff&size=32`}
+                              src={getTeacherPhoto(course.teacher, course.subject)}
                               alt={(course.teacher as any).name}
                               className="w-6 h-6 rounded-full object-cover border border-border-subtle"
+                              onError={e => { (e.target as HTMLImageElement).src = getTeacherPhoto(null, course.subject); }}
                             />
                             <span className="text-text-secondary text-xs font-medium truncate">{(course.teacher as any).name}</span>
                           </div>

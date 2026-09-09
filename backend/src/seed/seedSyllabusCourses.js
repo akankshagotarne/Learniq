@@ -81,6 +81,7 @@ async function seedSyllabusCourses() {
         subject: cSpec.subject,
         standard: cSpec.standard,
         teacher: teacher._id,
+        thumbnail: teacher.avatar,
         price: 99,
         isFree: false,
         totalLectures: cSpec.chapters.length,

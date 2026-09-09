@@ -8,6 +8,7 @@ import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
 import { Course, LiveSession } from '../types';
+import { getCourseThumbnail } from '../utils/courseImage';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -261,10 +262,10 @@ const HomePage: React.FC = () => {
                 >
                   <div className="aspect-video w-full overflow-hidden relative bg-[#F1F1FA] dark:bg-[#242540]">
                     <img
-                      src={course.thumbnail || `https://picsum.photos/seed/${course._id}/400/225`}
+                      src={getCourseThumbnail(course)}
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={e => { (e.target as HTMLImageElement).src = 'https://picsum.photos/400/225'; }}
+                      onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                     />
                     <div className="absolute top-3 left-3">
                       <span className={`badge ${getSubjectBadgeClass(course.subject)} text-xs shadow-sm`}>
