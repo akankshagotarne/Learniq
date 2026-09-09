@@ -11,6 +11,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
+import { generateFeeReceipt } from '../utils/generateReceipt';
 
 const PaymentPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -59,6 +60,34 @@ const PaymentPage: React.FC = () => {
   const basePrice = itemDetails?.price || queryAmount;
   const discount = Math.round(basePrice * 0.2); // 20% Learniq scholarship discount
   const finalPrice = Math.max(0, basePrice - discount);
+
+  const handleDownloadReceipt = () => {
+    try {
+      generateFeeReceipt({
+        transactionId: successData?.txnId || 'TXN_' + Date.now().toString().slice(-8),
+        paymentId: successData?.paymentId || 'pay_verified',
+        orderId: successData?.txnId || 'order_verified',
+        date: new Date().toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        studentName: user?.name || 'Student',
+        studentEmail: user?.email || '',
+        courseTitle: itemDetails?.title || 'Learniq Video Course',
+        courseStandard: itemDetails?.standard || '',
+        courseSubject: itemDetails?.subject || '',
+        amount: successData?.amount || finalPrice,
+        accessGranted: 'Full Lifetime Access',
+      });
+      toast.success('Fee receipt downloaded successfully! 📄');
+    } catch (err) {
+      console.error('Failed to generate receipt:', err);
+      toast.error('Failed to generate receipt PDF. Please try again.');
+    }
+  };
 
   const handleProcessPayment = async () => {
     setLoading(true);
@@ -229,8 +258,9 @@ const PaymentPage: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <button 
-                onClick={() => toast.success('Fee receipt downloaded successfully!')}
-                className="btn-secondary w-full py-2.5 text-xs flex items-center justify-center gap-2"
+                onClick={handleDownloadReceipt}
+                className="btn-secondary w-full py-2.5 text-xs flex items-center justify-center gap-2 hover:border-brand-primary/40 transition-colors"
+                title="Download official PDF fee receipt"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download Fee Receipt</span>
