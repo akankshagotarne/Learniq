@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
-import { Mail, Phone, MapPin, Target, Eye, Heart, Sparkles } from 'lucide-react';
+import { Mail, Phone, MapPin, Target, Eye, Heart, Sparkles, Users, Code2 } from 'lucide-react';
 
 interface CompanyData {
   name: string; tagline: string; mission: string; vision: string; about: string;
@@ -41,6 +41,54 @@ const AboutPage: React.FC = () => {
     ],
     socialLinks: { linkedin: '#', twitter: '#', instagram: '#', youtube: '#' },
   };
+
+  const coreTeam = [
+    {
+      name: 'Akanksha Gotarne',
+      role: 'CEO',
+      photo: '/assets/team/akanksha-gotarne.jpg',
+      tag: 'Core Team #1 of 3',
+      description: 'Directs strategic vision, platform innovation, and institutional partnerships to democratize quality education across India.',
+    },
+    {
+      name: 'Kruti Kahane',
+      role: 'CTO',
+      photo: '/assets/team/kruti-kahane.jpg',
+      tag: 'Core Team #2 of 3',
+      description: 'Architects scalable technology infrastructure, engineering robust digital learning systems and high-availability cloud platforms.',
+    },
+    {
+      name: 'Nikhil Kandangire',
+      role: 'CMO',
+      photo: '/assets/team/nikhil-kandangire.jpg',
+      tag: 'Core Team #3 of 3',
+      description: 'Drives student outreach, community engagement, and growth campaigns to bring interactive learning to learners nationwide.',
+    },
+  ];
+
+  const teamMembers = [
+    {
+      name: 'Shweta Kedari',
+      role: 'Frontend Developer',
+      photo: '/assets/team/shweta-kedari.jpg',
+      tag: 'Team Member #1 of 3',
+      description: 'Builds intuitive, accessible, and responsive user interfaces that deliver seamless client-side learning experiences across all devices.',
+    },
+    {
+      name: 'Monu Rajbhar',
+      role: 'Backend Developer',
+      photo: '/assets/team/monu-rajbhar.jpg',
+      tag: 'Team Member #2 of 3',
+      description: 'Engineers high-performance RESTful APIs, robust authentication workflows, and resilient server-side microservices.',
+    },
+    {
+      name: 'Pooja Dahiphale',
+      role: 'Database Manager',
+      photo: '/assets/team/pooja-dahiphale.jpg',
+      tag: 'Team Member #3 of 3',
+      description: 'Manages relational data schemas, query optimization, and persistent data indexing for student progress and assessment tracking.',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-page flex flex-col transition-colors">
@@ -179,24 +227,109 @@ const AboutPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Team */}
-          <div className="mb-16">
-            <h2 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-8 text-center">
-              Our <span className="text-gradient">Core Team</span>
-            </h2>
-            <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-5">
-              {c.team.map(member => (
-                <div key={member.name} className="card-soft p-5 text-center hover:shadow-soft-hover transition-all">
-                  <img
-                    src={member.photo}
-                    alt={member.name}
-                    className="w-16 h-16 rounded-full object-cover mx-auto mb-3 border border-border-subtle shadow-xs"
-                    onError={e => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=6C63F2&color=fff&size=200`; }}
-                  />
-                  <h3 className="font-heading text-text-primary font-semibold text-sm">{member.name}</h3>
-                  <p className="text-brand-primary text-xs mb-2 font-medium">{member.role}</p>
-                  <span className="badge bg-surface-alt border border-border-subtle text-text-secondary text-[11px] font-medium">{member.department}</span>
-                  <p className="text-text-secondary text-xs mt-2 leading-relaxed">{member.description}</p>
+          {/* Core Team */}
+          <div className="mb-20">
+            <div className="text-center mb-10">
+              <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 mb-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1">
+                <Users className="w-3.5 h-3.5" />
+                <span>Executive Leadership</span>
+              </span>
+              <h2 className="font-heading font-black text-3xl md:text-4xl text-text-primary mb-3">
+                Our <span className="text-gradient">Core Team</span>
+              </h2>
+              <p className="text-text-secondary text-sm md:text-base max-w-2xl mx-auto">
+                Driving the mission, technology, and outreach that power Learniq's modern educational ecosystem.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
+              {coreTeam.map((member) => (
+                <div
+                  key={member.name}
+                  className="card-soft p-6 sm:p-7 text-center rounded-3xl border border-border-subtle hover:shadow-soft-hover transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative inline-block mb-4">
+                      <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden mx-auto border-2 border-border-subtle shadow-sm bg-surface-alt">
+                        <img
+                          src={member.photo}
+                          alt={`${member.name} - ${member.role}`}
+                          className="w-full h-full object-cover object-top"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=6C63F2&color=fff&size=256`;
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <h3 className="font-heading text-lg sm:text-xl font-bold text-text-primary mb-1">
+                      {member.name}
+                    </h3>
+                    <p className="text-brand-primary text-xs sm:text-sm font-semibold mb-3">
+                      {member.role}
+                    </p>
+                    <p className="text-text-secondary text-xs sm:text-sm leading-relaxed mb-6">
+                      {member.description}
+                    </p>
+                  </div>
+                  <div className="pt-4 border-t border-border-subtle/60 mt-auto">
+                    <span className="text-xs font-medium text-text-muted tracking-wide">
+                      {member.tag}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Team Members */}
+          <div className="mb-20">
+            <div className="text-center mb-10">
+              <span className="badge bg-accent-sky/15 text-accent-sky border border-accent-sky/20 mb-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1">
+                <Code2 className="w-3.5 h-3.5" />
+                <span>Engineering & Data</span>
+              </span>
+              <h2 className="font-heading font-black text-3xl md:text-4xl text-text-primary mb-3">
+                Our <span className="text-gradient">Team Members</span>
+              </h2>
+              <p className="text-text-secondary text-sm md:text-base max-w-2xl mx-auto">
+                Dedicated specialists engineering daily platform stability, interactive learning interfaces, and database optimization.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
+              {teamMembers.map((member) => (
+                <div
+                  key={member.name}
+                  className="card-soft p-6 sm:p-7 text-center rounded-3xl border border-border-subtle hover:shadow-soft-hover transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative inline-block mb-4">
+                      <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden mx-auto border-2 border-border-subtle shadow-sm bg-surface-alt">
+                        <img
+                          src={member.photo}
+                          alt={`${member.name} - ${member.role}`}
+                          className="w-full h-full object-cover object-top"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=6C63F2&color=fff&size=256`;
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <h3 className="font-heading text-lg sm:text-xl font-bold text-text-primary mb-1">
+                      {member.name}
+                    </h3>
+                    <p className="text-brand-primary text-xs sm:text-sm font-semibold mb-3">
+                      {member.role}
+                    </p>
+                    <p className="text-text-secondary text-xs sm:text-sm leading-relaxed mb-6">
+                      {member.description}
+                    </p>
+                  </div>
+                  <div className="pt-4 border-t border-border-subtle/60 mt-auto">
+                    <span className="text-xs font-medium text-text-muted tracking-wide">
+                      {member.tag}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
