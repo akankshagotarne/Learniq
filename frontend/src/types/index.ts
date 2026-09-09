@@ -230,3 +230,41 @@ export interface LeaderboardEntry {
   percentage: number;
   submittedAt: string;
 }
+
+// ---- Live MCQ Feature ----
+
+export interface LiveMcq {
+  mcqId: string;
+  question: string;
+  options: string[];
+  startTimestamp: number; // ms epoch from server
+  durationMs: number;     // always 15000
+}
+
+export interface McqResultEntry {
+  studentId: string;
+  studentName: string;
+  selectedOption: number | null;
+  isCorrect: boolean;
+  responseTimeSec: number | null;
+  rank: number;
+}
+
+export interface ScoreboardEntry {
+  userId: string;
+  name: string;
+  correct: number;
+  wrong: number;
+  totalResponseTimeSec: number;
+  rank: number;
+}
+
+export interface PodiumEntry {
+  userId: string;
+  name: string;
+  correct: number;
+  wrong: number;
+  totalResponseTimeSec: number;
+  rank: number;
+  place: number;
+}
