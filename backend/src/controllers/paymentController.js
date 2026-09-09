@@ -5,7 +5,7 @@ const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
 
 const getRazorpayInstance = () => {
-  if (!process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID.startsWith('rzp_test_YOUR')) {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_ID.startsWith('rzp_test_YOUR')) {
     return null; // Not configured
   }
   return new Razorpay({
