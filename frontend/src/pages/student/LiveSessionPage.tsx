@@ -273,25 +273,25 @@ const ParticipantTile: React.FC<{
   const showVideo = isLocal ? (localCamOn && !!stream) : (participant.isCameraOn && !!stream);
   const avatarColor = getAvatarColor(participant.name || 'U');
 
-  const sizeClasses = size === 'small'
-    ? 'h-full aspect-video flex-shrink-0'
-    : size === 'spotlight'
-    ? '' // sized via sizeStyle below -- a proper two-axis aspect-ratio fit, not a Tailwind class
-    : 'w-full aspect-video self-start';
+  const sizeClasses = size === 'small' ? 'h-full aspect-video flex-shrink-0' : '';
 
-  // The spotlight tile's wrapper (in VideoGrid) is a CSS containment
-  // context (`containerType: 'size'`), so `cqw`/`cqh` below refer to that
-  // wrapper's own box -- not the viewport. min(100cqw, 100cqh * 16/9) is
-  // the standard "largest box of a fixed aspect ratio that fits inside a
-  // container, whichever dimension is the tighter one" formula: it can't
-  // be over-constrained the way a plain max-width + fixed height can.
-  const sizeStyle: any = size === 'spotlight'
-    ? {
+  // Every non-"small" tile (grid cells and the spotlight tile alike) is
+  // sized via this fit formula instead of a plain Tailwind aspect class.
+  // Each one's immediate wrapper (the grid cell in VideoGrid, or the
+  // spotlight wrapper) is a CSS containment context (`containerType:
+  // 'size'`), so `cqw`/`cqh` refer to THAT wrapper's own box, not the
+  // viewport. min(100cqw, 100cqh * 16/9) is the standard "largest box of
+  // a fixed aspect ratio that fits inside a container, whichever
+  // dimension is the tighter one" formula -- it shrinks the tile as far
+  // as it needs to rather than ever cropping or stretching the video, and
+  // unlike a plain max-width + fixed height, it can't be over-constrained.
+  const sizeStyle: any = size === 'small'
+    ? undefined
+    : {
         aspectRatio: '16 / 9',
         width: 'min(100cqw, calc(100cqh * 16 / 9))',
         height: 'min(100cqh, calc(100cqw * 9 / 16))',
-      }
-    : undefined;
+      };
 
   return (
     <div
@@ -462,9 +462,16 @@ const VideoGrid: React.FC<{
 
   // ── No pin: auto grid layout ────────────────────────────────────────────
   const cols = count === 1 ? 1 : count <= 4 ? 2 : 3;
+  const rows = Math.max(1, Math.ceil(count / cols));
   const gridStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: `repeat(${cols}, 1fr)`,
+    // Explicit, equal row tracks -- without this, rows are auto-sized to
+    // their tallest cell, and cells that don't match that height (every
+    // tile only ever shrinks to fit, it never stretches) end up floating
+    // with a gap under them while the next row starts at a different
+    // point per column: an uneven, "overlapping"-looking grid.
+    gridTemplateRows: `repeat(${rows}, 1fr)`,
     gap: '8px',
     width: '100%',
     height: '100%',
@@ -473,20 +480,25 @@ const VideoGrid: React.FC<{
   return (
     <div style={gridStyle}>
       {participants.map(p => (
-        <ParticipantTile
+        <div
           key={p.socketId}
-          participant={p}
-          stream={getStream(p)}
-          isLocal={isLocalParticipant(p)}
-          isPinned={false}
-          size="large"
-          onPin={() => onPin(p.socketId)}
-          isViewerTeacher={isViewerTeacher}
-          onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
-          localCamOn={isCamOn}
-          localMicOn={isMicOn}
-          localIsPortrait={isPortrait}
-        />
+          className="w-full h-full flex items-center justify-center"
+          style={{ containerType: 'size' } as any}
+        >
+          <ParticipantTile
+            participant={p}
+            stream={getStream(p)}
+            isLocal={isLocalParticipant(p)}
+            isPinned={false}
+            size="large"
+            onPin={() => onPin(p.socketId)}
+            isViewerTeacher={isViewerTeacher}
+            onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
+            localCamOn={isCamOn}
+            localMicOn={isMicOn}
+            localIsPortrait={isPortrait}
+          />
+        </div>
       ))}
     </div>
   );
