@@ -43,3 +43,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Local DB backups from one-time seed/wipe scripts
+backend/backups/

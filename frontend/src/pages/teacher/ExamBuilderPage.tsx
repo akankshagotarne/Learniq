@@ -9,20 +9,9 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { ExamQuestion } from '../../types';
 import toast from 'react-hot-toast';
+import { ALL_SUBJECTS } from '../../constants/olympiadSubjects';
 
-const SUBJECT_OPTIONS = [
-  'Mathematics',
-  'Science',
-  'English',
-  'Social Science',
-  'History',
-  'Geography',
-  'Hindi',
-  'Marathi',
-  'Physics',
-  'Chemistry',
-  'Biology',
-];
+const SUBJECT_OPTIONS = ALL_SUBJECTS;
 
 const ExamBuilderPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();

@@ -12,7 +12,6 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
 import { generateCourseNotes } from '../utils/generateCourseNotes';
-import { SYLLABUS_COURSES, TEACHERS_DATA } from '../data/syllabusCourses';
 import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
 
 const getSubjectBadge = (subject: string) => {
@@ -46,68 +45,7 @@ const CourseDetailPage: React.FC = () => {
       setLectures(r.data.lectures || []);
       setIsEnrolled(r.data.isEnrolled || false);
     }).catch(() => {
-      // Graceful fallback to static syllabus data if API fails or for slug routes
-      const fallback = SYLLABUS_COURSES.find(c => c.id === id || c.title.toLowerCase() === id?.toLowerCase());
-      if (fallback) {
-        const teacherObj = TEACHERS_DATA.find(t => t.name === fallback.teacherName) || {
-          id: 'teacher-spec',
-          name: fallback.teacherName,
-          email: `${fallback.teacherName.toLowerCase().replace(/\s+/g, '.')}@learniq.in`,
-          avatar: `/assets/teachers/${fallback.teacherName.toLowerCase().replace(/\s+/g, '-')}.jpg`,
-          qualification: 'Senior Maharashtra State Board Specialist',
-          experience: '12+ years',
-          bio: `Dedicated Maharashtra SSC educator guiding students through ${fallback.subject} conceptual depth and examination excellence.`,
-          subjects: [fallback.subject],
-          standards: [fallback.standard],
-        };
-
-        const mappedCourse: Course = {
-          _id: fallback.id,
-          title: fallback.title,
-          description: fallback.description,
-          subject: fallback.subject,
-          standard: fallback.standard,
-          teacher: teacherObj as any,
-          totalLectures: fallback.chapters.length,
-          duration: `${Math.max(1, Math.round(fallback.chapters.length * 0.35))} hrs`,
-          rating: 4.8,
-          totalRatings: 24,
-          enrolledCount: 145,
-          isFree: false,
-          price: fallback.price,
-          isActive: true,
-          tags: ['Maharashtra State Board', 'SSC', `Std ${fallback.standard}`, fallback.subject],
-          language: fallback.subject === 'Marathi' ? 'Marathi' : fallback.subject === 'Hindi' ? 'Hindi' : 'English',
-          level: fallback.standard <= 4 ? 'Beginner' : fallback.standard <= 7 ? 'Intermediate' : 'Advanced',
-          syllabus: fallback.chapters,
-          isFlagged: fallback.isFlagged,
-          flagReason: fallback.flagReason,
-          createdAt: new Date().toISOString(),
-        };
-
-        const mappedLectures: Lecture[] = fallback.chapters.map((ch, idx) => ({
-          _id: `${fallback.id}-lec-${idx + 1}`,
-          title: ch,
-          description: `Comprehensive video lecture and conceptual breakdown for ${ch}`,
-          course: fallback.id,
-          teacher: teacherObj as any,
-          standard: fallback.standard,
-          subject: fallback.subject,
-          order: idx + 1,
-          videoDuration: '18:30',
-          isFree: idx === 0,
-          price: idx === 0 ? 0 : 20,
-          hasNotes: true,
-          isActive: true,
-          views: 0,
-          createdAt: new Date().toISOString(),
-        }));
-
-        setCourse(mappedCourse);
-        setLectures(mappedLectures);
-      } else {
-        navigate('/courses');
-      }
+      navigate('/courses');
     }).finally(() => setLoading(false));
   }, [id, navigate]);
 

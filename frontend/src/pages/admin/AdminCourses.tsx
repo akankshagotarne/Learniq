@@ -4,8 +4,9 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Course } from '../../types';
 import toast from 'react-hot-toast';
+import { ALL_SUBJECTS } from '../../constants/olympiadSubjects';
 
-const SUBJECTS = ['Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Hindi', 'History and Civics', 'Geography', 'Environmental Studies'];
+const SUBJECTS = ALL_SUBJECTS;
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = (subject || '').toLowerCase();

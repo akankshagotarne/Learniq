@@ -47,11 +47,11 @@ const AdminDashboard: React.FC = () => {
   ];
 
   const pieData = [
-    { name: 'Mathematics', value: 35, color: '#6C63F2' },
-    { name: 'Science', value: 28, color: '#4ADE9A' },
-    { name: 'English', value: 20, color: '#5AC8FA' },
-    { name: 'Social Sci.', value: 10, color: '#FFC24B' },
-    { name: 'Marathi', value: 7, color: '#B69CF2' },
+    { name: 'Mathematics', value: 32, color: '#6C63F2' },
+    { name: 'Science', value: 26, color: '#4ADE9A' },
+    { name: 'English', value: 18, color: '#5AC8FA' },
+    { name: 'GK', value: 14, color: '#FFC24B' },
+    { name: 'Computer', value: 10, color: '#B69CF2' },
   ];
 
   const revenueData = [

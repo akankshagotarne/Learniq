@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { LiveSession } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
+import { ALL_SUBJECTS } from '../../constants/olympiadSubjects';
 
 const TeacherLiveSessions: React.FC = () => {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ const TeacherLiveSessions: React.FC = () => {
     toast.success('Session link copied!');
   };
 
-  const subjects = ['Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Environmental Studies'];
+  const subjects = ALL_SUBJECTS;
 
   return (
     <div className="flex min-h-screen bg-page">

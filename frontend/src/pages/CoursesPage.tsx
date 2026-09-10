@@ -7,8 +7,9 @@ import api from '../services/api';
 import { Course } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
+import { ALL_SUBJECTS } from '../constants/olympiadSubjects';
 
-const SUBJECTS = ['All', 'Mathematics', 'Science', 'English', 'Social Science', 'Marathi', 'Hindi', 'History and Civics', 'Geography', 'Environmental Studies'];
+const SUBJECTS = ['All', ...ALL_SUBJECTS];
 const STANDARDS = ['All', ...Array.from({ length: 10 }, (_, i) => String(i + 1))];
 
 const getSubjectBadge = (subject: string) => {

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
+import { getSubjectsForStandard } from '../../constants/olympiadSubjects';
 
 const standards = Array.from({ length: 10 }, (_, i) => i + 1);
 
@@ -11,10 +12,7 @@ const levelLabel = (std: number) => {
   return 'Secondary School';
 };
 
-const subjects = (std: number) => {
-  if (std <= 4) return ['Maths', 'English', 'EVS', 'Marathi'];
-  return ['Maths', 'Science', 'English', 'Social Science', 'Marathi'];
-};
+const subjects = (std: number) => getSubjectsForStandard(std);
 
 const gradientColors = [
   'from-[#FF8FA3] to-[#FF6B8B]', 'from-[#FFC24B] to-[#F59E0B]', 'from-[#F59E0B] to-[#10B981]',

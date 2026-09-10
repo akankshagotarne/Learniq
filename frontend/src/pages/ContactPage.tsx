@@ -14,7 +14,7 @@ const FAQS = [
   },
   {
     q: 'Which standards and boards does Learniq cover?',
-    a: 'Learniq currently provides specialized curriculum content for Standard 1 through Standard 10, covering CBSE, ICSE, and State Board syllabuses for Mathematics, Science, English, Social Science, and Marathi/Hindi.'
+    a: 'Learniq currently provides specialized Olympiad exam preparation content for Standard 1 through Standard 10, covering Mathematics, Science, English, General Knowledge, and Computer Olympiads (with Physics, Chemistry and Biology Olympiads for Standards 6-10).'
   },
   {
     q: 'What if a student misses a scheduled live class?',

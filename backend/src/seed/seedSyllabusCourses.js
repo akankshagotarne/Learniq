@@ -6,7 +6,7 @@ const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
 const Note = require('../models/Note');
 const connectDB = require('../config/db');
-const { TEACHERS_SPEC, COURSES_SPEC } = require('../data/maharashtraSyllabus');
+const { TEACHERS_SPEC, COURSES_SPEC } = require('../data/olympiadSyllabus');
 
 const DEMO_VIDEOS = [
   'https://www.w3schools.com/html/mov_bbb.mp4',

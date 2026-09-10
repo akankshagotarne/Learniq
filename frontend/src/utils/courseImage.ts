@@ -1,136 +1,47 @@
 /**
  * Course and Teacher Image Utilities
- * Maps courses and subjects directly to official teacher portrait photos.
+ *
+ * Uses a teacher's real uploaded photo/avatar when available, and falls
+ * back to a generated initials avatar otherwise. There are no fixed
+ * demo-teacher photos baked in here anymore — once a real teacher is
+ * added with a photo, their card picks it up automatically.
  */
 
-export const TEACHER_PHOTOS: Record<string, string> = {
-  'sunita sharma': '/assets/teachers/sunita-sharma.jpg',
-  'rohit gupta': '/assets/teachers/rohit-gupta.jpg',
-  'aisha khan': '/assets/teachers/aisha-khan.jpg',
-  'priya patel': '/assets/teachers/priya-patel.jpg',
-  'ravi singh': '/assets/teachers/ravi-singh.jpg',
-  'fatima shaikh': '/assets/teachers/fatima-shaikh.jpg',
-  'michael desilva': '/assets/teachers/michael-desilva.jpg',
-};
-
-export const DEFAULT_TEACHER_PHOTO = '/assets/teachers/rohit-gupta.jpg';
+const uiAvatar = (label: string, background = '6C63F2') =>
+  `https://ui-avatars.com/api/?name=${encodeURIComponent(label || '?')}&background=${background}&color=fff&size=128`;
 
 /**
- * Returns the assigned teacher photo based on subject or title keywords.
- */
-export function getTeacherPhotoBySubject(subject?: string): string {
-  if (!subject) return DEFAULT_TEACHER_PHOTO;
-  const s = subject.toLowerCase().trim();
-
-  // Mathematics / Algebra / Geometry -> Rohit Gupta
-  if (s.includes('math') || s.includes('algebra') || s.includes('geometry') || s.includes('arithmetic') || s.includes('number')) {
-    return '/assets/teachers/rohit-gupta.jpg';
-  }
-
-  // English -> Aisha Khan
-  if (s.includes('english') || s.includes('literature') || s.includes('grammar')) {
-    return '/assets/teachers/aisha-khan.jpg';
-  }
-
-  // Science / EVS / Physics / Chemistry / Biology -> Priya Patel
-  if (
-    s.includes('science') ||
-    s.includes('environmental') ||
-    s.includes('evs') ||
-    s.includes('physics') ||
-    s.includes('chemistry') ||
-    s.includes('biology')
-  ) {
-    return '/assets/teachers/priya-patel.jpg';
-  }
-
-  // Marathi -> Sunita Sharma
-  if (s.includes('marathi') || s.includes('balbharati') || s.includes('sulabhbharati')) {
-    return '/assets/teachers/sunita-sharma.jpg';
-  }
-
-  // Hindi -> Ravi Singh
-  if (s.includes('hindi') || s.includes('lokbharati')) {
-    return '/assets/teachers/ravi-singh.jpg';
-  }
-
-  // Geography -> Michael Desilva
-  if (s.includes('geography')) {
-    return '/assets/teachers/michael-desilva.jpg';
-  }
-
-  // History / Civics / Social Sciences / Political Science -> Fatima Shaikh
-  if (
-    s.includes('history') ||
-    s.includes('civic') ||
-    s.includes('social') ||
-    s.includes('political')
-  ) {
-    return '/assets/teachers/fatima-shaikh.jpg';
-  }
-
-  return DEFAULT_TEACHER_PHOTO;
-}
-
-/**
- * Returns teacher photo based on teacher name or teacher object.
+ * Returns a teacher's photo if they have one, otherwise a generated
+ * initials avatar based on their name (or the subject, if no teacher
+ * is assigned yet).
  */
 export function getTeacherPhoto(teacher?: any, subject?: string): string {
-  if (!teacher) return getTeacherPhotoBySubject(subject);
-
-  if (typeof teacher === 'object') {
-    if (teacher.avatar && typeof teacher.avatar === 'string' && teacher.avatar.startsWith('/assets/teachers/')) {
-      return teacher.avatar;
-    }
-    if (teacher.name) {
-      const nameKey = teacher.name.toLowerCase().trim();
-      for (const [tName, photo] of Object.entries(TEACHER_PHOTOS)) {
-        if (nameKey.includes(tName)) return photo;
-      }
-    }
-  } else if (typeof teacher === 'string') {
-    const nameKey = teacher.toLowerCase().trim();
-    for (const [tName, photo] of Object.entries(TEACHER_PHOTOS)) {
-      if (nameKey.includes(tName)) return photo;
-    }
+  if (teacher && typeof teacher === 'object' && teacher.avatar) {
+    return teacher.avatar;
   }
-
-  return getTeacherPhotoBySubject(subject);
+  if (teacher && typeof teacher === 'object' && teacher.name) {
+    return uiAvatar(teacher.name);
+  }
+  if (typeof teacher === 'string' && teacher.trim()) {
+    return uiAvatar(teacher);
+  }
+  return uiAvatar(subject || 'Teacher', 'B69CF2');
 }
 
 /**
- * Returns the proper thumbnail for a course.
- * Ensures that teacher photo is displayed rather than any placeholder or fake images.
+ * Returns the thumbnail for a course: its own thumbnail if set, else
+ * the assigned teacher's photo, else a subject-based placeholder.
  */
 export function getCourseThumbnail(course?: any): string {
-  if (!course) return DEFAULT_TEACHER_PHOTO;
+  if (!course) return uiAvatar('Course');
 
-  // If course has a valid teacher thumbnail, return it
   if (course.thumbnail && typeof course.thumbnail === 'string') {
-    if (course.thumbnail.startsWith('/assets/teachers/')) {
-      return course.thumbnail;
-    }
-    // Reject picsum or generic placeholders
-    if (!course.thumbnail.includes('picsum.photos') && !course.thumbnail.includes('placeholder')) {
-      return course.thumbnail;
-    }
+    return course.thumbnail;
   }
 
-  // Check teacher object
   if (course.teacher) {
-    const photo = getTeacherPhoto(course.teacher, course.subject);
-    if (photo && photo !== DEFAULT_TEACHER_PHOTO) return photo;
+    return getTeacherPhoto(course.teacher, course.subject);
   }
 
-  // Derive by subject
-  if (course.subject) {
-    return getTeacherPhotoBySubject(course.subject);
-  }
-
-  // Derive by title
-  if (course.title) {
-    return getTeacherPhotoBySubject(course.title);
-  }
-
-  return DEFAULT_TEACHER_PHOTO;
+  return uiAvatar(course.subject || course.title || 'Course', 'B69CF2');
 }
