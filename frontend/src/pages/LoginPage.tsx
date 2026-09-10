@@ -1,9 +1,35 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
+
+type Role = 'student' | 'teacher' | 'admin';
+
+const ROLES: { role: Role; label: string; icon: React.ReactNode; color: string; activeColor: string }[] = [
+  {
+    role: 'student',
+    label: 'Student',
+    icon: <GraduationCap className="w-3.5 h-3.5" />,
+    color: 'bg-surface-alt border-border-subtle text-text-secondary hover:border-[#86EFAC] hover:text-[#16A34A]',
+    activeColor: 'bg-[#DCFCE7] dark:bg-[#153428] border-[#86EFAC] text-[#16A34A] dark:text-[#4ADE9A] shadow-xs',
+  },
+  {
+    role: 'teacher',
+    label: 'Teacher',
+    icon: <BookOpen className="w-3.5 h-3.5" />,
+    color: 'bg-surface-alt border-border-subtle text-text-secondary hover:border-[#DDD6FE] hover:text-[#6C63F2]',
+    activeColor: 'bg-[#EDE9FE] dark:bg-[#28214C] border-[#DDD6FE] text-[#6C63F2] dark:text-[#B69CF2] shadow-xs',
+  },
+  {
+    role: 'admin',
+    label: 'Admin',
+    icon: <ShieldCheck className="w-3.5 h-3.5" />,
+    color: 'bg-surface-alt border-border-subtle text-text-secondary hover:border-[#FFD1DC] hover:text-[#E1447A]',
+    activeColor: 'bg-[#FFE4EC] dark:bg-[#3D1825] border-[#FFD1DC] text-[#E1447A] dark:text-[#FF8FA3] shadow-xs',
+  },
+];
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -11,7 +37,8 @@ const LoginPage: React.FC = () => {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, user } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<Role>('student');
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,36 +46,15 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      const loggedInUser = await login(email, password);
       toast.success('Welcome back!');
+      // Redirect based on actual role returned from the server
       setTimeout(() => {
         const stored = localStorage.getItem('learniq_token');
         if (stored) navigate('/student');
       }, 100);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Quick demo login
-  const demoLogin = async (role: string) => {
-    const creds = {
-      student: { email: 'student1@learniq.in', password: 'Student@123456' },
-      teacher: { email: 'teacher1@learniq.in', password: 'Teacher@123456' },
-      admin: { email: 'admin@learniq.in', password: 'Admin@123456' },
-    };
-    const c = creds[role as keyof typeof creds];
-    setEmail(c.email);
-    setPassword(c.password);
-    setError('');
-    setLoading(true);
-    try {
-      await login(c.email, c.password);
-      toast.success(`Logged in as ${role}!`);
-    } catch {
-      setError('Demo login failed. Please seed the database first.');
     } finally {
       setLoading(false);
     }
@@ -69,6 +75,33 @@ const LoginPage: React.FC = () => {
           <p className="text-text-secondary text-sm">Sign in to your learning account</p>
         </div>
 
+        {/* Role Selector Card — above the form */}
+        <div className="card-soft p-4 mb-3 rounded-card border border-border-subtle shadow-soft">
+          <p className="text-text-secondary text-xs text-center mb-3 font-semibold uppercase tracking-wider">
+            I am a
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {ROLES.map(({ role, label, icon, color, activeColor }) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setSelectedRole(role)}
+                className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border flex items-center justify-center gap-1.5 ${
+                  selectedRole === role ? activeColor : color
+                }`}
+                aria-pressed={selectedRole === role}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-text-muted text-[11px] text-center mt-2.5">
+            Selecting a role helps identify your account type
+          </p>
+        </div>
+
+        {/* Login Form Card */}
         <div className="card-soft p-8 rounded-card border border-border-subtle shadow-soft">
           <h2 className="font-heading text-2xl font-bold text-text-primary mb-6">Welcome Back</h2>
 
@@ -128,7 +161,7 @@ const LoginPage: React.FC = () => {
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Signing in...
                 </span>
-              ) : 'Sign In'}
+              ) : `Sign In as ${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}`}
             </button>
           </form>
 
@@ -139,32 +172,9 @@ const LoginPage: React.FC = () => {
             </Link>
           </p>
         </div>
-
-        {/* Demo Accounts */}
-        <div className="card-soft p-5 mt-4 rounded-card border border-border-subtle shadow-soft">
-          <p className="text-text-secondary text-xs text-center mb-3 font-semibold uppercase tracking-wider">Quick Demo Accounts</p>
-          <div className="grid grid-cols-3 gap-2.5">
-            {[
-              { role: 'student', label: 'Student', color: 'bg-[#DCFCE7] dark:bg-[#153428] text-[#16A34A] dark:text-[#4ADE9A] border-[#86EFAC]' },
-              { role: 'teacher', label: 'Teacher', color: 'bg-[#EDE9FE] dark:bg-[#28214C] text-[#6C63F2] dark:text-[#B69CF2] border-[#DDD6FE]' },
-              { role: 'admin', label: 'Admin', color: 'bg-[#FFE4EC] dark:bg-[#3D1825] text-[#E1447A] dark:text-[#FF8FA3] border-[#FFD1DC]' },
-            ].map(({ role, label, color }) => (
-              <button
-                key={role}
-                onClick={() => demoLogin(role)}
-                disabled={loading}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold transition-all ${color} border shadow-xs hover:opacity-90`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="text-text-muted text-xs text-center mt-2 font-medium">Click any role to auto-login for evaluation</p>
-        </div>
       </div>
     </div>
   );
 };
 
 export default LoginPage;
-
