@@ -275,25 +275,25 @@ const setupSocket = (io) => {
 
     socket.on('camera-state', ({ sessionCode, isOn }) => {
       if (sessionRooms[sessionCode]?.participants[socket.id]) {
-        sessionRooms[sessionCode].participants[socket.id].isCameraOn = isOn;
+        sessionRooms[sessionCode].participants[socket.id].isCameraOn = !!isOn;
       }
-      socket.to(`session:${sessionCode}`).emit('participant-camera', {
+      io.to(`session:${sessionCode}`).emit('participant-camera', {
         socketId: socket.id,
         userId: socket.user?._id,
         name: socket.user?.name,
-        isOn,
+        isOn: !!isOn,
       });
     });
 
     socket.on('mic-state', ({ sessionCode, isOn }) => {
       if (sessionRooms[sessionCode]?.participants[socket.id]) {
-        sessionRooms[sessionCode].participants[socket.id].isMicOn = isOn;
+        sessionRooms[sessionCode].participants[socket.id].isMicOn = !!isOn;
       }
-      socket.to(`session:${sessionCode}`).emit('participant-mic', {
+      io.to(`session:${sessionCode}`).emit('participant-mic', {
         socketId: socket.id,
         userId: socket.user?._id,
         name: socket.user?.name,
-        isOn,
+        isOn: !!isOn,
       });
     });
 

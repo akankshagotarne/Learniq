@@ -54,22 +54,66 @@ const StreamVideo: React.FC<{
   stream: MediaStream | null;
   muted?: boolean;
   className?: string;
-}> = ({ stream, muted = false, className = 'w-full h-full object-cover' }) => {
+}> = ({ stream, muted = true, className = 'w-full h-full object-cover' }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (video) {
-      if (stream) {
-        video.srcObject = stream;
-        video.play().catch(() => {});
-      } else {
-        video.srcObject = null;
-      }
+    if (!video) return;
+
+    if (stream) {
+      video.srcObject = stream;
+      video.play().catch(err => {
+        console.warn('[StreamVideo] Autoplay blocked:', err);
+      });
+    } else {
+      video.srcObject = null;
     }
   }, [stream]);
 
   return <video ref={videoRef} autoPlay playsInline muted={muted} className={className} />;
+};
+
+// ======================= RemoteAudioPool =======================
+
+const SingleRemoteAudio: React.FC<{ socketId: string; stream: MediaStream }> = ({ socketId, stream }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.srcObject = stream;
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(err => {
+        console.warn(`[Audio] Autoplay blocked for ${socketId}:`, err);
+        const onUserInteraction = () => {
+          audio.play().catch(() => {});
+          window.removeEventListener('click', onUserInteraction);
+          window.removeEventListener('keydown', onUserInteraction);
+        };
+        window.addEventListener('click', onUserInteraction);
+        window.addEventListener('keydown', onUserInteraction);
+      });
+    }
+  }, [stream, socketId]);
+
+  return <audio ref={audioRef} autoPlay playsInline />;
+};
+
+const RemoteAudioPool: React.FC<{
+  remoteStreams: Record<string, MediaStream>;
+  mySocketId: string;
+}> = ({ remoteStreams, mySocketId }) => {
+  return (
+    <div style={{ display: 'none' }} aria-hidden="true">
+      {Object.entries(remoteStreams).map(([socketId, stream]) => {
+        if (socketId === mySocketId) return null;
+        return <SingleRemoteAudio key={socketId} socketId={socketId} stream={stream} />;
+      })}
+    </div>
+  );
 };
 
 // ======================= ParticipantTile =======================
@@ -93,7 +137,9 @@ const ParticipantTile: React.FC<{
 }) => {
   const isCamEffective = isLocal ? (localCamOn ?? false) : participant.isCameraOn;
   const isMicEffective = isLocal ? (localMicOn ?? false) : participant.isMicOn;
-  const showVideo = !!stream && isCamEffective;
+  
+  const hasLiveVideoTrack = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live' && t.enabled);
+  const showVideo = isLocal ? (localCamOn && !!stream) : (isCamEffective || hasLiveVideoTrack);
   const avatarColor = getAvatarColor(participant.name || 'U');
 
   const sizeClasses = size === 'small'
@@ -110,7 +156,7 @@ const ParticipantTile: React.FC<{
     >
       {/* Video or Avatar */}
       {showVideo ? (
-        <StreamVideo stream={stream} muted={isLocal} className="w-full h-full object-cover" />
+        <StreamVideo stream={stream} muted={true} className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-2">
           <div className={`rounded-full flex items-center justify-center font-bold border-2 ${avatarColor}
@@ -196,6 +242,7 @@ const VideoGrid: React.FC<{
   remoteStreams: Record<string, MediaStream>;
   localStream: MediaStream | null;
   mySocketId: string;
+  isLocalParticipant: (p: Participant) => boolean;
   pinnedSocketId: string | null;
   onPin: (socketId: string | null) => void;
   isViewerTeacher: boolean;
@@ -203,7 +250,7 @@ const VideoGrid: React.FC<{
   isCamOn: boolean;
   isMicOn: boolean;
 }> = ({
-  participants, remoteStreams, localStream, mySocketId,
+  participants, remoteStreams, localStream, mySocketId, isLocalParticipant,
   pinnedSocketId, onPin, isViewerTeacher, onRequestMedia, isCamOn, isMicOn,
 }) => {
   const pinnedP = participants.find(p => p.socketId === pinnedSocketId);
@@ -211,7 +258,7 @@ const VideoGrid: React.FC<{
   const count = participants.length;
 
   const getStream = (p: Participant) =>
-    p.socketId === mySocketId ? localStream : (remoteStreams[p.socketId] || null);
+    isLocalParticipant(p) ? localStream : (remoteStreams[p.socketId] || null);
 
   // ── Spotlight layout (a tile is pinned) ────────────────────────────────
   if (pinnedSocketId && pinnedP) {
@@ -222,7 +269,7 @@ const VideoGrid: React.FC<{
           <ParticipantTile
             participant={pinnedP}
             stream={getStream(pinnedP)}
-            isLocal={pinnedP.socketId === mySocketId}
+            isLocal={isLocalParticipant(pinnedP)}
             isPinned
             size="large"
             onPin={() => onPin(pinnedP.socketId)}
@@ -241,7 +288,7 @@ const VideoGrid: React.FC<{
                 key={p.socketId}
                 participant={p}
                 stream={getStream(p)}
-                isLocal={p.socketId === mySocketId}
+                isLocal={isLocalParticipant(p)}
                 isPinned={false}
                 size="small"
                 onPin={() => onPin(p.socketId)}
@@ -274,7 +321,7 @@ const VideoGrid: React.FC<{
           key={p.socketId}
           participant={p}
           stream={getStream(p)}
-          isLocal={p.socketId === mySocketId}
+          isLocal={isLocalParticipant(p)}
           isPinned={false}
           size="large"
           onPin={() => onPin(p.socketId)}
@@ -526,7 +573,6 @@ const McqResultsPopup: React.FC<{
   onClose: () => void;
 }> = ({ results, correctIndex, options, currentUserId, onClose }) => {
   const correct = results.filter(r => r.isCorrect);
-  const incorrect = results.filter(r => !r.isCorrect);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
       <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col animate-slide-up">
@@ -538,35 +584,155 @@ const McqResultsPopup: React.FC<{
           <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {correct.length > 0 && (<>
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">✅ Correct — ranked by speed</p>
-            {correct.map((r, i) => (
-              <div key={r.studentId} className={`flex items-center gap-3 p-3 rounded-xl border ${r.studentId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-surface-alt border-border-subtle'}`}>
-                <span className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm font-black flex-shrink-0 ${i === 0 ? 'bg-[#FEF3C7] text-yellow-600' : i === 1 ? 'bg-surface border border-border-subtle text-text-muted' : i === 2 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-surface-alt text-text-muted text-xs'}`}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                </span>
-                <p className={`text-sm font-semibold flex-1 truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{r.studentName} {r.studentId === currentUserId && '(You)'}</p>
-                <p className="text-xs font-mono text-accent-mint font-semibold flex-shrink-0">{r.responseTimeSec !== null ? `${r.responseTimeSec}s` : '—'}</p>
-              </div>
-            ))}
-          </>)}
-          {incorrect.length > 0 && (<>
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mt-4 mb-2">❌ Wrong / No answer</p>
-            {incorrect.map(r => (
-              <div key={r.studentId} className={`flex items-center gap-3 p-3 rounded-xl border ${r.studentId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-surface border-border-subtle'}`}>
-                <div className="w-7 h-7 rounded-lg bg-[#FFE4EC] flex items-center justify-center flex-shrink-0"><span className="text-[#E1447A] text-xs font-bold">✗</span></div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{r.studentName} {r.studentId === currentUserId && '(You)'}</p>
-                  <p className="text-text-muted text-xs">{r.selectedOption !== null ? `Chose ${OPTION_LABELS[r.selectedOption]}` : 'No answer'}</p>
+          {correct.length > 0 ? (
+            <>
+              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">✅ Correct — ranked by speed</p>
+              {correct.map((r, i) => (
+                <div key={r.studentId} className={`flex items-center gap-3 p-3 rounded-xl border ${r.studentId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-surface-alt border-border-subtle'}`}>
+                  <span className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm font-black flex-shrink-0 ${i === 0 ? 'bg-[#FEF3C7] text-yellow-600' : i === 1 ? 'bg-surface border border-border-subtle text-text-muted' : i === 2 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-surface-alt text-text-muted text-xs'}`}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </span>
+                  <p className={`text-sm font-semibold flex-1 truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{r.studentName} {r.studentId === currentUserId && '(You)'}</p>
+                  <p className="text-xs font-mono text-accent-mint font-semibold flex-shrink-0">{r.responseTimeSec !== null ? `${r.responseTimeSec}s` : '—'}</p>
                 </div>
-              </div>
-            ))}
-          </>)}
-          {results.length === 0 && <p className="text-text-muted text-center py-8 text-sm">No responses recorded.</p>}
+              ))}
+            </>
+          ) : (
+            <p className="text-text-muted text-center py-8 text-sm">No correct answers for this question.</p>
+          )}
         </div>
         <div className="px-5 py-3 border-t border-border-subtle flex-shrink-0">
           <button onClick={onClose} className="btn-primary w-full py-2.5 text-sm">Close Results</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ======================= PARTICIPANTS DRAWER =======================
+
+const ParticipantsDrawer: React.FC<{
+  participants: Participant[];
+  mySocketId: string;
+  isViewerTeacher: boolean;
+  isLocalParticipant: (p: Participant) => boolean;
+  onRequestMedia: (targetSocketId: string, type: 'camera' | 'mic') => void;
+  onClose: () => void;
+}> = ({ participants, mySocketId, isViewerTeacher, isLocalParticipant, onRequestMedia, onClose }) => {
+  return (
+    <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10 animate-slide-left">
+      <div className="p-3.5 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-brand-primary" />
+          <span className="font-heading text-text-primary text-sm font-bold">
+            Participants ({participants.length})
+          </span>
+        </div>
+        <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 rounded-lg">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {participants.map(p => {
+          const isLocal = isLocalParticipant(p);
+          const isStudent = !p.isTeacher;
+          const avatarColor = getAvatarColor(p.name || 'U');
+
+          return (
+            <div
+              key={p.socketId || p.userId}
+              className="flex items-center justify-between p-2.5 rounded-xl bg-surface-alt/70 border border-border-subtle/80 hover:bg-surface-alt transition-all gap-2"
+            >
+              {/* Avatar + Info */}
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border ${avatarColor} flex-shrink-0`}>
+                  {(p.name?.[0] || '?').toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-text-primary truncate">
+                      {p.name}
+                    </p>
+                    {isLocal && <span className="text-[10px] text-text-muted font-normal">(You)</span>}
+                  </div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {p.isTeacher ? (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-accent-amber font-semibold">
+                        <Crown className="w-2.5 h-2.5" /> Host
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-text-muted capitalize">Student</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Icons & Host Request Actions */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Camera Status & Request Button */}
+                {p.isCameraOn ? (
+                  <div
+                    title="Camera is on"
+                    className="w-7 h-7 rounded-lg bg-accent-mint/10 text-accent-mint flex items-center justify-center"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    {isViewerTeacher && isStudent && !isLocal ? (
+                      <button
+                        onClick={() => onRequestMedia(p.socketId, 'camera')}
+                        title={`Ask ${p.name} to turn on camera`}
+                        className="px-2 py-1 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/20 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-all"
+                      >
+                        <Video className="w-3 h-3" />
+                        <span>Ask Cam</span>
+                      </button>
+                    ) : (
+                      <div
+                        title="Camera is off"
+                        className="w-7 h-7 rounded-lg bg-surface border border-border-subtle text-text-muted flex items-center justify-center"
+                      >
+                        <VideoOff className="w-3.5 h-3.5 text-text-muted/60" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Mic Status & Request Button */}
+                {p.isMicOn ? (
+                  <div
+                    title="Microphone is on"
+                    className="w-7 h-7 rounded-lg bg-accent-mint/10 text-accent-mint flex items-center justify-center"
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    {isViewerTeacher && isStudent && !isLocal ? (
+                      <button
+                        onClick={() => onRequestMedia(p.socketId, 'mic')}
+                        title={`Ask ${p.name} to unmute`}
+                        className="px-2 py-1 bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#92400E] border border-[#FDE68A] rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-all"
+                      >
+                        <Mic className="w-3 h-3" />
+                        <span>Ask Mic</span>
+                      </button>
+                    ) : (
+                      <div
+                        title="Microphone is muted"
+                        className="w-7 h-7 rounded-lg bg-[#FFE4EC]/40 border border-[#FFE4EC] text-[#E1447A] flex items-center justify-center"
+                      >
+                        <MicOff className="w-3.5 h-3.5 text-[#E1447A]" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -682,6 +848,7 @@ const LiveSessionPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(true);
+  const [showParticipants, setShowParticipants] = useState(false);
 
   // Media states
   const [isCamOn, setIsCamOn] = useState(false);
@@ -813,10 +980,11 @@ const LiveSessionPage: React.FC = () => {
     evts.forEach(e => socket.off(e));
   }, [socket]);
 
-  // ── WebRTC: Create Peer Connection ─────────────────────────────────────
-  const createPeerConnection = useCallback((targetSocketId: string): RTCPeerConnection => {
-    if (peerConnectionsRef.current[targetSocketId]) {
-      try { peerConnectionsRef.current[targetSocketId].close(); } catch {}
+  // ── WebRTC: Get or Create Peer Connection ─────────────────────────────
+  const getOrCreatePeerConnection = useCallback((targetSocketId: string): RTCPeerConnection => {
+    const existingPc = peerConnectionsRef.current[targetSocketId];
+    if (existingPc && existingPc.signalingState !== 'closed') {
+      return existingPc;
     }
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -828,18 +996,68 @@ const LiveSessionPage: React.FC = () => {
     };
 
     pc.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
-      setRemoteStreams(prev => ({ ...prev, [targetSocketId]: stream }));
+      console.log(`[WebRTC] ontrack from ${targetSocketId}:`, event.track.kind, event.track.id);
+      setRemoteStreams(prev => {
+        const existing = prev[targetSocketId];
+        let stream: MediaStream;
+        if (existing) {
+          existing.getTracks().forEach(t => {
+            if (t.kind === event.track.kind && t.id !== event.track.id) {
+              existing.removeTrack(t);
+            }
+          });
+          existing.addTrack(event.track);
+          stream = new MediaStream(existing.getTracks());
+        } else if (event.streams && event.streams[0]) {
+          stream = new MediaStream(event.streams[0].getTracks());
+        } else {
+          stream = new MediaStream([event.track]);
+        }
+        return { ...prev, [targetSocketId]: stream };
+      });
+
+      event.track.onunmute = () => {
+        setRemoteStreams(prev => {
+          const s = prev[targetSocketId];
+          return s ? { ...prev, [targetSocketId]: new MediaStream(s.getTracks()) } : prev;
+        });
+      };
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(`[WebRTC] ${targetSocketId}: ${pc.connectionState}`);
+      console.log(`[WebRTC] ${targetSocketId} connectionState:`, pc.connectionState);
+      if (pc.connectionState === 'failed') {
+        try { pc.restartIce(); } catch {}
+      }
     };
 
-    // Add all current local tracks (including audio) so senders exist from the start
+    // Pre-allocate transceivers with sendrecv so SDP includes both audio and video
+    let audioTransceiver: RTCRtpTransceiver | undefined;
+    let videoTransceiver: RTCRtpTransceiver | undefined;
+    try {
+      audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+      videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (e) {
+      console.warn('[WebRTC] addTransceiver error:', e);
+    }
+
+    // Attach active local tracks to senders if local media already exists
     const activeStream = screenStreamRef.current || localStreamRef.current;
     if (activeStream) {
-      activeStream.getTracks().forEach(track => pc.addTrack(track, activeStream));
+      const activeVideo = activeStream.getVideoTracks()[0] || null;
+      const activeAudio = activeStream.getAudioTracks()[0] || null;
+
+      if (videoTransceiver && activeVideo) {
+        videoTransceiver.sender.replaceTrack(activeVideo).catch(() => {});
+      } else if (activeVideo) {
+        try { pc.addTrack(activeVideo, activeStream); } catch {}
+      }
+
+      if (audioTransceiver && activeAudio) {
+        audioTransceiver.sender.replaceTrack(activeAudio).catch(() => {});
+      } else if (activeAudio) {
+        try { pc.addTrack(activeAudio, activeStream); } catch {}
+      }
     }
 
     peerConnectionsRef.current[targetSocketId] = pc;
@@ -848,37 +1066,73 @@ const LiveSessionPage: React.FC = () => {
 
   const createOffer = useCallback(async (targetSocketId: string) => {
     try {
-      const pc = createPeerConnection(targetSocketId);
-      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+      const pc = getOrCreatePeerConnection(targetSocketId);
+      if (pc.signalingState !== 'stable') {
+        console.warn(`[WebRTC] Cannot create offer for ${targetSocketId} in state: ${pc.signalingState}`);
+        return;
+      }
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('webrtc-offer', { targetSocketId, offer });
     } catch (err) {
       console.error(`[WebRTC] createOffer error for ${targetSocketId}:`, err);
     }
-  }, [createPeerConnection, socket]);
+  }, [getOrCreatePeerConnection, socket]);
 
   const handleOffer = useCallback(async (fromSocketId: string, offer: RTCSessionDescriptionInit) => {
     try {
-      const pc = createPeerConnection(fromSocketId);
+      const pc = getOrCreatePeerConnection(fromSocketId);
+
+      // Handle glare (simultaneous offers)
+      if (pc.signalingState !== 'stable') {
+        if (pc.signalingState === 'have-local-offer') {
+          try {
+            await pc.setLocalDescription({ type: 'rollback' });
+          } catch {}
+        }
+      }
+
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      for (const c of (pendingCandidatesRef.current[fromSocketId] || [])) {
+
+      // Flush queued candidates
+      const pending = pendingCandidatesRef.current[fromSocketId] || [];
+      for (const c of pending) {
         try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
       }
       pendingCandidatesRef.current[fromSocketId] = [];
+
+      // Ensure any active local tracks are attached to answerer's senders
+      const activeStream = screenStreamRef.current || localStreamRef.current;
+      if (activeStream) {
+        const activeVideo = activeStream.getVideoTracks()[0] || null;
+        const activeAudio = activeStream.getAudioTracks()[0] || null;
+        const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+        const vTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video');
+        const aTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+
+        if (vTransceiver && activeVideo && vTransceiver.sender.track !== activeVideo) {
+          vTransceiver.sender.replaceTrack(activeVideo).catch(() => {});
+        }
+        if (aTransceiver && activeAudio && aTransceiver.sender.track !== activeAudio) {
+          aTransceiver.sender.replaceTrack(activeAudio).catch(() => {});
+        }
+      }
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('webrtc-answer', { targetSocketId: fromSocketId, answer });
     } catch (err) {
       console.error(`[WebRTC] handleOffer error from ${fromSocketId}:`, err);
     }
-  }, [createPeerConnection, socket]);
+  }, [getOrCreatePeerConnection, socket]);
 
   const handleAnswer = useCallback(async (fromSocketId: string, answer: RTCSessionDescriptionInit) => {
     try {
       const pc = peerConnectionsRef.current[fromSocketId];
-      if (pc) {
+      if (pc && pc.signalingState === 'have-local-offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        for (const c of (pendingCandidatesRef.current[fromSocketId] || [])) {
+        const pending = pendingCandidatesRef.current[fromSocketId] || [];
+        for (const c of pending) {
           try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
         }
         pendingCandidatesRef.current[fromSocketId] = [];
@@ -890,7 +1144,7 @@ const LiveSessionPage: React.FC = () => {
 
   const handleIceCandidate = useCallback(async (fromSocketId: string, candidate: RTCIceCandidateInit) => {
     const pc = peerConnectionsRef.current[fromSocketId];
-    if (pc && pc.remoteDescription?.type) {
+    if (pc && pc.remoteDescription && pc.remoteDescription.type) {
       try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
     } else {
       pendingCandidatesRef.current[fromSocketId] = pendingCandidatesRef.current[fromSocketId] || [];
@@ -1009,10 +1263,12 @@ const LiveSessionPage: React.FC = () => {
 
     // Permission request (Part 3)
     socket.on('permission-request', (req) => { setPermRequest(req); });
-    socket.on('permission-response', ({ type, granted }) => {
+    socket.on('permission-response', ({ type, granted, from }: { type: string; granted: boolean; from?: string }) => {
+      const mediaName = type === 'camera' ? 'camera' : 'microphone';
       if (granted) {
-        if (type === 'mic') toggleMic(true);
-        if (type === 'camera') toggleCamera(true);
+        toast.success(`${from || 'Student'} accepted your request to turn on their ${mediaName}.`);
+      } else {
+        toast(`${from || 'Student'} declined your request to turn on their ${mediaName}.`, { icon: 'ℹ️' });
       }
     });
 
@@ -1047,105 +1303,146 @@ const LiveSessionPage: React.FC = () => {
 
   }, [socket, createOffer, handleOffer, handleAnswer, handleIceCandidate, cleanup, navigate]);
 
-  // ── broadcastTrack: sync a new track to all open peer connections ────────
-  const broadcastTrack = useCallback((newTrack: MediaStreamTrack, kind: 'audio' | 'video') => {
+  // ── broadcastLocalTracks: push active tracks to all open peer connections without renegotiation ──
+  const broadcastLocalTracks = useCallback(() => {
+    const stream = screenStreamRef.current || localStreamRef.current;
+    const videoTrack = stream?.getVideoTracks()[0] || null;
+    const audioTrack = stream?.getAudioTracks()[0] || null;
+
     Object.entries(peerConnectionsRef.current).forEach(([targetSocketId, pc]) => {
-      const sender = pc.getSenders().find(s => s.track?.kind === kind);
-      if (sender) {
-        sender.replaceTrack(newTrack).catch(() => {});
-      } else if (localStreamRef.current) {
-        pc.addTrack(newTrack, localStreamRef.current);
-        // Renegotiate since we added a new track
-        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }).then(offer => {
-          return pc.setLocalDescription(offer).then(() => {
-            socket.emit('webrtc-offer', { targetSocketId, offer });
-          });
-        }).catch(() => {});
+      if (pc.signalingState === 'closed') return;
+
+      const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+      const videoTransceiver = transceivers.find(t => 
+        t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video'
+      );
+      const audioTransceiver = transceivers.find(t => 
+        t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio'
+      );
+
+      const videoSender = videoTransceiver?.sender || pc.getSenders().find(s => s.track?.kind === 'video');
+      const audioSender = audioTransceiver?.sender || pc.getSenders().find(s => s.track?.kind === 'audio');
+
+      if (videoSender) {
+        videoSender.replaceTrack(videoTrack).catch(err => {
+          console.warn(`[WebRTC] replaceTrack video error to ${targetSocketId}:`, err);
+        });
+      } else if (videoTrack && stream) {
+        try {
+          pc.addTrack(videoTrack, stream);
+          if (pc.signalingState === 'stable') {
+            pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+              socket.emit('webrtc-offer', { targetSocketId, offer: pc.localDescription });
+            }).catch(() => {});
+          }
+        } catch {}
+      }
+
+      if (audioSender) {
+        audioSender.replaceTrack(audioTrack).catch(err => {
+          console.warn(`[WebRTC] replaceTrack audio error to ${targetSocketId}:`, err);
+        });
+      } else if (audioTrack && stream) {
+        try {
+          pc.addTrack(audioTrack, stream);
+          if (pc.signalingState === 'stable') {
+            pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+              socket.emit('webrtc-offer', { targetSocketId, offer: pc.localDescription });
+            }).catch(() => {});
+          }
+        } catch {}
       }
     });
   }, [socket]);
 
-  // ── toggleCamera: ALWAYS request audio+video together ────────────────────
+  // ── toggleCamera: cleanly acquire/release video without double-offers ─────
   const toggleCamera = async (force?: boolean) => {
     if (isCamOn && !force) {
       const videoTrack = localStreamRef.current?.getVideoTracks()[0];
-      if (videoTrack) { videoTrack.stop(); localStreamRef.current?.removeTrack(videoTrack); }
+      if (videoTrack) {
+        videoTrack.stop();
+        localStreamRef.current?.removeTrack(videoTrack);
+      }
       setIsCamOn(false);
+      broadcastLocalTracks();
       socket.emit('camera-state', { sessionCode: code, isOn: false });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isCameraOn: false } : p));
       toast('Camera turned off', { icon: '📷' });
       return;
     }
+
     try {
+      const hasAudioAlready = !!localStreamRef.current?.getAudioTracks().length;
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true, // ← Always request audio with camera so audio senders exist on all PCs
+        audio: !hasAudioAlready,
       });
 
       const videoTrack = stream.getVideoTracks()[0];
       const audioTrack = stream.getAudioTracks()[0];
 
-      // Immediately disable audio if mic is currently off
-      if (audioTrack) audioTrack.enabled = isMicOn;
-
       if (!localStreamRef.current) {
-        localStreamRef.current = stream;
-      } else {
-        // Replace old video track
-        const oldVideo = localStreamRef.current.getVideoTracks()[0];
-        if (oldVideo) { oldVideo.stop(); localStreamRef.current.removeTrack(oldVideo); }
-        localStreamRef.current.addTrack(videoTrack);
-        // Add audio if not already present
-        if (audioTrack && localStreamRef.current.getAudioTracks().length === 0) {
-          localStreamRef.current.addTrack(audioTrack);
-        }
+        localStreamRef.current = new MediaStream();
       }
 
-      broadcastTrack(videoTrack, 'video');
-      if (audioTrack) broadcastTrack(audioTrack, 'audio');
+      const oldVideo = localStreamRef.current.getVideoTracks()[0];
+      if (oldVideo) {
+        oldVideo.stop();
+        localStreamRef.current.removeTrack(oldVideo);
+      }
+      localStreamRef.current.addTrack(videoTrack);
+
+      if (audioTrack) {
+        audioTrack.enabled = isMicOn;
+        localStreamRef.current.addTrack(audioTrack);
+      }
 
       setIsCamOn(true);
+      broadcastLocalTracks();
       socket.emit('camera-state', { sessionCode: code, isOn: true });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isCameraOn: true } : p));
       toast.success('Camera turned on');
-    } catch {
+    } catch (err) {
+      console.error('Camera access error:', err);
       toast.error('Could not access camera. Please allow camera permissions.');
     }
   };
 
-  // ── toggleMic: enable/disable track (no remove/re-add needed) ────────────
+  // ── toggleMic: cleanly enable/disable audio without renegotiation glare ───
   const toggleMic = async (force?: boolean) => {
     if (isMicOn && !force) {
-      // Just disable all audio tracks — they stay in the PC senders
       localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
       setIsMicOn(false);
       socket.emit('mic-state', { sessionCode: code, isOn: false });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isMicOn: false } : p));
       toast('Microphone muted', { icon: '🔇' });
       return;
     }
 
     const existingAudio = localStreamRef.current?.getAudioTracks()[0];
     if (existingAudio) {
-      // Audio track already exists (added with camera) — just re-enable
       existingAudio.enabled = true;
       setIsMicOn(true);
       socket.emit('mic-state', { sessionCode: code, isOn: true });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isMicOn: true } : p));
       toast.success('Microphone unmuted');
       return;
     }
 
-    // No audio track yet (user turned on mic before camera)
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioTrack = audioStream.getAudioTracks()[0];
       if (!localStreamRef.current) {
-        localStreamRef.current = audioStream;
-      } else {
-        localStreamRef.current.addTrack(audioTrack);
+        localStreamRef.current = new MediaStream();
       }
-      broadcastTrack(audioTrack, 'audio');
+      localStreamRef.current.addTrack(audioTrack);
       setIsMicOn(true);
+      broadcastLocalTracks();
       socket.emit('mic-state', { sessionCode: code, isOn: true });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isMicOn: true } : p));
       toast.success('Microphone unmuted');
-    } catch {
+    } catch (err) {
+      console.error('Mic access error:', err);
       toast.error('Could not access microphone. Please allow microphone permissions.');
     }
   };
@@ -1156,8 +1453,7 @@ const LiveSessionPage: React.FC = () => {
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
       setIsScreenSharing(false);
-      const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
-      if (cameraTrack) broadcastTrack(cameraTrack, 'video');
+      broadcastLocalTracks();
       toast('Screen sharing stopped', { icon: '🖥️' });
       return;
     }
@@ -1168,10 +1464,9 @@ const LiveSessionPage: React.FC = () => {
       screenTrack.onended = () => {
         screenStreamRef.current = null;
         setIsScreenSharing(false);
-        const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
-        if (cameraTrack) broadcastTrack(cameraTrack, 'video');
+        broadcastLocalTracks();
       };
-      broadcastTrack(screenTrack, 'video');
+      broadcastLocalTracks();
       setIsScreenSharing(true);
       toast.success('Screen sharing started');
     } catch (err: any) {
@@ -1197,8 +1492,10 @@ const LiveSessionPage: React.FC = () => {
   };
 
   const requestMedia = (targetSocketId: string, type: 'camera' | 'mic') => {
+    const target = participants.find(p => p.socketId === targetSocketId);
+    const targetName = target?.name || 'student';
     socket.emit('request-permission', { sessionCode: code, targetSocketId, type });
-    toast(`Requesting ${type} permission from student...`, { icon: '📡' });
+    toast(`Requested ${targetName} to turn on ${type === 'camera' ? 'camera' : 'microphone'}`, { icon: '📡' });
   };
 
   const sendChat = () => {
@@ -1232,20 +1529,37 @@ const LiveSessionPage: React.FC = () => {
 
   // Build local participant entry for VideoGrid
   const mySocketId = socket.id || '';
-  const localParticipant: Participant = participants.find(p => p.socketId === mySocketId) || {
+  const isLocalParticipant = useCallback((p: Participant) => {
+    if (p.socketId && socket.id && p.socketId === socket.id) return true;
+    if (p.userId && user?._id && p.userId.toString() === user._id.toString()) return true;
+    return false;
+  }, [socket.id, user?._id]);
+
+  const localParticipant: Participant = participants.find(p => isLocalParticipant(p)) || {
     userId: user?._id || '',
     name: user?.name || 'You',
     role: user?.role || 'student',
     isTeacher,
-    isCameraOn: isCamOn,
+    isCameraOn: isCamOn || isScreenSharing,
     isMicOn,
     socketId: mySocketId,
   };
 
-  // All participants including local (for VideoGrid)
-  const allParticipantsForGrid: Participant[] = participants.length > 0
-    ? participants
-    : [localParticipant];
+  // Ensure local participant entry accurately reflects current live state in grid
+  const allParticipantsForGrid: Participant[] = participants.map(p => {
+    if (isLocalParticipant(p)) {
+      return {
+        ...p,
+        isCameraOn: isCamOn || isScreenSharing,
+        isMicOn,
+      };
+    }
+    return p;
+  });
+
+  if (!allParticipantsForGrid.some(p => isLocalParticipant(p))) {
+    allParticipantsForGrid.unshift(localParticipant);
+  }
 
   // ── Render guards ─────────────────────────────────────────────────────────
 
@@ -1370,10 +1684,19 @@ const LiveSessionPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-surface-alt border border-border-subtle rounded-xl text-xs font-semibold">
+          {/* Participants toggle button */}
+          <button
+            onClick={() => setShowParticipants(v => !v)}
+            title="Toggle participants list"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              showParticipants
+                ? 'bg-brand-primary/15 text-brand-primary border-brand-primary/30 shadow-xs ring-2 ring-brand-primary/20'
+                : 'bg-surface-alt text-text-secondary border-border-subtle hover:bg-surface hover:text-text-primary'
+            }`}
+          >
             <Users className="w-3.5 h-3.5 text-brand-primary" />
             <span>{participants.length}</span>
-          </div>
+          </button>
 
           {/* Waiting room badge — teacher only */}
           {isTeacher && waitingRoom.length > 0 && (
@@ -1446,6 +1769,9 @@ const LiveSessionPage: React.FC = () => {
 
           {view === 'session' && (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
+              {/* Dedicated Remote Audio Elements so remote audio always plays regardless of tile state */}
+              <RemoteAudioPool remoteStreams={remoteStreams} mySocketId={mySocketId} />
+
               {/* VideoGrid */}
               <div className="flex-1 min-h-0">
                 <VideoGrid
@@ -1453,6 +1779,7 @@ const LiveSessionPage: React.FC = () => {
                   remoteStreams={remoteStreams}
                   localStream={activeLocalStream}
                   mySocketId={mySocketId}
+                  isLocalParticipant={isLocalParticipant}
                   pinnedSocketId={pinnedSocketId}
                   onPin={setPinnedSocketId}
                   isViewerTeacher={isTeacher}
@@ -1580,6 +1907,18 @@ const LiveSessionPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Participants Drawer */}
+        {showParticipants && (
+          <ParticipantsDrawer
+            participants={allParticipantsForGrid}
+            mySocketId={mySocketId}
+            isViewerTeacher={isTeacher}
+            isLocalParticipant={isLocalParticipant}
+            onRequestMedia={requestMedia}
+            onClose={() => setShowParticipants(false)}
+          />
+        )}
       </div>
 
       {/* ── Controls Bar ── */}
@@ -1608,6 +1947,12 @@ const LiveSessionPage: React.FC = () => {
           <button onClick={() => setShowChat(!showChat)} title="Toggle chat"
             className={`p-3 rounded-xl transition-all shadow-xs ${showChat ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
             <MessageSquare className="w-5 h-5" />
+          </button>
+
+          {/* Participants */}
+          <button onClick={() => setShowParticipants(!showParticipants)} title="Toggle participants list"
+            className={`p-3 rounded-xl transition-all shadow-xs ${showParticipants ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
+            <Users className="w-5 h-5" />
           </button>
 
           {/* Scoreboard */}
