@@ -155,10 +155,12 @@ async function seedDatabase() {
 
     // ==================== ADMIN ====================
     console.log('👤 Creating admin...');
+    const adminEmail = process.env.ADMIN_EMAIL || 'learniq.admin@gmail.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Nikhil@1710';
     const admin = await User.create({
       name: 'Admin Learniq',
-      email: 'admin@learniq.in',
-      password: 'Admin@123456',
+      email: adminEmail,
+      password: adminPassword,
       role: 'admin',
       isApproved: true,
       bio: 'Platform Administrator',
@@ -507,8 +509,8 @@ async function seedDatabase() {
     console.log('📝 DEMO ACCOUNTS:');
     console.log('='.repeat(50));
     console.log('ADMIN:');
-    console.log('  Email: admin@learniq.in');
-    console.log('  Password: Admin@123456');
+    console.log(`  Email: ${adminEmail}`);
+    console.log(`  Password: ${adminPassword}`);
     console.log('\nTEACHERS (all password: Teacher@123456):');
     TEACHERS.forEach(t => console.log(`  ${t.email} - ${t.name}`));
     console.log('\nSTUDENTS (all password: Student@123456):');
