@@ -84,19 +84,30 @@ const SingleRemoteAudio: React.FC<{ socketId: string; stream: MediaStream }> = (
     if (!audio) return;
     audio.srcObject = stream;
 
+    let onUserInteraction: (() => void) | null = null;
+
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch(err => {
         console.warn(`[Audio] Autoplay blocked for ${socketId}:`, err);
-        const onUserInteraction = () => {
+        onUserInteraction = () => {
           audio.play().catch(() => {});
-          window.removeEventListener('click', onUserInteraction);
-          window.removeEventListener('keydown', onUserInteraction);
+          if (onUserInteraction) {
+            window.removeEventListener('click', onUserInteraction);
+            window.removeEventListener('keydown', onUserInteraction);
+          }
         };
         window.addEventListener('click', onUserInteraction);
         window.addEventListener('keydown', onUserInteraction);
       });
     }
+
+    return () => {
+      if (onUserInteraction) {
+        window.removeEventListener('click', onUserInteraction);
+        window.removeEventListener('keydown', onUserInteraction);
+      }
+    };
   }, [stream, socketId]);
 
   return <audio ref={audioRef} autoPlay playsInline />;
@@ -138,8 +149,9 @@ const ParticipantTile: React.FC<{
   const isCamEffective = isLocal ? (localCamOn ?? false) : participant.isCameraOn;
   const isMicEffective = isLocal ? (localMicOn ?? false) : participant.isMicOn;
   
-  const hasLiveVideoTrack = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live' && t.enabled);
-  const showVideo = isLocal ? (localCamOn && !!stream) : (isCamEffective || hasLiveVideoTrack);
+  // Video is only shown if the participant has actively turned their camera on.
+  // When camera is off, avatar is displayed even though a placeholder track keeps the WebRTC pipeline active.
+  const showVideo = isLocal ? (localCamOn && !!stream) : (participant.isCameraOn && !!stream);
   const avatarColor = getAvatarColor(participant.name || 'U');
 
   const sizeClasses = size === 'small'
@@ -827,6 +839,60 @@ const PodiumScreen: React.FC<{
   );
 };
 
+// ======================= WEBRTC PLACEHOLDER TRACK GENERATORS =======================
+
+function createBlankVideoTrack(): MediaStreamTrack | null {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#05060f';
+      ctx.fillRect(0, 0, 16, 16);
+    }
+    const stream = (canvas as any).captureStream ? (canvas as any).captureStream(10) : null;
+    if (stream && stream.getVideoTracks().length > 0) {
+      const track = stream.getVideoTracks()[0];
+      const interval = setInterval(() => {
+        if (track.readyState === 'ended') {
+          clearInterval(interval);
+          return;
+        }
+        if (ctx) {
+          ctx.fillStyle = '#05060f';
+          ctx.fillRect(0, 0, 16, 16);
+        }
+      }, 1000);
+      return track;
+    }
+  } catch (err) {
+    console.warn('[WebRTC] Could not create blank video track:', err);
+  }
+  return null;
+}
+
+function createSilentAudioTrack(): MediaStreamTrack | null {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return null;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0; // 0 volume = completely silent
+    const dst = ctx.createMediaStreamDestination();
+    osc.connect(gain);
+    gain.connect(dst);
+    osc.start();
+    const track = dst.stream.getAudioTracks()[0];
+    track.enabled = true;
+    return track;
+  } catch (err) {
+    console.warn('[WebRTC] Could not create silent audio track:', err);
+  }
+  return null;
+}
+
 // ======================= MAIN COMPONENT =======================
 
 const LiveSessionPage: React.FC = () => {
@@ -893,6 +959,26 @@ const LiveSessionPage: React.FC = () => {
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
   const pendingCandidatesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const blankVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const silentAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+
+  const getOrCreateBlankVideoTrack = useCallback((): MediaStreamTrack | null => {
+    if (blankVideoTrackRef.current && blankVideoTrackRef.current.readyState === 'live') {
+      return blankVideoTrackRef.current;
+    }
+    const track = createBlankVideoTrack();
+    blankVideoTrackRef.current = track;
+    return track;
+  }, []);
+
+  const getOrCreateSilentAudioTrack = useCallback((): MediaStreamTrack | null => {
+    if (silentAudioTrackRef.current && silentAudioTrackRef.current.readyState === 'live') {
+      return silentAudioTrackRef.current;
+    }
+    const track = createSilentAudioTrack();
+    silentAudioTrackRef.current = track;
+    return track;
+  }, []);
 
   const socket = getSocket();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
@@ -962,12 +1048,17 @@ const LiveSessionPage: React.FC = () => {
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     screenStreamRef.current = null;
+    blankVideoTrackRef.current?.stop();
+    silentAudioTrackRef.current?.stop();
+    blankVideoTrackRef.current = null;
+    silentAudioTrackRef.current = null;
     Object.values(peerConnectionsRef.current).forEach(pc => { try { pc.close(); } catch {} });
     peerConnectionsRef.current = {};
     pendingCandidatesRef.current = {};
     setRemoteStreams({});
 
     const evts = [
+      'existing-participants', 'teacher-joined',
       'participant-joined', 'participant-left', 'participant-camera', 'participant-mic',
       'webrtc-offer', 'webrtc-answer', 'webrtc-ice-candidate',
       'chat-message', 'chat-deleted',
@@ -1031,38 +1122,39 @@ const LiveSessionPage: React.FC = () => {
       }
     };
 
-    // Pre-allocate transceivers with sendrecv so SDP includes both audio and video
-    let audioTransceiver: RTCRtpTransceiver | undefined;
-    let videoTransceiver: RTCRtpTransceiver | undefined;
+    // Pre-allocate transceivers with sendrecv and initial tracks (real or placeholder).
+    // This is CRUCIAL: it guarantees both sides negotiate sendrecv in both directions
+    // and neither browser ever defaults to recvonly.
+    const activeStream = screenStreamRef.current || localStreamRef.current;
+    const activeVideo = activeStream?.getVideoTracks()[0] || null;
+    const activeAudio = activeStream?.getAudioTracks()[0] || null;
+
+    const initialVideoTrack = activeVideo || getOrCreateBlankVideoTrack();
+    const initialAudioTrack = activeAudio || getOrCreateSilentAudioTrack();
+
     try {
-      audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-      videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+      if (initialAudioTrack) {
+        pc.addTransceiver(initialAudioTrack, { direction: 'sendrecv' });
+      } else {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+      }
     } catch (e) {
-      console.warn('[WebRTC] addTransceiver error:', e);
+      console.warn('[WebRTC] addTransceiver audio error:', e);
     }
 
-    // Attach active local tracks to senders if local media already exists
-    const activeStream = screenStreamRef.current || localStreamRef.current;
-    if (activeStream) {
-      const activeVideo = activeStream.getVideoTracks()[0] || null;
-      const activeAudio = activeStream.getAudioTracks()[0] || null;
-
-      if (videoTransceiver && activeVideo) {
-        videoTransceiver.sender.replaceTrack(activeVideo).catch(() => {});
-      } else if (activeVideo) {
-        try { pc.addTrack(activeVideo, activeStream); } catch {}
+    try {
+      if (initialVideoTrack) {
+        pc.addTransceiver(initialVideoTrack, { direction: 'sendrecv' });
+      } else {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
       }
-
-      if (audioTransceiver && activeAudio) {
-        audioTransceiver.sender.replaceTrack(activeAudio).catch(() => {});
-      } else if (activeAudio) {
-        try { pc.addTrack(activeAudio, activeStream); } catch {}
-      }
+    } catch (e) {
+      console.warn('[WebRTC] addTransceiver video error:', e);
     }
 
     peerConnectionsRef.current[targetSocketId] = pc;
     return pc;
-  }, [socket]);
+  }, [socket, getOrCreateBlankVideoTrack, getOrCreateSilentAudioTrack]);
 
   const createOffer = useCallback(async (targetSocketId: string) => {
     try {
@@ -1101,21 +1193,22 @@ const LiveSessionPage: React.FC = () => {
       }
       pendingCandidatesRef.current[fromSocketId] = [];
 
-      // Ensure any active local tracks are attached to answerer's senders
+      // Ensure any active local tracks (or placeholder tracks) are attached to answerer's senders
       const activeStream = screenStreamRef.current || localStreamRef.current;
-      if (activeStream) {
-        const activeVideo = activeStream.getVideoTracks()[0] || null;
-        const activeAudio = activeStream.getAudioTracks()[0] || null;
-        const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
-        const vTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video');
-        const aTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+      const activeVideo = activeStream?.getVideoTracks()[0] || null;
+      const activeAudio = activeStream?.getAudioTracks()[0] || null;
+      const videoToSend = activeVideo || getOrCreateBlankVideoTrack();
+      const audioToSend = activeAudio || getOrCreateSilentAudioTrack();
 
-        if (vTransceiver && activeVideo && vTransceiver.sender.track !== activeVideo) {
-          vTransceiver.sender.replaceTrack(activeVideo).catch(() => {});
-        }
-        if (aTransceiver && activeAudio && aTransceiver.sender.track !== activeAudio) {
-          aTransceiver.sender.replaceTrack(activeAudio).catch(() => {});
-        }
+      const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+      const vTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video');
+      const aTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+
+      if (vTransceiver && videoToSend && vTransceiver.sender.track !== videoToSend) {
+        vTransceiver.sender.replaceTrack(videoToSend).catch(() => {});
+      }
+      if (aTransceiver && audioToSend && aTransceiver.sender.track !== audioToSend) {
+        aTransceiver.sender.replaceTrack(audioToSend).catch(() => {});
       }
 
       const answer = await pc.createAnswer();
@@ -1124,7 +1217,7 @@ const LiveSessionPage: React.FC = () => {
     } catch (err) {
       console.error(`[WebRTC] handleOffer error from ${fromSocketId}:`, err);
     }
-  }, [getOrCreatePeerConnection, socket]);
+  }, [getOrCreatePeerConnection, getOrCreateBlankVideoTrack, getOrCreateSilentAudioTrack, socket]);
 
   const handleAnswer = useCallback(async (fromSocketId: string, answer: RTCSessionDescriptionInit) => {
     try {
@@ -1155,13 +1248,39 @@ const LiveSessionPage: React.FC = () => {
   // ── Socket listeners ──────────────────────────────────────────────────
   const setupSocketListeners = useCallback(() => {
 
+    // ── WebRTC Mesh Join Protocol ──
+    // 1. Newcomer receives list of already-connected participants:
+    socket.on('existing-participants', ({ existingParticipants }: { existingParticipants: Participant[] }) => {
+      console.log('[WebRTC] existing-participants received:', existingParticipants);
+      if (Array.isArray(existingParticipants)) {
+        existingParticipants.forEach(peer => {
+          if (peer.socketId && peer.socketId !== socket.id) {
+            console.log(`[WebRTC] Newcomer initiating offer to existing peer: ${peer.socketId} (${peer.name})`);
+            createOffer(peer.socketId);
+          }
+        });
+      }
+    });
+
+    socket.on('teacher-joined', ({ existingParticipants: ep }: { existingParticipants?: Participant[] }) => {
+      console.log('[WebRTC] teacher-joined received:', ep);
+      if (Array.isArray(ep)) {
+        ep.forEach(peer => {
+          if (peer.socketId && peer.socketId !== socket.id) {
+            console.log(`[WebRTC] Teacher initiating offer to existing peer: ${peer.socketId} (${peer.name})`);
+            createOffer(peer.socketId);
+          }
+        });
+      }
+    });
+
     // Waiting room — student side
     socket.on('waiting-for-approval', () => {
       setIsWaitingApproval(true);
       setLoading(false);
     });
 
-    socket.on('join-approved', ({ participants: p, scoreboard: sb, activeMcq: mcq }) => {
+    socket.on('join-approved', ({ participants: p, existingParticipants: ep, scoreboard: sb, activeMcq: mcq }: any) => {
       setIsWaitingApproval(false);
       setParticipants(p);
       if (sb) setScoreboard(sb);
@@ -1170,7 +1289,14 @@ const LiveSessionPage: React.FC = () => {
         setMcqSelectedOption(null);
         setMcqAnswerLocked(false);
       }
-      // Approved student does NOT create offers — existing participants will offer to us
+      if (Array.isArray(ep)) {
+        ep.forEach(peer => {
+          if (peer.socketId && peer.socketId !== socket.id) {
+            console.log(`[WebRTC] Approved student initiating offer to existing peer: ${peer.socketId} (${peer.name})`);
+            createOffer(peer.socketId);
+          }
+        });
+      }
     });
 
     socket.on('join-denied', ({ message }: { message: string }) => {
@@ -1194,12 +1320,13 @@ const LiveSessionPage: React.FC = () => {
       if (wr.length === 0) setShowWaitingRoomPanel(false);
     });
 
-    // Participants
+    // 2. Existing participants are notified of newcomer:
     socket.on('participant-joined', ({ participant, participants: p }: { participant: Participant; participants: Participant[] }) => {
       setParticipants(p);
-      // All EXISTING participants create offers to the new joiner
-      if (participant && participant.socketId !== socket.id) {
-        createOffer(participant.socketId);
+      if (participant && participant.socketId && participant.socketId !== socket.id) {
+        console.log(`[WebRTC] Existing participant notified of newcomer: ${participant.socketId} (${participant.name}). Preparing connection...`);
+        // Prepare RTCPeerConnection for newcomer B so it is ready to receive & answer B's incoming offer
+        getOrCreatePeerConnection(participant.socketId);
       }
     });
 
@@ -1301,13 +1428,16 @@ const LiveSessionPage: React.FC = () => {
     socket.on('mcq-error', ({ message }: { message: string }) => { toast.error(message); });
     socket.on('scoreboard-update', ({ scoreboard: sb }: { scoreboard: ScoreboardEntry[] }) => { setScoreboard(sb); });
 
-  }, [socket, createOffer, handleOffer, handleAnswer, handleIceCandidate, cleanup, navigate]);
+  }, [socket, createOffer, getOrCreatePeerConnection, handleOffer, handleAnswer, handleIceCandidate, cleanup, navigate]);
 
   // ── broadcastLocalTracks: push active tracks to all open peer connections without renegotiation ──
   const broadcastLocalTracks = useCallback(() => {
     const stream = screenStreamRef.current || localStreamRef.current;
-    const videoTrack = stream?.getVideoTracks()[0] || null;
-    const audioTrack = stream?.getAudioTracks()[0] || null;
+    const realVideo = stream?.getVideoTracks()[0] || null;
+    const realAudio = stream?.getAudioTracks()[0] || null;
+
+    const videoTrackToSend = realVideo || getOrCreateBlankVideoTrack();
+    const audioTrackToSend = realAudio || getOrCreateSilentAudioTrack();
 
     Object.entries(peerConnectionsRef.current).forEach(([targetSocketId, pc]) => {
       if (pc.signalingState === 'closed') return;
@@ -1323,37 +1453,19 @@ const LiveSessionPage: React.FC = () => {
       const videoSender = videoTransceiver?.sender || pc.getSenders().find(s => s.track?.kind === 'video');
       const audioSender = audioTransceiver?.sender || pc.getSenders().find(s => s.track?.kind === 'audio');
 
-      if (videoSender) {
-        videoSender.replaceTrack(videoTrack).catch(err => {
+      if (videoSender && videoTrackToSend) {
+        videoSender.replaceTrack(videoTrackToSend).catch(err => {
           console.warn(`[WebRTC] replaceTrack video error to ${targetSocketId}:`, err);
         });
-      } else if (videoTrack && stream) {
-        try {
-          pc.addTrack(videoTrack, stream);
-          if (pc.signalingState === 'stable') {
-            pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
-              socket.emit('webrtc-offer', { targetSocketId, offer: pc.localDescription });
-            }).catch(() => {});
-          }
-        } catch {}
       }
 
-      if (audioSender) {
-        audioSender.replaceTrack(audioTrack).catch(err => {
+      if (audioSender && audioTrackToSend) {
+        audioSender.replaceTrack(audioTrackToSend).catch(err => {
           console.warn(`[WebRTC] replaceTrack audio error to ${targetSocketId}:`, err);
         });
-      } else if (audioTrack && stream) {
-        try {
-          pc.addTrack(audioTrack, stream);
-          if (pc.signalingState === 'stable') {
-            pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
-              socket.emit('webrtc-offer', { targetSocketId, offer: pc.localDescription });
-            }).catch(() => {});
-          }
-        } catch {}
       }
     });
-  }, [socket]);
+  }, [getOrCreateBlankVideoTrack, getOrCreateSilentAudioTrack]);
 
   // ── toggleCamera: cleanly acquire/release video without double-offers ─────
   const toggleCamera = async (force?: boolean) => {
@@ -1413,6 +1525,7 @@ const LiveSessionPage: React.FC = () => {
     if (isMicOn && !force) {
       localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
       setIsMicOn(false);
+      broadcastLocalTracks();
       socket.emit('mic-state', { sessionCode: code, isOn: false });
       setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isMicOn: false } : p));
       toast('Microphone muted', { icon: '🔇' });
@@ -1423,6 +1536,7 @@ const LiveSessionPage: React.FC = () => {
     if (existingAudio) {
       existingAudio.enabled = true;
       setIsMicOn(true);
+      broadcastLocalTracks();
       socket.emit('mic-state', { sessionCode: code, isOn: true });
       setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isMicOn: true } : p));
       toast.success('Microphone unmuted');

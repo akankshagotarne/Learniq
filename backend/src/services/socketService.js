@@ -72,6 +72,8 @@ const setupSocket = (io) => {
       if (isTeacher) {
         socket.join(`session:${sessionCode}`);
 
+        const existingParticipants = Object.values(room.participants).filter(p => p.socketId !== socket.id);
+
         room.participants[socket.id] = {
           userId: socket.user._id,
           name: socket.user.name,
@@ -82,17 +84,26 @@ const setupSocket = (io) => {
           socketId: socket.id,
         };
         room.teacherSocketId = socket.id;
-        socket.emit('teacher-joined', { sessionCode });
+
+        socket.emit('teacher-joined', { sessionCode, existingParticipants });
+        socket.emit('existing-participants', {
+          existingParticipants,
+          participants: Object.values(room.participants),
+        });
 
         // Send current waiting room to teacher
         socket.emit('waiting-room-update', {
           waitingRoom: Object.values(room.waitingRoom),
         });
 
-        // Notify room of teacher joining
-        io.to(`session:${sessionCode}`).emit('participant-joined', {
-          participant: room.participants[socket.id],
-          participants: Object.values(room.participants),
+        // Broadcast newcomer to all ALREADY-connected participants in the room
+        Object.keys(room.participants).forEach(sid => {
+          if (sid !== socket.id) {
+            io.to(sid).emit('participant-joined', {
+              participant: room.participants[socket.id],
+              participants: Object.values(room.participants),
+            });
+          }
         });
 
         // MCQ / scoreboard reconnection state
@@ -161,6 +172,8 @@ const setupSocket = (io) => {
         console.error('[WaitingRoom] socketsJoin failed:', err);
       }
 
+      const existingParticipants = Object.values(room.participants).filter(p => p.socketId !== targetSocketId);
+
       // Add to participants
       room.participants[targetSocketId] = {
         userId: waiter.userId,
@@ -188,17 +201,28 @@ const setupSocket = (io) => {
         }
       }
 
-      // Notify the approved student — they receive current participants and state
+      // Notify the approved student — they receive current participants, state, and existing peers
       io.to(targetSocketId).emit('join-approved', {
         participants: Object.values(room.participants),
+        existingParticipants,
         scoreboard: sortedScoreboard,
         activeMcq: activeMcqForStudent,
       });
 
-      // Broadcast new participant to the whole room (triggers WebRTC offers from existing peers)
-      io.to(`session:${sessionCode}`).emit('participant-joined', {
-        participant: room.participants[targetSocketId],
+      // Send existing participants explicitly for WebRTC mesh offer initiation
+      io.to(targetSocketId).emit('existing-participants', {
+        existingParticipants,
         participants: Object.values(room.participants),
+      });
+
+      // Broadcast new participant to every ALREADY-connected participant in the room
+      Object.keys(room.participants).forEach(sid => {
+        if (sid !== targetSocketId) {
+          io.to(sid).emit('participant-joined', {
+            participant: room.participants[targetSocketId],
+            participants: Object.values(room.participants),
+          });
+        }
       });
 
       // Update teacher's waiting room view
