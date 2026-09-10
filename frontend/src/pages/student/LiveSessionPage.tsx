@@ -84,6 +84,12 @@ const StreamVideo: React.FC<{
   // sources -- landscape sources keep filling the tile edge-to-edge like
   // before, same as Meet/Zoom do.
   const [isPortraitSource, setIsPortraitSource] = useState(false);
+  // True once we've actually measured the decoded video frame's own
+  // width/height -- this is ground truth (it's exactly what gets
+  // painted), unlike any upstream signal (camera-reported settings,
+  // device screen orientation, etc.) which can be stale, unset, or
+  // wrong depending on OEM/browser/timing quirks.
+  const [hasMeasuredOrientation, setHasMeasuredOrientation] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -109,6 +115,7 @@ const StreamVideo: React.FC<{
       if (video.videoWidth && video.videoHeight) {
         gotValidReading = true;
         setIsPortraitSource(video.videoHeight > video.videoWidth);
+        setHasMeasuredOrientation(true);
       }
     };
 
@@ -143,11 +150,17 @@ const StreamVideo: React.FC<{
     };
   }, [stream]);
 
-  // Prefer the explicit, signaled orientation (reliable, sender-reported)
-  // over the auto-detected one (kept only as a fallback for the brief
-  // window before a fresh camera-state signal arrives, or for an older
-  // cached client).
-  const effectivePortrait = typeof isPortrait === 'boolean' ? isPortrait : isPortraitSource;
+  // Prefer what we've actually measured off the decoded video frame --
+  // it's ground truth and sidesteps every upstream signal issue (camera
+  // driver quirks across OEMs, a stale/missing camera-state signal, a
+  // backend that hasn't been redeployed with the field yet, etc.). The
+  // signaled `isPortrait` is only used as a best guess for the brief
+  // window before the first frame's metadata has loaded, so there's no
+  // flash of the wrong shape on first paint; once we have a real
+  // measurement it always wins.
+  const effectivePortrait = hasMeasuredOrientation
+    ? isPortraitSource
+    : (typeof isPortrait === 'boolean' ? isPortrait : isPortraitSource);
   const effectiveClassName = effectivePortrait
     ? className.replace('object-cover', 'object-contain')
     : className;
@@ -234,7 +247,9 @@ const ParticipantTile: React.FC<{
   // Remote participants report their own camera orientation over the
   // signaling channel (see camera-state / participant-camera); the local
   // tile uses the orientation we just read off our own camera.
-  const isPortraitEffective = isLocal ? !!localIsPortrait : !!(participant as any).isPortrait;
+  const isPortraitEffective = isLocal
+    ? localIsPortrait
+    : (typeof (participant as any).isPortrait === 'boolean' ? (participant as any).isPortrait : undefined);
   
   // Video is only shown if the participant has actively turned their camera on.
   // When camera is off, avatar is displayed even though a placeholder track keeps the WebRTC pipeline active.
