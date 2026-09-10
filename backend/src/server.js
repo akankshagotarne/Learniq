@@ -18,6 +18,7 @@ const apiRoutes = require('./routes/api');
 const teacherRoutes = require('./routes/teacher');
 const adminRoutes = require('./routes/admin');
 const miscRoutes = require('./routes/misc');
+const examRoutes = require('./routes/exams');
 
 const app = express();
 const server = http.createServer(app);
@@ -101,6 +102,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/exams', examRoutes);
 app.use('/api', miscRoutes);
 
 // 404

@@ -23,11 +23,16 @@ const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelecti
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
 const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
+const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
+const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
 const TeacherLiveSessions = lazy(() => import('./pages/teacher/TeacherLiveSessions'));
 const TeacherStudents = lazy(() => import('./pages/teacher/TeacherStudents'));
+const TeacherExamsPage = lazy(() => import('./pages/teacher/TeacherExamsPage'));
+const ExamBuilderPage = lazy(() => import('./pages/teacher/ExamBuilderPage'));
+const ExamResultsPage = lazy(() => import('./pages/teacher/ExamResultsPage'));
 
 // Admin pages
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -127,6 +132,17 @@ const AppRoutes: React.FC = () => (
           <StudentProgress />
         </ProtectedRoute>
       } />
+      <Route path="/student/exams" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentExamsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/exams/:id" element={
+        <ProtectedRoute roles={['student']}>
+          <ExamTakerPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
 
       {/* Teacher routes */}
       <Route path="/teacher" element={
@@ -144,6 +160,27 @@ const AppRoutes: React.FC = () => (
           <TeacherStudents />
         </ProtectedRoute>
       } />
+      <Route path="/teacher/exams" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <TeacherExamsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/exams/new" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <ExamBuilderPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/exams/:id/edit" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <ExamBuilderPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/exams/:id/results" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <ExamResultsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/quizzes" element={<Navigate to="/teacher/exams" replace />} />
 
       {/* Admin routes */}
       <Route path="/admin" element={

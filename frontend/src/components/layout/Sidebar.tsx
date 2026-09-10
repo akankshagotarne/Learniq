@@ -21,7 +21,7 @@ const studentNav: NavItem[] = [
   { label: 'My Standard', href: '/student/standard', icon: Layers },
   { label: 'Courses', href: '/courses', icon: BookOpen },
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
-  { label: 'Quizzes', href: '/student/quizzes', icon: HelpCircle },
+  { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
 ];
 
@@ -30,7 +30,7 @@ const teacherNav: NavItem[] = [
   { label: 'My Courses', href: '/teacher/courses', icon: BookOpen },
   { label: 'Live Sessions', href: '/teacher/live', icon: Radio },
   { label: 'Students', href: '/teacher/students', icon: Users },
-  { label: 'Quizzes', href: '/teacher/quizzes', icon: HelpCircle },
+  { label: 'Exams', href: '/teacher/exams', icon: ClipboardList },
 ];
 
 const adminNav: NavItem[] = [

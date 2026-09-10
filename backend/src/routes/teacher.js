@@ -5,6 +5,7 @@ const { uploadVideo, uploadPDF, uploadAssignment } = require('../middleware/uplo
 const courseCtrl = require('../controllers/courseController');
 const lectureCtrl = require('../controllers/lectureController');
 const quizCtrl = require('../controllers/quizController');
+const examCtrl = require('../controllers/examController');
 const assignmentCtrl = require('../controllers/assignmentController');
 const liveCtrl = require('../controllers/liveSessionController');
 const userCtrl = require('../controllers/userController');
@@ -27,6 +28,11 @@ router.post('/notes', ...teacherAuth, uploadPDF.single('pdf'), lectureCtrl.creat
 router.get('/quizzes', ...teacherAuth, quizCtrl.getTeacherQuizzes);
 router.post('/quizzes', ...teacherAuth, quizCtrl.createQuiz);
 router.get('/quizzes/:id/results', ...teacherAuth, quizCtrl.getQuizResults);
+
+// Exams
+router.get('/exams', ...teacherAuth, examCtrl.getTeacherExams);
+router.get('/exams/:id', ...teacherAuth, examCtrl.getTeacherExam);
+router.get('/exams/:id/attempts', ...teacherAuth, examCtrl.getExamAttempts);
 
 // Assignments
 router.get('/assignments', ...teacherAuth, assignmentCtrl.getTeacherAssignments);

@@ -292,7 +292,7 @@ const StudentDashboard: React.FC = () => {
                 </h3>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { label: 'Take Quiz', icon: HelpCircle, href: '/student/quizzes', color: 'text-[#6C63F2] bg-[#EDE9FE]' },
+                    { label: 'Take Exam', icon: ClipboardList, href: '/student/exams', color: 'text-[#6C63F2] bg-[#EDE9FE]' },
                     { label: 'Live Classes', icon: Radio, href: '/live-sessions', color: 'text-[#E1447A] bg-[#FFE4EC]' },
                     { label: 'Analytics', icon: TrendingUp, href: '/student/progress', color: 'text-[#16A34A] bg-[#DCFCE7]' },
                     { label: 'Standards', icon: Sparkles, href: '/student/standard', color: 'text-[#D97706] bg-[#FEF3C7]' },

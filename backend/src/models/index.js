@@ -98,4 +98,6 @@ const Progress = mongoose.model('Progress', progressSchema);
 const Badge = mongoose.model('Badge', badgeSchema);
 const Company = mongoose.model('Company', companySchema);
 
-module.exports = { Enrollment, Payment, Notification, Progress, Badge, Company };
+const { Exam, ExamAttempt } = require('./Exam');
+
+module.exports = { Enrollment, Payment, Notification, Progress, Badge, Company, Exam, ExamAttempt };

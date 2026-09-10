@@ -268,3 +268,100 @@ export interface PodiumEntry {
   rank: number;
   place: number;
 }
+
+// ---- Exam Feature ----
+
+export interface ExamQuestion {
+  _id?: string;
+  type: 'mcq' | 'truefalse' | 'fillblank';
+  question: string;
+  options: string[];
+  correctAnswer?: number;
+  marks: number;
+  explanation?: string;
+  order?: number;
+}
+
+export interface Exam {
+  _id: string;
+  title: string;
+  description?: string;
+  instructions?: string;
+  teacher: User | { _id: string; name: string; avatar?: string };
+  standard: number;
+  subject: string;
+  chapter?: string;
+  questions: ExamQuestion[];
+  totalMarks: number;
+  durationMinutes: number;
+  negativeMarking: boolean;
+  negativeMarkValue: number;
+  passingMarks: number;
+  attemptLimit: number;
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+  isPublished: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  // Computed fields from listing
+  questionCount?: number;
+  attemptCount?: number;
+  myBestAttempt?: ExamAttempt | null;
+  myAttemptCount?: number;
+  attemptsLeft?: number | null;
+  canAttempt?: boolean;
+  availability?: 'available' | 'upcoming' | 'expired';
+}
+
+export interface ExamAnswer {
+  questionId: string;
+  selectedOption: number | null;
+  answeredAt?: string;
+}
+
+export interface IntegrityEvent {
+  type: 'tab-switch' | 'fullscreen-exit' | 'copy-paste';
+  timestamp: string;
+}
+
+export interface ExamAttempt {
+  _id: string;
+  exam: Exam | string;
+  student: User | string;
+  status: 'in-progress' | 'submitted' | 'auto-submitted';
+  answers: ExamAnswer[];
+  draftAnswers?: Record<string, number | null>;
+  startedAt: string;
+  submittedAt?: string;
+  timeTaken: number;
+  score: number;
+  totalMarks: number;
+  percentage: number;
+  integrityEvents?: IntegrityEvent[];
+  attemptNumber: number;
+  rank?: number;
+}
+
+export interface ExamResult {
+  score: number;
+  totalMarks: number;
+  percentage: number;
+  timeTaken: number;
+  rank: number;
+  totalAttemptees: number;
+  percentile: number;
+  passed: boolean;
+}
+
+export interface ExamQuestionReview {
+  questionId: string;
+  question: string;
+  type: string;
+  options: string[];
+  correctAnswer: number;
+  selectedOption: number | null;
+  isCorrect: boolean;
+  marks: number;
+  explanation?: string;
+}
