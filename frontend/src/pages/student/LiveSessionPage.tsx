@@ -257,10 +257,24 @@ const ParticipantTile: React.FC<{
   const avatarColor = getAvatarColor(participant.name || 'U');
 
   const sizeClasses = size === 'small'
-    ? 'h-full aspect-[4/3] flex-shrink-0'
+    ? 'h-full aspect-video flex-shrink-0'
     : size === 'spotlight'
-    ? 'h-full aspect-[4/3] max-w-full'
-    : 'w-full aspect-[4/3] self-start';
+    ? '' // sized via sizeStyle below -- a proper two-axis aspect-ratio fit, not a Tailwind class
+    : 'w-full aspect-video self-start';
+
+  // The spotlight tile's wrapper (in VideoGrid) is a CSS containment
+  // context (`containerType: 'size'`), so `cqw`/`cqh` below refer to that
+  // wrapper's own box -- not the viewport. min(100cqw, 100cqh * 16/9) is
+  // the standard "largest box of a fixed aspect ratio that fits inside a
+  // container, whichever dimension is the tighter one" formula: it can't
+  // be over-constrained the way a plain max-width + fixed height can.
+  const sizeStyle: any = size === 'spotlight'
+    ? {
+        aspectRatio: '16 / 9',
+        width: 'min(100cqw, calc(100cqh * 16 / 9))',
+        height: 'min(100cqh, calc(100cqw * 9 / 16))',
+      }
+    : undefined;
 
   return (
     <div
@@ -268,6 +282,7 @@ const ParticipantTile: React.FC<{
         ${sizeClasses}
         ${isPinned ? 'ring-2 ring-brand-primary ring-offset-2 ring-offset-[#0D0E1A]' : ''}
       `}
+      style={sizeStyle}
       onClick={isPinned && onUnpin ? onUnpin : onPin}
     >
       {/* Video or Avatar */}
@@ -387,7 +402,7 @@ const VideoGrid: React.FC<{
     return (
       <div className="flex flex-col h-full gap-2">
         {/* Large spotlight */}
-        <div className="flex-1 min-h-0 flex items-center justify-center">
+        <div className="flex-1 min-h-0 flex items-center justify-center" style={{ containerType: 'size' } as any}>
           <ParticipantTile
             participant={pinnedP}
             stream={getStream(pinnedP)}
