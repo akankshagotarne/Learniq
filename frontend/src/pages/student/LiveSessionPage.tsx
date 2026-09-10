@@ -3,31 +3,53 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Users, X, Send, PhoneOff,
   Trophy, Clock, CheckCircle, Crown, Monitor, MonitorOff, Square, Sparkles, Copy,
-  BarChart2, HelpCircle, AlertCircle
+  BarChart2, HelpCircle, Bell, UserCheck, UserX, Maximize2, Minimize2, Loader,
+  Pin, PinOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getSocket } from '../../services/socket';
 import api from '../../services/api';
 import {
   LiveSession, ChatMessage, Participant, LeaderboardEntry, Quiz, Question,
-  LiveMcq, McqResultEntry, ScoreboardEntry, PodiumEntry
+  LiveMcq, McqResultEntry, ScoreboardEntry, PodiumEntry,
 } from '../../types';
 import toast from 'react-hot-toast';
 
+// ======================= TYPES =======================
+
 type LiveView = 'session' | 'quiz' | 'leaderboard';
+
+interface WaitingEntry {
+  socketId: string;
+  name: string;
+  userId: string;
+}
+
+// ======================= CONSTANTS =======================
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:stun.services.mozilla.com' },
 ];
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
-// Reusable Video Player Element for Local & Remote Streams
+const AVATAR_COLORS = [
+  'bg-[#6C63F2]/30 text-[#6C63F2] border-[#6C63F2]/40',
+  'bg-[#16A34A]/30 text-[#16A34A] border-[#16A34A]/40',
+  'bg-[#E1447A]/30 text-[#E1447A] border-[#E1447A]/40',
+  'bg-[#F59E0B]/30 text-[#F59E0B] border-[#F59E0B]/40',
+  'bg-[#0EA5E9]/30 text-[#0EA5E9] border-[#0EA5E9]/40',
+  'bg-[#8B5CF6]/30 text-[#8B5CF6] border-[#8B5CF6]/40',
+];
+
+const getAvatarColor = (name: string) =>
+  AVATAR_COLORS[(name.charCodeAt(0) || 0) % AVATAR_COLORS.length];
+
+// ======================= StreamVideo =======================
+
 const StreamVideo: React.FC<{
   stream: MediaStream | null;
   muted?: boolean;
@@ -40,27 +62,306 @@ const StreamVideo: React.FC<{
     if (video) {
       if (stream) {
         video.srcObject = stream;
-        video.play().catch(err => {
-          console.warn('[WebRTC] Auto-play prevented or stream paused:', err.message);
-        });
+        video.play().catch(() => {});
       } else {
         video.srcObject = null;
       }
     }
   }, [stream]);
 
+  return <video ref={videoRef} autoPlay playsInline muted={muted} className={className} />;
+};
+
+// ======================= ParticipantTile =======================
+
+const ParticipantTile: React.FC<{
+  participant: Participant;
+  stream: MediaStream | null;
+  isLocal: boolean;
+  isPinned: boolean;
+  size: 'large' | 'small';
+  onPin: () => void;
+  onUnpin?: () => void;
+  isViewerTeacher: boolean;
+  onRequestMedia?: (type: 'camera' | 'mic') => void;
+  /** Override isCameraOn for local tile */
+  localCamOn?: boolean;
+  localMicOn?: boolean;
+}> = ({
+  participant, stream, isLocal, isPinned, size, onPin, onUnpin,
+  isViewerTeacher, onRequestMedia, localCamOn, localMicOn,
+}) => {
+  const isCamEffective = isLocal ? (localCamOn ?? false) : participant.isCameraOn;
+  const isMicEffective = isLocal ? (localMicOn ?? false) : participant.isMicOn;
+  const showVideo = !!stream && isCamEffective;
+  const avatarColor = getAvatarColor(participant.name || 'U');
+
+  const sizeClasses = size === 'small'
+    ? 'h-full aspect-video flex-shrink-0 min-w-[160px] w-[160px]'
+    : 'w-full h-full';
+
   return (
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      muted={muted}
-      className={className}
-    />
+    <div
+      className={`relative bg-[#0D0E1A] rounded-xl overflow-hidden group cursor-pointer
+        ${sizeClasses}
+        ${isPinned ? 'ring-2 ring-brand-primary ring-offset-2 ring-offset-[#0D0E1A]' : ''}
+      `}
+      onClick={isPinned && onUnpin ? onUnpin : onPin}
+    >
+      {/* Video or Avatar */}
+      {showVideo ? (
+        <StreamVideo stream={stream} muted={isLocal} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+          <div className={`rounded-full flex items-center justify-center font-bold border-2 ${avatarColor}
+            ${size === 'small' ? 'w-10 h-10 text-base' : 'w-16 h-16 text-2xl'}
+          `}>
+            {(participant.name?.[0] || '?').toUpperCase()}
+          </div>
+          {size === 'large' && (
+            <p className="text-white/60 text-xs font-medium">Camera off</p>
+          )}
+        </div>
+      )}
+
+      {/* Gradient overlay at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent px-2 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className={`font-semibold text-white truncate ${size === 'small' ? 'text-[10px]' : 'text-xs'}`}>
+            {participant.name}
+            {isLocal && <span className="text-white/60 ml-1">(You)</span>}
+          </span>
+          {participant.isTeacher && (
+            <Crown className={`text-accent-amber flex-shrink-0 ${size === 'small' ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
+          )}
+          {!isMicEffective && (
+            <MicOff className={`text-red-400 flex-shrink-0 ml-auto ${size === 'small' ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
+          )}
+        </div>
+      </div>
+
+      {/* Pinned badge */}
+      {isPinned && size === 'large' && (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-brand-primary/80 text-white text-[9px] px-1.5 py-0.5 rounded-md font-semibold">
+          <Pin className="w-2.5 h-2.5" />
+          PINNED
+        </div>
+      )}
+
+      {/* Hover controls — large tiles only */}
+      {size === 'large' && !isLocal && (
+        <>
+          {/* Pin / unpin */}
+          <button
+            onClick={(e) => { e.stopPropagation(); isPinned ? onUnpin?.() : onPin(); }}
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all bg-black/70 text-white p-1.5 rounded-lg hover:bg-black/90"
+            title={isPinned ? 'Unpin' : 'Pin to spotlight'}
+          >
+            {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+
+          {/* Teacher: request camera/mic buttons */}
+          {isViewerTeacher && onRequestMedia && (
+            <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+              {!participant.isCameraOn && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRequestMedia('camera'); }}
+                  className="bg-black/70 text-white p-1.5 rounded-lg hover:bg-brand-primary/80 transition-all"
+                  title="Request student to turn on camera"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {!participant.isMicOn && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRequestMedia('mic'); }}
+                  className="bg-black/70 text-white p-1.5 rounded-lg hover:bg-brand-primary/80 transition-all"
+                  title="Request student to unmute"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 };
 
-// ==================== MCQ FORM MODAL (Teacher) ====================
+// ======================= VideoGrid =======================
+
+const VideoGrid: React.FC<{
+  participants: Participant[];
+  remoteStreams: Record<string, MediaStream>;
+  localStream: MediaStream | null;
+  mySocketId: string;
+  pinnedSocketId: string | null;
+  onPin: (socketId: string | null) => void;
+  isViewerTeacher: boolean;
+  onRequestMedia: (targetSocketId: string, type: 'camera' | 'mic') => void;
+  isCamOn: boolean;
+  isMicOn: boolean;
+}> = ({
+  participants, remoteStreams, localStream, mySocketId,
+  pinnedSocketId, onPin, isViewerTeacher, onRequestMedia, isCamOn, isMicOn,
+}) => {
+  const pinnedP = participants.find(p => p.socketId === pinnedSocketId);
+  const others = participants.filter(p => p.socketId !== pinnedSocketId);
+  const count = participants.length;
+
+  const getStream = (p: Participant) =>
+    p.socketId === mySocketId ? localStream : (remoteStreams[p.socketId] || null);
+
+  // ── Spotlight layout (a tile is pinned) ────────────────────────────────
+  if (pinnedSocketId && pinnedP) {
+    return (
+      <div className="flex flex-col h-full gap-2">
+        {/* Large spotlight */}
+        <div className="flex-1 min-h-0">
+          <ParticipantTile
+            participant={pinnedP}
+            stream={getStream(pinnedP)}
+            isLocal={pinnedP.socketId === mySocketId}
+            isPinned
+            size="large"
+            onPin={() => onPin(pinnedP.socketId)}
+            onUnpin={() => onPin(null)}
+            isViewerTeacher={isViewerTeacher}
+            onRequestMedia={(type) => onRequestMedia(pinnedP.socketId, type)}
+            localCamOn={isCamOn}
+            localMicOn={isMicOn}
+          />
+        </div>
+        {/* Filmstrip */}
+        {others.length > 0 && (
+          <div className="h-28 flex-shrink-0 flex gap-2 overflow-x-auto pb-1">
+            {others.map(p => (
+              <ParticipantTile
+                key={p.socketId}
+                participant={p}
+                stream={getStream(p)}
+                isLocal={p.socketId === mySocketId}
+                isPinned={false}
+                size="small"
+                onPin={() => onPin(p.socketId)}
+                isViewerTeacher={isViewerTeacher}
+                onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
+                localCamOn={isCamOn}
+                localMicOn={isMicOn}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── No pin: auto grid layout ────────────────────────────────────────────
+  const cols = count === 1 ? 1 : count <= 4 ? 2 : 3;
+  const gridStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+    gap: '8px',
+    width: '100%',
+    height: '100%',
+  };
+
+  return (
+    <div style={gridStyle}>
+      {participants.map(p => (
+        <ParticipantTile
+          key={p.socketId}
+          participant={p}
+          stream={getStream(p)}
+          isLocal={p.socketId === mySocketId}
+          isPinned={false}
+          size="large"
+          onPin={() => onPin(p.socketId)}
+          isViewerTeacher={isViewerTeacher}
+          onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
+          localCamOn={isCamOn}
+          localMicOn={isMicOn}
+        />
+      ))}
+    </div>
+  );
+};
+
+// ======================= WaitingScreen (student) =======================
+
+const WaitingScreen: React.FC<{
+  sessionTitle?: string;
+  onLeave: () => void;
+}> = ({ sessionTitle, onLeave }) => (
+  <div className="min-h-screen bg-page flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="absolute top-20 left-10 w-64 h-64 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="absolute bottom-20 right-10 w-64 h-64 bg-[#FF8FA3]/10 rounded-full blur-3xl pointer-events-none" />
+
+    <div className="relative z-10 card-soft p-10 rounded-2xl border border-border-subtle shadow-soft text-center max-w-md w-full">
+      {/* Pulsing ring animation */}
+      <div className="relative w-20 h-20 mx-auto mb-6">
+        <div className="absolute inset-0 rounded-full border-4 border-brand-primary/20 animate-ping" />
+        <div className="absolute inset-2 rounded-full border-4 border-brand-primary/40 animate-ping" style={{ animationDelay: '0.3s' }} />
+        <div className="w-20 h-20 rounded-full bg-brand-primary/10 border-2 border-brand-primary flex items-center justify-center">
+          <Loader className="w-8 h-8 text-brand-primary animate-spin" />
+        </div>
+      </div>
+
+      <h2 className="font-heading font-black text-text-primary text-xl mb-2">
+        Waiting for Approval
+      </h2>
+      <p className="text-text-secondary text-sm mb-1">
+        The teacher will let you in shortly.
+      </p>
+      {sessionTitle && (
+        <p className="text-text-muted text-xs mb-6 mt-2 px-3 py-1.5 bg-surface-alt rounded-xl inline-block">
+          🎓 {sessionTitle}
+        </p>
+      )}
+      {!sessionTitle && <div className="mb-6" />}
+
+      <div className="flex justify-center gap-1 mb-8">
+        {[0, 1, 2].map(i => (
+          <div
+            key={i}
+            className="w-2 h-2 rounded-full bg-brand-primary animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+
+      <button
+        onClick={onLeave}
+        className="px-5 py-2.5 bg-surface-alt border border-border-subtle text-text-secondary text-sm rounded-xl hover:text-text-primary hover:border-[#FF8FA3]/50 transition-all"
+      >
+        Leave Session
+      </button>
+    </div>
+  </div>
+);
+
+// ======================= DeniedScreen =======================
+
+const DeniedScreen: React.FC<{ onLeave: () => void }> = ({ onLeave }) => (
+  <div className="min-h-screen bg-page flex items-center justify-center p-4">
+    <div className="card-soft p-10 rounded-2xl border border-[#FF8FA3]/30 shadow-soft text-center max-w-sm w-full">
+      <div className="w-16 h-16 rounded-full bg-[#FFE4EC] flex items-center justify-center mx-auto mb-5">
+        <UserX className="w-8 h-8 text-[#E1447A]" />
+      </div>
+      <h2 className="font-heading font-black text-text-primary text-xl mb-2">Request Declined</h2>
+      <p className="text-text-secondary text-sm mb-6">
+        The teacher has declined your request to join this session.
+      </p>
+      <button onClick={onLeave} className="btn-primary w-full py-2.5 text-sm">
+        Back to Live Sessions
+      </button>
+    </div>
+  </div>
+);
+
+// ======================= MCQ FORM MODAL (Teacher) =======================
+
 const McqFormModal: React.FC<{
   onClose: () => void;
   onLaunch: (question: string, options: string[], correctIndex: number) => void;
@@ -70,28 +371,13 @@ const McqFormModal: React.FC<{
   const [correctIndex, setCorrectIndex] = useState<number | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    questionRef.current?.focus();
-  }, []);
+  useEffect(() => { questionRef.current?.focus(); }, []);
 
-  const canLaunch = question.trim().length > 0
-    && options.every(o => o.trim().length > 0)
-    && correctIndex !== null;
-
-  const handleOptionChange = (i: number, val: string) => {
-    setOptions(prev => prev.map((o, idx) => idx === i ? val : o));
-  };
-
-  const handleLaunch = () => {
-    if (!canLaunch) return;
-    onLaunch(question.trim(), options.map(o => o.trim()), correctIndex!);
-    onClose();
-  };
+  const canLaunch = question.trim().length > 0 && options.every(o => o.trim().length > 0) && correctIndex !== null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
       <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-lg animate-slide-up">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 bg-brand-primary/10 rounded-lg">
@@ -99,14 +385,9 @@ const McqFormModal: React.FC<{
             </div>
             <h2 className="font-heading font-bold text-text-primary text-sm">Raise MCQ Question</h2>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-all p-1">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
         </div>
-
-        {/* Body */}
         <div className="p-5 space-y-4">
-          {/* Question */}
           <div>
             <label className="text-text-secondary text-xs font-semibold mb-1.5 block">Question</label>
             <textarea
@@ -118,8 +399,6 @@ const McqFormModal: React.FC<{
               className="w-full bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 resize-none"
             />
           </div>
-
-          {/* Options */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-text-secondary text-xs font-semibold">Options</label>
@@ -128,29 +407,20 @@ const McqFormModal: React.FC<{
             <div className="space-y-2">
               {options.map((opt, i) => (
                 <div key={i} className="flex items-center gap-2.5">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${
-                    correctIndex === i
-                      ? 'bg-brand-primary text-white'
-                      : 'bg-surface-alt border border-border-subtle text-text-muted'
-                  }`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${correctIndex === i ? 'bg-brand-primary text-white' : 'bg-surface-alt border border-border-subtle text-text-muted'}`}>
                     {OPTION_LABELS[i]}
                   </div>
                   <input
                     type="text"
                     value={opt}
-                    onChange={e => handleOptionChange(i, e.target.value)}
+                    onChange={e => setOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
                     placeholder={`Option ${OPTION_LABELS[i]}`}
                     className="flex-1 bg-surface-alt border border-border-subtle rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
                   />
                   <button
                     type="button"
                     onClick={() => setCorrectIndex(i)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all flex-shrink-0 border ${
-                      correctIndex === i
-                        ? 'bg-accent-mint/20 text-accent-mint border-accent-mint/40'
-                        : 'bg-surface-alt border-border-subtle text-text-muted hover:border-accent-mint/30 hover:text-accent-mint'
-                    }`}
-                    title={`Mark Option ${OPTION_LABELS[i]} as correct`}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all flex-shrink-0 border ${correctIndex === i ? 'bg-accent-mint/20 text-accent-mint border-accent-mint/40' : 'bg-surface-alt border-border-subtle text-text-muted hover:border-accent-mint/30 hover:text-accent-mint'}`}
                   >
                     {correctIndex === i ? '✓ Correct' : 'Correct?'}
                   </button>
@@ -158,7 +428,6 @@ const McqFormModal: React.FC<{
               ))}
             </div>
           </div>
-
           {correctIndex !== null && (
             <div className="flex items-center gap-1.5 text-accent-mint text-xs bg-accent-mint/10 rounded-xl px-3 py-2">
               <CheckCircle className="w-3.5 h-3.5" />
@@ -166,22 +435,14 @@ const McqFormModal: React.FC<{
             </div>
           )}
         </div>
-
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-border-subtle">
+          <button onClick={onClose} className="px-4 py-2 text-text-secondary text-sm rounded-xl border border-border-subtle hover:bg-surface-alt transition-all">Cancel</button>
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-text-secondary text-sm rounded-xl border border-border-subtle hover:bg-surface-alt transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleLaunch}
+            onClick={() => { if (canLaunch) { onLaunch(question.trim(), options.map(o => o.trim()), correctIndex!); onClose(); } }}
             disabled={!canLaunch}
             className="px-5 py-2 bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl text-sm font-semibold shadow-xs hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
           >
-            <Sparkles className="w-4 h-4" />
-            Launch — 15s
+            <Sparkles className="w-4 h-4" /> Launch — 15s
           </button>
         </div>
       </div>
@@ -189,7 +450,8 @@ const McqFormModal: React.FC<{
   );
 };
 
-// ==================== MCQ OVERLAY (Everyone) ====================
+// ======================= MCQ OVERLAY =======================
+
 const McqOverlay: React.FC<{
   mcq: LiveMcq;
   isTeacher: boolean;
@@ -201,100 +463,61 @@ const McqOverlay: React.FC<{
   onSubmit: () => void;
 }> = ({ mcq, isTeacher, teacherCorrectIndex, timeLeft, selectedOption, isLocked, onSelect, onSubmit }) => {
   const isUrgent = timeLeft <= 5;
-
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
       <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-xl animate-slide-up">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-subtle">
           <div className="flex items-center gap-2">
             <div className="live-dot" />
             <span className="text-text-secondary text-xs font-semibold uppercase tracking-wide">Live MCQ</span>
           </div>
-          {/* Server-authoritative countdown */}
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono font-bold text-sm transition-all ${
-            isUrgent
-              ? 'bg-[#FFE4EC] text-[#E1447A] animate-pulse'
-              : 'bg-brand-primary/10 text-brand-primary'
-          }`}>
-            <Clock className="w-4 h-4" />
-            {timeLeft}s
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono font-bold text-sm transition-all ${isUrgent ? 'bg-[#FFE4EC] text-[#E1447A] animate-pulse' : 'bg-brand-primary/10 text-brand-primary'}`}>
+            <Clock className="w-4 h-4" />{timeLeft}s
           </div>
         </div>
-
-        {/* Question */}
         <div className="px-5 py-4">
           <p className="text-text-primary font-semibold text-base leading-relaxed">{mcq.question}</p>
-          {isTeacher && (
-            <p className="text-text-muted text-xs mt-1.5 flex items-center gap-1">
-              <Crown className="w-3 h-3 text-accent-amber" />
-              Teacher view — correct answer highlighted
-            </p>
-          )}
+          {isTeacher && <p className="text-text-muted text-xs mt-1.5 flex items-center gap-1"><Crown className="w-3 h-3 text-accent-amber" />Teacher view — correct answer highlighted</p>}
         </div>
-
-        {/* Options */}
         <div className="px-5 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {mcq.options.map((opt, i) => {
             const isSelected = selectedOption === i;
             const isCorrectOption = isTeacher && teacherCorrectIndex === i;
-
-            let optClass = 'bg-surface-alt border-border-subtle text-text-secondary hover:bg-surface hover:text-text-primary';
-            if (isLocked && isSelected) optClass = 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold';
-            if (!isLocked && isSelected) optClass = 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold shadow-xs';
-            if (isCorrectOption) optClass = 'bg-accent-mint/15 border-accent-mint text-accent-mint font-semibold';
-
+            let cls = 'bg-surface-alt border-border-subtle text-text-secondary hover:bg-surface hover:text-text-primary';
+            if (isLocked && isSelected) cls = 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold';
+            else if (!isLocked && isSelected) cls = 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold shadow-xs';
+            if (isCorrectOption) cls = 'bg-accent-mint/15 border-accent-mint text-accent-mint font-semibold';
             return (
-              <button
-                key={i}
-                onClick={() => !isLocked && !isTeacher && onSelect(i)}
-                disabled={isLocked || isTeacher}
-                className={`p-3.5 rounded-xl border text-left text-sm transition-all ${optClass} ${
-                  isLocked || isTeacher ? 'cursor-default' : 'cursor-pointer'
-                }`}
-              >
-                <span className="font-bold text-brand-primary mr-2">{OPTION_LABELS[i]}.</span>
-                {opt}
+              <button key={i} onClick={() => !isLocked && !isTeacher && onSelect(i)} disabled={isLocked || isTeacher}
+                className={`p-3.5 rounded-xl border text-left text-sm transition-all ${cls} ${isLocked || isTeacher ? 'cursor-default' : 'cursor-pointer'}`}>
+                <span className="font-bold text-brand-primary mr-2">{OPTION_LABELS[i]}.</span>{opt}
                 {isCorrectOption && <span className="ml-1 text-accent-mint text-xs">✓</span>}
               </button>
             );
           })}
         </div>
-
-        {/* Submit (students only, not locked) */}
         {!isTeacher && (
           <div className="px-5 pb-5">
             {isLocked ? (
               <div className="flex items-center gap-2 justify-center py-3 bg-surface-alt border border-border-subtle rounded-xl text-text-secondary text-sm">
                 <CheckCircle className="w-4 h-4 text-brand-primary" />
-                {selectedOption !== null ? 'Answer locked in!' : 'Time\'s up — no answer recorded'}
+                {selectedOption !== null ? 'Answer locked in!' : "Time's up — no answer recorded"}
               </div>
             ) : (
-              <button
-                onClick={onSubmit}
-                disabled={selectedOption === null}
-                className="btn-primary w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Lock in Answer
+              <button onClick={onSubmit} disabled={selectedOption === null} className="btn-primary w-full py-3 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                <CheckCircle className="w-4 h-4" /> Lock in Answer
               </button>
             )}
           </div>
         )}
-
-        {isTeacher && (
-          <div className="px-5 pb-5">
-            <div className="text-center text-text-muted text-xs py-2">
-              Waiting for students to answer... Question auto-closes in {timeLeft}s
-            </div>
-          </div>
-        )}
+        {isTeacher && <div className="px-5 pb-5 text-center text-text-muted text-xs">Auto-closes in {timeLeft}s</div>}
       </div>
     </div>
   );
 };
 
-// ==================== MCQ RESULTS POPUP ====================
+// ======================= MCQ RESULTS POPUP =======================
+
 const McqResultsPopup: React.FC<{
   results: McqResultEntry[];
   correctIndex: number;
@@ -304,110 +527,53 @@ const McqResultsPopup: React.FC<{
 }> = ({ results, correctIndex, options, currentUserId, onClose }) => {
   const correct = results.filter(r => r.isCorrect);
   const incorrect = results.filter(r => !r.isCorrect);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
       <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col animate-slide-up">
-        {/* Header */}
         <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="font-heading font-black text-text-primary text-base">📊 MCQ Results</h2>
-            <p className="text-text-muted text-xs mt-0.5">
-              Correct answer: <strong className="text-accent-mint">{OPTION_LABELS[correctIndex]}. {options[correctIndex]}</strong>
-            </p>
+            <p className="text-text-muted text-xs mt-0.5">Correct: <strong className="text-accent-mint">{OPTION_LABELS[correctIndex]}. {options[correctIndex] || '...'}</strong></p>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-all p-1">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
         </div>
-
-        {/* Results list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {correct.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
-                ✅ Correct — ranked by speed
-              </p>
-              {correct.map((r, i) => (
-                <div
-                  key={r.studentId}
-                  className={`flex items-center gap-3 p-3 rounded-xl border ${
-                    r.studentId === currentUserId
-                      ? 'bg-brand-primary/10 border-brand-primary/30'
-                      : 'bg-surface-alt border-border-subtle'
-                  }`}
-                >
-                  <span className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm font-black flex-shrink-0 ${
-                    i === 0 ? 'bg-[#FEF3C7] text-yellow-600' :
-                    i === 1 ? 'bg-surface border border-border-subtle text-text-muted' :
-                    i === 2 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-surface-alt text-text-muted text-xs'
-                  }`}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>
-                      {r.studentName} {r.studentId === currentUserId && '(You)'}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xs font-mono text-accent-mint font-semibold">
-                      {r.responseTimeSec !== null ? `${r.responseTimeSec}s` : '—'}
-                    </p>
-                  </div>
+          {correct.length > 0 && (<>
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">✅ Correct — ranked by speed</p>
+            {correct.map((r, i) => (
+              <div key={r.studentId} className={`flex items-center gap-3 p-3 rounded-xl border ${r.studentId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-surface-alt border-border-subtle'}`}>
+                <span className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm font-black flex-shrink-0 ${i === 0 ? 'bg-[#FEF3C7] text-yellow-600' : i === 1 ? 'bg-surface border border-border-subtle text-text-muted' : i === 2 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-surface-alt text-text-muted text-xs'}`}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                </span>
+                <p className={`text-sm font-semibold flex-1 truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{r.studentName} {r.studentId === currentUserId && '(You)'}</p>
+                <p className="text-xs font-mono text-accent-mint font-semibold flex-shrink-0">{r.responseTimeSec !== null ? `${r.responseTimeSec}s` : '—'}</p>
+              </div>
+            ))}
+          </>)}
+          {incorrect.length > 0 && (<>
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mt-4 mb-2">❌ Wrong / No answer</p>
+            {incorrect.map(r => (
+              <div key={r.studentId} className={`flex items-center gap-3 p-3 rounded-xl border ${r.studentId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-surface border-border-subtle'}`}>
+                <div className="w-7 h-7 rounded-lg bg-[#FFE4EC] flex items-center justify-center flex-shrink-0"><span className="text-[#E1447A] text-xs font-bold">✗</span></div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{r.studentName} {r.studentId === currentUserId && '(You)'}</p>
+                  <p className="text-text-muted text-xs">{r.selectedOption !== null ? `Chose ${OPTION_LABELS[r.selectedOption]}` : 'No answer'}</p>
                 </div>
-              ))}
-            </>
-          )}
-
-          {incorrect.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mt-4 mb-2">
-                ❌ Wrong / No answer
-              </p>
-              {incorrect.map(r => (
-                <div
-                  key={r.studentId}
-                  className={`flex items-center gap-3 p-3 rounded-xl border ${
-                    r.studentId === currentUserId
-                      ? 'bg-brand-primary/10 border-brand-primary/30'
-                      : 'bg-surface border-border-subtle'
-                  }`}
-                >
-                  <div className="w-7 h-7 rounded-lg bg-[#FFE4EC] flex items-center justify-center flex-shrink-0">
-                    <span className="text-[#E1447A] text-xs font-bold">✗</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold truncate ${r.studentId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>
-                      {r.studentName} {r.studentId === currentUserId && '(You)'}
-                    </p>
-                    <p className="text-text-muted text-xs">
-                      {r.selectedOption !== null ? `Chose ${OPTION_LABELS[r.selectedOption]}` : 'No answer'}
-                    </p>
-                  </div>
-                  <p className="text-xs font-mono text-text-muted flex-shrink-0">
-                    {r.responseTimeSec !== null ? `${r.responseTimeSec}s` : '—'}
-                  </p>
-                </div>
-              ))}
-            </>
-          )}
-
-          {results.length === 0 && (
-            <p className="text-text-muted text-center py-8 text-sm">No responses recorded.</p>
-          )}
+              </div>
+            ))}
+          </>)}
+          {results.length === 0 && <p className="text-text-muted text-center py-8 text-sm">No responses recorded.</p>}
         </div>
-
         <div className="px-5 py-3 border-t border-border-subtle flex-shrink-0">
-          <button onClick={onClose} className="btn-primary w-full py-2.5 text-sm">
-            Close Results
-          </button>
+          <button onClick={onClose} className="btn-primary w-full py-2.5 text-sm">Close Results</button>
         </div>
       </div>
     </div>
   );
 };
 
-// ==================== SCOREBOARD MODAL ====================
+// ======================= SCOREBOARD MODAL =======================
+
 const ScoreboardModal: React.FC<{
   scoreboard: ScoreboardEntry[];
   currentUserId?: string;
@@ -416,75 +582,42 @@ const ScoreboardModal: React.FC<{
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
     <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col animate-slide-up">
       <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <BarChart2 className="w-4 h-4 text-brand-primary" />
-          <h2 className="font-heading font-bold text-text-primary text-sm">Session Scoreboard</h2>
-        </div>
-        <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1">
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2.5"><BarChart2 className="w-4 h-4 text-brand-primary" /><h2 className="font-heading font-bold text-text-primary text-sm">Session Scoreboard</h2></div>
+        <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
       </div>
-
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {scoreboard.length === 0 && (
-          <p className="text-text-muted text-center py-8 text-sm">No MCQs asked yet this session.</p>
-        )}
+        {scoreboard.length === 0 && <p className="text-text-muted text-center py-8 text-sm">No MCQs asked yet.</p>}
         {scoreboard.map((entry, i) => (
-          <div
-            key={entry.userId}
-            className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all ${
-              entry.userId === currentUserId
-                ? 'bg-brand-primary/10 border-brand-primary/30'
-                : i === 0 ? 'bg-[#FEF3C7]/30 border-[#FDE68A]/50'
-                : 'bg-surface-alt border-border-subtle'
-            }`}
-          >
-            <span className={`text-lg font-black w-8 text-center flex-shrink-0 ${
-              i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-600' : 'text-text-muted text-sm'
-            }`}>
+          <div key={entry.userId} className={`flex items-center gap-3 p-3.5 rounded-xl border ${entry.userId === currentUserId ? 'bg-brand-primary/10 border-brand-primary/30' : i === 0 ? 'bg-[#FEF3C7]/30 border-[#FDE68A]/50' : 'bg-surface-alt border-border-subtle'}`}>
+            <span className={`text-lg font-black w-8 text-center flex-shrink-0 ${i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-600' : 'text-text-muted text-sm'}`}>
               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
             </span>
-            <div className="flex-1 min-w-0">
-              <p className={`font-semibold text-sm truncate ${entry.userId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>
-                {entry.name} {entry.userId === currentUserId && '(You)'}
-              </p>
-            </div>
+            <p className={`font-semibold text-sm flex-1 truncate ${entry.userId === currentUserId ? 'text-brand-primary' : 'text-text-primary'}`}>{entry.name} {entry.userId === currentUserId && '(You)'}</p>
             <div className="flex items-center gap-3 flex-shrink-0 text-xs">
               <span className="text-accent-mint font-bold">✓{entry.correct}</span>
               <span className="text-[#E1447A] font-semibold">✗{entry.wrong}</span>
-              {entry.correct > 0 && (
-                <span className="text-text-muted font-mono">
-                  {(entry.totalResponseTimeSec / entry.correct).toFixed(1)}s avg
-                </span>
-              )}
             </div>
           </div>
         ))}
       </div>
-
       <div className="px-5 py-3 border-t border-border-subtle flex-shrink-0">
-        <p className="text-text-muted text-[11px] text-center">
-          Ranked by: most correct answers · fastest response time (tiebreaker)
-        </p>
+        <p className="text-text-muted text-[11px] text-center">Ranked by: most correct · fastest response time (tiebreaker)</p>
       </div>
     </div>
   </div>
 );
 
-// ==================== TOP-3 PODIUM SCREEN ====================
+// ======================= PODIUM SCREEN =======================
+
 const PodiumScreen: React.FC<{
   podium: PodiumEntry[];
   currentUserId?: string;
   onDismiss: () => void;
 }> = ({ podium, currentUserId, onDismiss }) => {
   const [countdown, setCountdown] = useState(10);
-
   useEffect(() => {
     const t = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { clearInterval(t); onDismiss(); return 0; }
-        return c - 1;
-      });
+      setCountdown(c => { if (c <= 1) { clearInterval(t); onDismiss(); return 0; } return c - 1; });
     }, 1000);
     return () => clearInterval(t);
   }, [onDismiss]);
@@ -495,115 +628,40 @@ const PodiumScreen: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-[#0D0E1A] via-[#1a1b35] to-[#0D0E1A] animate-fade-in px-4">
-      {/* Stars / sparkles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {[...Array(30)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-white rounded-full opacity-30 animate-pulse"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animationDuration: `${2 + Math.random() * 3}s`,
-            }}
-          />
+          <div key={i} className="absolute w-1 h-1 bg-white rounded-full opacity-30 animate-pulse" style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 3}s`, animationDuration: `${2 + Math.random() * 3}s` }} />
         ))}
       </div>
-
-      <div className="relative z-10 text-center mb-10">
-        <p className="text-4xl mb-3">🏆</p>
-        <h1 className="font-heading font-black text-3xl text-white mb-1">Final Results</h1>
-        <p className="text-white/50 text-sm">Session has ended</p>
-      </div>
-
-      {/* Podium visual: 2nd | 1st | 3rd */}
+      <div className="relative z-10 text-center mb-10"><p className="text-4xl mb-3">🏆</p><h1 className="font-heading font-black text-3xl text-white mb-1">Final Results</h1><p className="text-white/50 text-sm">Session has ended</p></div>
       <div className="relative z-10 flex items-end justify-center gap-4 mb-12 w-full max-w-lg">
-        {/* 2nd Place */}
         <div className="flex flex-col items-center">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black mb-3 border-2 ${
-            place2?.userId === currentUserId
-              ? 'bg-brand-primary/30 border-brand-primary text-white'
-              : 'bg-white/10 border-white/20 text-white'
-          }`}>
-            {place2?.name?.[0] || '?'}
-          </div>
-          <p className={`text-sm font-semibold mb-1 max-w-[90px] text-center truncate ${
-            place2?.userId === currentUserId ? 'text-brand-primary' : 'text-white/80'
-          }`}>
-            {place2?.name || '—'}
-          </p>
-          {place2 && (
-            <p className="text-white/50 text-xs">✓{place2.correct}</p>
-          )}
-          <div className="w-20 h-20 bg-slate-400/30 border-2 border-slate-400/50 rounded-t-xl flex items-end justify-center pb-2 mt-2">
-            <span className="text-3xl">🥈</span>
-          </div>
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black mb-3 border-2 ${place2?.userId === currentUserId ? 'bg-brand-primary/30 border-brand-primary text-white' : 'bg-white/10 border-white/20 text-white'}`}>{place2?.name?.[0] || '?'}</div>
+          <p className={`text-sm font-semibold mb-1 max-w-[90px] text-center truncate ${place2?.userId === currentUserId ? 'text-brand-primary' : 'text-white/80'}`}>{place2?.name || '—'}</p>
+          {place2 && <p className="text-white/50 text-xs">✓{place2.correct}</p>}
+          <div className="w-20 h-20 bg-slate-400/30 border-2 border-slate-400/50 rounded-t-xl flex items-end justify-center pb-2 mt-2"><span className="text-3xl">🥈</span></div>
         </div>
-
-        {/* 1st Place */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-6 h-6 mb-1">
-            <Crown className="w-6 h-6 text-accent-amber" />
-          </div>
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black mb-3 border-4 shadow-xl ${
-            place1?.userId === currentUserId
-              ? 'bg-brand-primary/30 border-brand-primary text-white'
-              : 'bg-white/15 border-yellow-400/70 text-white'
-          }`}>
-            {place1?.name?.[0] || '?'}
-          </div>
-          <p className={`text-base font-bold mb-1 max-w-[110px] text-center truncate ${
-            place1?.userId === currentUserId ? 'text-brand-primary' : 'text-white'
-          }`}>
-            {place1?.name || '—'}
-          </p>
-          {place1 && (
-            <p className="text-yellow-400 text-xs font-semibold">✓{place1.correct}</p>
-          )}
-          <div className="w-24 h-28 bg-yellow-400/20 border-2 border-yellow-400/60 rounded-t-xl flex items-end justify-center pb-2 mt-2">
-            <span className="text-4xl">🥇</span>
-          </div>
+          <Crown className="w-6 h-6 text-accent-amber mb-1" />
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black mb-3 border-4 shadow-xl ${place1?.userId === currentUserId ? 'bg-brand-primary/30 border-brand-primary text-white' : 'bg-white/15 border-yellow-400/70 text-white'}`}>{place1?.name?.[0] || '?'}</div>
+          <p className={`text-base font-bold mb-1 max-w-[110px] text-center truncate ${place1?.userId === currentUserId ? 'text-brand-primary' : 'text-white'}`}>{place1?.name || '—'}</p>
+          {place1 && <p className="text-yellow-400 text-xs font-semibold">✓{place1.correct}</p>}
+          <div className="w-24 h-28 bg-yellow-400/20 border-2 border-yellow-400/60 rounded-t-xl flex items-end justify-center pb-2 mt-2"><span className="text-4xl">🥇</span></div>
         </div>
-
-        {/* 3rd Place */}
         <div className="flex flex-col items-center">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black mb-3 border-2 ${
-            place3?.userId === currentUserId
-              ? 'bg-brand-primary/30 border-brand-primary text-white'
-              : 'bg-white/10 border-white/20 text-white'
-          }`}>
-            {place3?.name?.[0] || '?'}
-          </div>
-          <p className={`text-sm font-semibold mb-1 max-w-[90px] text-center truncate ${
-            place3?.userId === currentUserId ? 'text-brand-primary' : 'text-white/80'
-          }`}>
-            {place3?.name || '—'}
-          </p>
-          {place3 && (
-            <p className="text-white/50 text-xs">✓{place3.correct}</p>
-          )}
-          <div className="w-20 h-14 bg-amber-700/30 border-2 border-amber-600/50 rounded-t-xl flex items-end justify-center pb-2 mt-2">
-            <span className="text-3xl">🥉</span>
-          </div>
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black mb-3 border-2 ${place3?.userId === currentUserId ? 'bg-brand-primary/30 border-brand-primary text-white' : 'bg-white/10 border-white/20 text-white'}`}>{place3?.name?.[0] || '?'}</div>
+          <p className={`text-sm font-semibold mb-1 max-w-[90px] text-center truncate ${place3?.userId === currentUserId ? 'text-brand-primary' : 'text-white/80'}`}>{place3?.name || '—'}</p>
+          {place3 && <p className="text-white/50 text-xs">✓{place3.correct}</p>}
+          <div className="w-20 h-14 bg-amber-700/30 border-2 border-amber-600/50 rounded-t-xl flex items-end justify-center pb-2 mt-2"><span className="text-3xl">🥉</span></div>
         </div>
       </div>
-
-      {podium.length === 0 && (
-        <p className="text-white/40 text-sm relative z-10 mb-8">No MCQ answers recorded this session.</p>
-      )}
-
-      <button
-        onClick={onDismiss}
-        className="relative z-10 px-6 py-2.5 bg-white/10 border border-white/20 text-white rounded-xl text-sm hover:bg-white/15 transition-all"
-      >
-        Continue ({countdown}s)
-      </button>
+      {podium.length === 0 && <p className="text-white/40 text-sm relative z-10 mb-8">No MCQ answers recorded this session.</p>}
+      <button onClick={onDismiss} className="relative z-10 px-6 py-2.5 bg-white/10 border border-white/20 text-white rounded-xl text-sm hover:bg-white/15 transition-all">Continue ({countdown}s)</button>
     </div>
   );
 };
 
-// ==================== MAIN COMPONENT ====================
+// ======================= MAIN COMPONENT =======================
 
 const LiveSessionPage: React.FC = () => {
   const { code } = useParams<{ code: string }>();
@@ -613,6 +671,12 @@ const LiveSessionPage: React.FC = () => {
   const [session, setSession] = useState<LiveSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<LiveView>('session');
+
+  // Waiting room state
+  const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [joinDenied, setJoinDenied] = useState(false);
+  const [waitingRoom, setWaitingRoom] = useState<WaitingEntry[]>([]);
+  const [showWaitingRoomPanel, setShowWaitingRoomPanel] = useState(false);
 
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -626,6 +690,12 @@ const LiveSessionPage: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
 
+  // Video grid state
+  const [pinnedSocketId, setPinnedSocketId] = useState<string | null>(null);
+
+  // Permission request (student receives from teacher)
+  const [permRequest, setPermRequest] = useState<{ type: string; from: string; fromSocketId: string } | null>(null);
+
   // Legacy quiz state
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
@@ -635,29 +705,22 @@ const LiveSessionPage: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [quizStartTime, setQuizStartTime] = useState<number>(0);
 
-  // Permission request
-  const [permRequest, setPermRequest] = useState<{ type: string; from: string; fromSocketId: string } | null>(null);
-
-  // ---- Live MCQ state ----
+  // MCQ state
   const [activeMcq, setActiveMcq] = useState<LiveMcq | null>(null);
   const [teacherCorrectIndex, setTeacherCorrectIndex] = useState<number | null>(null);
   const [mcqSelectedOption, setMcqSelectedOption] = useState<number | null>(null);
   const [mcqAnswerLocked, setMcqAnswerLocked] = useState(false);
   const [mcqTimeLeft, setMcqTimeLeft] = useState(0);
   const mcqTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const [mcqClosedResults, setMcqClosedResults] = useState<{ results: McqResultEntry[]; correctIndex: number; options: string[] } | null>(null);
   const [showMcqResults, setShowMcqResults] = useState(false);
-
   const [showMcqForm, setShowMcqForm] = useState(false);
-
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [scoreboard, setScoreboard] = useState<ScoreboardEntry[]>([]);
-
   const [showPodium, setShowPodium] = useState(false);
   const [podium, setPodium] = useState<PodiumEntry[]>([]);
 
-  // WebRTC Refs
+  // WebRTC refs
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -667,20 +730,18 @@ const LiveSessionPage: React.FC = () => {
   const socket = getSocket();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
-  // ---- Server-authoritative MCQ countdown ----
+  // ── MCQ server-authoritative countdown ─────────────────────────────────
   useEffect(() => {
     if (activeMcq) {
-      // Start interval that syncs to server startTimestamp
       if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
       mcqTimerRef.current = setInterval(() => {
         const remaining = Math.max(0, Math.ceil((activeMcq.startTimestamp + activeMcq.durationMs - Date.now()) / 1000));
         setMcqTimeLeft(remaining);
         if (remaining <= 0) {
           if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
-          // Auto-lock if not already submitted
           setMcqAnswerLocked(true);
         }
-      }, 250); // Update 4x/sec for smooth countdown
+      }, 250);
       return () => { if (mcqTimerRef.current) clearInterval(mcqTimerRef.current); };
     } else {
       if (mcqTimerRef.current) clearInterval(mcqTimerRef.current);
@@ -688,13 +749,9 @@ const LiveSessionPage: React.FC = () => {
     }
   }, [activeMcq]);
 
-  // Join Session on Mount
+  // ── Mount / Join ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+    if (!user) { navigate('/login'); return; }
     let isMounted = true;
 
     const init = async () => {
@@ -704,8 +761,6 @@ const LiveSessionPage: React.FC = () => {
         setSession(res.data.session);
         setMessages(res.data.chatHistory || []);
         setLoading(false);
-
-        console.log(`[LiveSession] Joining room for code: ${code}`);
         socket.emit('join-live-session', { sessionCode: code });
       } catch (err: any) {
         if (!isMounted) return;
@@ -714,84 +769,56 @@ const LiveSessionPage: React.FC = () => {
       }
     };
 
-    init();
     setupSocketListeners();
+    init();
 
-    return () => {
-      isMounted = false;
-      cleanup();
-    };
+    return () => { isMounted = false; cleanup(); };
   }, [code, user]);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   // Legacy quiz timer
   useEffect(() => {
     if (!activeQuiz || quizSubmitted || quizTimeLeft <= 0) return;
     const timer = setInterval(() => {
       setQuizTimeLeft(t => {
-        if (t <= 1) {
-          clearInterval(timer);
-          if (!quizSubmitted) handleSubmitQuiz(true);
-          return 0;
-        }
+        if (t <= 1) { clearInterval(timer); if (!quizSubmitted) handleSubmitQuiz(true); return 0; }
         return t - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
   }, [activeQuiz, quizSubmitted, quizTimeLeft]);
 
-  // Cleanup all media and connections on unmount
+  // ── Cleanup ──────────────────────────────────────────────────────────────
   const cleanup = useCallback(() => {
-    console.log('[WebRTC] Cleaning up streams and connections...');
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     screenStreamRef.current = null;
-
-    Object.values(peerConnectionsRef.current).forEach(pc => {
-      try { pc.close(); } catch {}
-    });
+    Object.values(peerConnectionsRef.current).forEach(pc => { try { pc.close(); } catch {} });
     peerConnectionsRef.current = {};
     pendingCandidatesRef.current = {};
     setRemoteStreams({});
 
-    socket.off('participant-joined');
-    socket.off('participant-left');
-    socket.off('participant-camera');
-    socket.off('participant-mic');
-    socket.off('webrtc-offer');
-    socket.off('webrtc-answer');
-    socket.off('webrtc-ice-candidate');
-    socket.off('chat-message');
-    socket.off('chat-deleted');
-    socket.off('quiz-started');
-    socket.off('quiz-result');
-    socket.off('leaderboard-update');
-    socket.off('quiz-ended');
-    socket.off('session-ended');
-    socket.off('permission-request');
-    socket.off('permission-response');
-    socket.off('error');
-    // MCQ events
-    socket.off('mcq-raised');
-    socket.off('mcq-teacher-info');
-    socket.off('mcq-closed');
-    socket.off('mcq-results');
-    socket.off('mcq-answer-locked');
-    socket.off('mcq-error');
-    socket.off('scoreboard-update');
+    const evts = [
+      'participant-joined', 'participant-left', 'participant-camera', 'participant-mic',
+      'webrtc-offer', 'webrtc-answer', 'webrtc-ice-candidate',
+      'chat-message', 'chat-deleted',
+      'quiz-started', 'quiz-result', 'leaderboard-update', 'quiz-ended',
+      'session-ended', 'permission-request', 'permission-response', 'error',
+      'waiting-for-approval', 'join-approved', 'join-denied', 'join-request', 'waiting-room-update',
+      'mcq-raised', 'mcq-teacher-info', 'mcq-closed', 'mcq-results', 'mcq-answer-locked',
+      'mcq-error', 'scoreboard-update',
+    ];
+    evts.forEach(e => socket.off(e));
   }, [socket]);
 
-  // Create Peer Connection with STUN, ICE queue, and stream listener
+  // ── WebRTC: Create Peer Connection ─────────────────────────────────────
   const createPeerConnection = useCallback((targetSocketId: string): RTCPeerConnection => {
     if (peerConnectionsRef.current[targetSocketId]) {
       try { peerConnectionsRef.current[targetSocketId].close(); } catch {}
     }
 
-    console.log(`[WebRTC] Creating RTCPeerConnection for ${targetSocketId}`);
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
     pc.onicecandidate = (event) => {
@@ -801,15 +828,15 @@ const LiveSessionPage: React.FC = () => {
     };
 
     pc.ontrack = (event) => {
-      console.log(`[WebRTC] Remote track received from ${targetSocketId}:`, event.track.kind);
       const stream = event.streams[0] || new MediaStream([event.track]);
       setRemoteStreams(prev => ({ ...prev, [targetSocketId]: stream }));
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(`[WebRTC] Connection state with ${targetSocketId}: ${pc.connectionState}`);
+      console.log(`[WebRTC] ${targetSocketId}: ${pc.connectionState}`);
     };
 
+    // Add all current local tracks (including audio) so senders exist from the start
     const activeStream = screenStreamRef.current || localStreamRef.current;
     if (activeStream) {
       activeStream.getTracks().forEach(track => pc.addTrack(track, activeStream));
@@ -826,7 +853,7 @@ const LiveSessionPage: React.FC = () => {
       await pc.setLocalDescription(offer);
       socket.emit('webrtc-offer', { targetSocketId, offer });
     } catch (err) {
-      console.error(`[WebRTC] Error creating offer for ${targetSocketId}:`, err);
+      console.error(`[WebRTC] createOffer error for ${targetSocketId}:`, err);
     }
   }, [createPeerConnection, socket]);
 
@@ -834,19 +861,15 @@ const LiveSessionPage: React.FC = () => {
     try {
       const pc = createPeerConnection(fromSocketId);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      if (pendingCandidatesRef.current[fromSocketId]?.length) {
-        for (const candidate of pendingCandidatesRef.current[fromSocketId]) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
-        }
-        pendingCandidatesRef.current[fromSocketId] = [];
+      for (const c of (pendingCandidatesRef.current[fromSocketId] || [])) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
       }
-
+      pendingCandidatesRef.current[fromSocketId] = [];
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('webrtc-answer', { targetSocketId: fromSocketId, answer });
     } catch (err) {
-      console.error(`[WebRTC] Error handling offer from ${fromSocketId}:`, err);
+      console.error(`[WebRTC] handleOffer error from ${fromSocketId}:`, err);
     }
   }, [createPeerConnection, socket]);
 
@@ -855,15 +878,13 @@ const LiveSessionPage: React.FC = () => {
       const pc = peerConnectionsRef.current[fromSocketId];
       if (pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        if (pendingCandidatesRef.current[fromSocketId]?.length) {
-          for (const candidate of pendingCandidatesRef.current[fromSocketId]) {
-            try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
-          }
-          pendingCandidatesRef.current[fromSocketId] = [];
+        for (const c of (pendingCandidatesRef.current[fromSocketId] || [])) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
         }
+        pendingCandidatesRef.current[fromSocketId] = [];
       }
     } catch (err) {
-      console.error(`[WebRTC] Error setting remote description from ${fromSocketId}:`, err);
+      console.error(`[WebRTC] handleAnswer error from ${fromSocketId}:`, err);
     }
   }, []);
 
@@ -872,17 +893,57 @@ const LiveSessionPage: React.FC = () => {
     if (pc && pc.remoteDescription?.type) {
       try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
     } else {
-      if (!pendingCandidatesRef.current[fromSocketId]) {
-        pendingCandidatesRef.current[fromSocketId] = [];
-      }
+      pendingCandidatesRef.current[fromSocketId] = pendingCandidatesRef.current[fromSocketId] || [];
       pendingCandidatesRef.current[fromSocketId].push(candidate);
     }
   }, []);
 
-  // Setup Socket Events
+  // ── Socket listeners ──────────────────────────────────────────────────
   const setupSocketListeners = useCallback(() => {
+
+    // Waiting room — student side
+    socket.on('waiting-for-approval', () => {
+      setIsWaitingApproval(true);
+      setLoading(false);
+    });
+
+    socket.on('join-approved', ({ participants: p, scoreboard: sb, activeMcq: mcq }) => {
+      setIsWaitingApproval(false);
+      setParticipants(p);
+      if (sb) setScoreboard(sb);
+      if (mcq) {
+        setActiveMcq(mcq);
+        setMcqSelectedOption(null);
+        setMcqAnswerLocked(false);
+      }
+      // Approved student does NOT create offers — existing participants will offer to us
+    });
+
+    socket.on('join-denied', ({ message }: { message: string }) => {
+      setIsWaitingApproval(false);
+      setJoinDenied(true);
+      toast.error(message || 'Your join request was denied.');
+    });
+
+    // Waiting room — teacher side
+    socket.on('join-request', ({ socketId, name, userId }: WaitingEntry) => {
+      setWaitingRoom(prev => {
+        if (prev.find(w => w.socketId === socketId)) return prev;
+        return [...prev, { socketId, name, userId }];
+      });
+      toast(`🔔 ${name} wants to join`, { duration: 8000 });
+      setShowWaitingRoomPanel(true);
+    });
+
+    socket.on('waiting-room-update', ({ waitingRoom: wr }: { waitingRoom: WaitingEntry[] }) => {
+      setWaitingRoom(wr);
+      if (wr.length === 0) setShowWaitingRoomPanel(false);
+    });
+
+    // Participants
     socket.on('participant-joined', ({ participant, participants: p }: { participant: Participant; participants: Participant[] }) => {
       setParticipants(p);
+      // All EXISTING participants create offers to the new joiner
       if (participant && participant.socketId !== socket.id) {
         createOffer(participant.socketId);
       }
@@ -895,7 +956,8 @@ const LiveSessionPage: React.FC = () => {
         delete peerConnectionsRef.current[leftId];
       }
       delete pendingCandidatesRef.current[leftId];
-      setRemoteStreams(prev => { const next = { ...prev }; delete next[leftId]; return next; });
+      setRemoteStreams(prev => { const n = { ...prev }; delete n[leftId]; return n; });
+      setPinnedSocketId(prev => prev === leftId ? null : prev);
     });
 
     socket.on('participant-camera', ({ socketId: sid, isOn }: { socketId: string; isOn: boolean }) => {
@@ -906,71 +968,47 @@ const LiveSessionPage: React.FC = () => {
       setParticipants(prev => prev.map(p => p.socketId === sid ? { ...p, isMicOn: isOn } : p));
     });
 
+    // WebRTC signaling
     socket.on('webrtc-offer', ({ fromSocketId, offer }: { fromSocketId: string; offer: RTCSessionDescriptionInit }) => {
       handleOffer(fromSocketId, offer);
     });
-
     socket.on('webrtc-answer', ({ fromSocketId, answer }: { fromSocketId: string; answer: RTCSessionDescriptionInit }) => {
       handleAnswer(fromSocketId, answer);
     });
-
     socket.on('webrtc-ice-candidate', ({ fromSocketId, candidate }: { fromSocketId: string; candidate: RTCIceCandidateInit }) => {
       handleIceCandidate(fromSocketId, candidate);
     });
 
+    // Chat
     socket.on('chat-message', (msg: ChatMessage) => {
       setMessages(prev => [...prev, msg]);
     });
-
     socket.on('chat-deleted', ({ messageId }: { messageId: string }) => {
       setMessages(prev => prev.filter(m => m._id !== messageId));
     });
 
-    // Legacy quiz events
+    // Legacy quiz
     socket.on('quiz-started', ({ quiz, timeLimit }: { quiz: Quiz; timeLimit: number }) => {
-      setActiveQuiz(quiz);
-      setSelectedAnswers({});
-      setQuizSubmitted(false);
-      setQuizResult(null);
-      setQuizTimeLeft((timeLimit || 20) * 60);
-      setQuizStartTime(Date.now());
-      setView('quiz');
-      toast('📝 New quiz started! Answer quickly!', { icon: '🎯', duration: 5000 });
+      setActiveQuiz(quiz); setSelectedAnswers({}); setQuizSubmitted(false); setQuizResult(null);
+      setQuizTimeLeft((timeLimit || 20) * 60); setQuizStartTime(Date.now()); setView('quiz');
+      toast('📝 New quiz started!', { icon: '🎯', duration: 5000 });
     });
-
-    socket.on('quiz-result', (result) => {
-      setQuizResult(result);
-      setQuizSubmitted(true);
-    });
-
-    socket.on('leaderboard-update', ({ leaderboard: lb }: { leaderboard: LeaderboardEntry[] }) => {
-      setLeaderboard(lb);
-    });
-
+    socket.on('quiz-result', (result) => { setQuizResult(result); setQuizSubmitted(true); });
+    socket.on('leaderboard-update', ({ leaderboard: lb }: { leaderboard: LeaderboardEntry[] }) => { setLeaderboard(lb); });
     socket.on('quiz-ended', ({ leaderboard: lb }: { leaderboard: LeaderboardEntry[] }) => {
-      setLeaderboard(lb);
-      setView('leaderboard');
-      setActiveQuiz(null);
+      setLeaderboard(lb); setView('leaderboard'); setActiveQuiz(null);
       setTimeout(() => setView('session'), 30000);
     });
 
-    // Session ended — now includes podium
+    // Session ended
     socket.on('session-ended', ({ message, podium: p }: { message?: string; podium?: PodiumEntry[] }) => {
       toast(message || 'The teacher has ended the session.', { icon: '📚' });
-      if (p && p.length > 0) {
-        setPodium(p);
-        setShowPodium(true);
-        // cleanup happens when user dismisses podium
-      } else {
-        cleanup();
-        navigate('/live-sessions');
-      }
+      if (p && p.length > 0) { setPodium(p); setShowPodium(true); }
+      else { cleanup(); navigate('/live-sessions'); }
     });
 
-    socket.on('permission-request', (req) => {
-      setPermRequest(req);
-    });
-
+    // Permission request (Part 3)
+    socket.on('permission-request', (req) => { setPermRequest(req); });
     socket.on('permission-response', ({ type, granted }) => {
       if (granted) {
         if (type === 'mic') toggleMic(true);
@@ -978,30 +1016,17 @@ const LiveSessionPage: React.FC = () => {
       }
     });
 
-    socket.on('error', ({ message }) => {
-      toast.error(message);
-    });
+    socket.on('error', ({ message }) => { toast.error(message); });
 
-    // ---- MCQ socket listeners ----
-
+    // MCQ
     socket.on('mcq-raised', ({ mcq }: { mcq: LiveMcq }) => {
-      setActiveMcq(mcq);
-      setMcqSelectedOption(null);
-      setMcqAnswerLocked(false);
-      setTeacherCorrectIndex(null); // reset until mcq-teacher-info arrives
+      setActiveMcq(mcq); setMcqSelectedOption(null); setMcqAnswerLocked(false); setTeacherCorrectIndex(null);
       toast('❓ MCQ Question raised!', { duration: 3000 });
     });
-
-    // Teacher-only event with correct index
-    socket.on('mcq-teacher-info', ({ correctIndex }: { correctIndex: number }) => {
-      setTeacherCorrectIndex(correctIndex);
-    });
-
+    socket.on('mcq-teacher-info', ({ correctIndex }: { correctIndex: number }) => { setTeacherCorrectIndex(correctIndex); });
     socket.on('mcq-closed', ({ mcqId, correctIndex, results }: { mcqId: string; correctIndex: number; results: McqResultEntry[] }) => {
-      // Capture options from activeMcq BEFORE clearing it
       setActiveMcq(prev => {
         if (prev?.mcqId === mcqId) {
-          // Store options while we still have them
           setMcqClosedResults({ results, correctIndex, options: prev.options });
           return null;
         }
@@ -1010,83 +1035,86 @@ const LiveSessionPage: React.FC = () => {
       });
       setMcqAnswerLocked(true);
     });
-
-    socket.on('mcq-results', ({ mcqId, correctIndex, results }: { mcqId: string; correctIndex: number; results: McqResultEntry[] }) => {
-      // Merge updated results (5s after close), preserve options already stored
+    socket.on('mcq-results', ({ correctIndex, results }: { mcqId: string; correctIndex: number; results: McqResultEntry[] }) => {
       setMcqClosedResults(prev => prev ? { ...prev, correctIndex, results } : { results, correctIndex, options: [] });
       setShowMcqResults(true);
     });
-
     socket.on('mcq-answer-locked', ({ selectedOption }: { selectedOption: number }) => {
-      setMcqAnswerLocked(true);
-      setMcqSelectedOption(selectedOption);
+      setMcqAnswerLocked(true); setMcqSelectedOption(selectedOption);
     });
+    socket.on('mcq-error', ({ message }: { message: string }) => { toast.error(message); });
+    socket.on('scoreboard-update', ({ scoreboard: sb }: { scoreboard: ScoreboardEntry[] }) => { setScoreboard(sb); });
 
-    socket.on('mcq-error', ({ message }: { message: string }) => {
-      toast.error(message);
-    });
-
-    socket.on('scoreboard-update', ({ scoreboard: sb }: { scoreboard: ScoreboardEntry[] }) => {
-      setScoreboard(sb);
-    });
   }, [socket, createOffer, handleOffer, handleAnswer, handleIceCandidate, cleanup, navigate]);
 
-  // Synchronize Tracks Across All Active Peer Connections
-  const broadcastTrack = (newTrack: MediaStreamTrack, oldTrackKind: 'audio' | 'video') => {
+  // ── broadcastTrack: sync a new track to all open peer connections ────────
+  const broadcastTrack = useCallback((newTrack: MediaStreamTrack, kind: 'audio' | 'video') => {
     Object.entries(peerConnectionsRef.current).forEach(([targetSocketId, pc]) => {
-      const senders = pc.getSenders();
-      const sender = senders.find(s => s.track && s.track.kind === oldTrackKind);
+      const sender = pc.getSenders().find(s => s.track?.kind === kind);
       if (sender) {
-        sender.replaceTrack(newTrack).catch(err => {
-          console.warn(`[WebRTC] Failed to replaceTrack with ${targetSocketId}:`, err);
-        });
+        sender.replaceTrack(newTrack).catch(() => {});
       } else if (localStreamRef.current) {
         pc.addTrack(newTrack, localStreamRef.current);
-        createOffer(targetSocketId);
+        // Renegotiate since we added a new track
+        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true }).then(offer => {
+          return pc.setLocalDescription(offer).then(() => {
+            socket.emit('webrtc-offer', { targetSocketId, offer });
+          });
+        }).catch(() => {});
       }
     });
-  };
+  }, [socket]);
 
+  // ── toggleCamera: ALWAYS request audio+video together ────────────────────
   const toggleCamera = async (force?: boolean) => {
     if (isCamOn && !force) {
       const videoTrack = localStreamRef.current?.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.stop();
-        localStreamRef.current?.removeTrack(videoTrack);
-      }
+      if (videoTrack) { videoTrack.stop(); localStreamRef.current?.removeTrack(videoTrack); }
       setIsCamOn(false);
       socket.emit('camera-state', { sessionCode: code, isOn: false });
       toast('Camera turned off', { icon: '📷' });
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: isMicOn,
+        audio: true, // ← Always request audio with camera so audio senders exist on all PCs
       });
 
       const videoTrack = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
+
+      // Immediately disable audio if mic is currently off
+      if (audioTrack) audioTrack.enabled = isMicOn;
 
       if (!localStreamRef.current) {
         localStreamRef.current = stream;
       } else {
+        // Replace old video track
         const oldVideo = localStreamRef.current.getVideoTracks()[0];
         if (oldVideo) { oldVideo.stop(); localStreamRef.current.removeTrack(oldVideo); }
         localStreamRef.current.addTrack(videoTrack);
+        // Add audio if not already present
+        if (audioTrack && localStreamRef.current.getAudioTracks().length === 0) {
+          localStreamRef.current.addTrack(audioTrack);
+        }
       }
 
       broadcastTrack(videoTrack, 'video');
+      if (audioTrack) broadcastTrack(audioTrack, 'audio');
+
       setIsCamOn(true);
       socket.emit('camera-state', { sessionCode: code, isOn: true });
       toast.success('Camera turned on');
-    } catch (err: any) {
-      toast.error('Could not access camera. Please allow camera permissions in your browser settings.');
+    } catch {
+      toast.error('Could not access camera. Please allow camera permissions.');
     }
   };
 
+  // ── toggleMic: enable/disable track (no remove/re-add needed) ────────────
   const toggleMic = async (force?: boolean) => {
     if (isMicOn && !force) {
+      // Just disable all audio tracks — they stay in the PC senders
       localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
       setIsMicOn(false);
       socket.emit('mic-state', { sessionCode: code, isOn: false });
@@ -1094,30 +1122,35 @@ const LiveSessionPage: React.FC = () => {
       return;
     }
 
-    try {
-      if (localStreamRef.current && localStreamRef.current.getAudioTracks().length > 0) {
-        localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = true; });
-      } else {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioTrack = audioStream.getAudioTracks()[0];
-
-        if (!localStreamRef.current) {
-          localStreamRef.current = audioStream;
-        } else {
-          localStreamRef.current.addTrack(audioTrack);
-        }
-
-        broadcastTrack(audioTrack, 'audio');
-      }
-
+    const existingAudio = localStreamRef.current?.getAudioTracks()[0];
+    if (existingAudio) {
+      // Audio track already exists (added with camera) — just re-enable
+      existingAudio.enabled = true;
       setIsMicOn(true);
       socket.emit('mic-state', { sessionCode: code, isOn: true });
       toast.success('Microphone unmuted');
-    } catch (err: any) {
-      toast.error('Could not access microphone. Please allow microphone permissions in your browser.');
+      return;
+    }
+
+    // No audio track yet (user turned on mic before camera)
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (!localStreamRef.current) {
+        localStreamRef.current = audioStream;
+      } else {
+        localStreamRef.current.addTrack(audioTrack);
+      }
+      broadcastTrack(audioTrack, 'audio');
+      setIsMicOn(true);
+      socket.emit('mic-state', { sessionCode: code, isOn: true });
+      toast.success('Microphone unmuted');
+    } catch {
+      toast.error('Could not access microphone. Please allow microphone permissions.');
     }
   };
 
+  // ── Screen share ──────────────────────────────────────────────────────────
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -1128,33 +1161,44 @@ const LiveSessionPage: React.FC = () => {
       toast('Screen sharing stopped', { icon: '🖥️' });
       return;
     }
-
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = displayStream;
       const screenTrack = displayStream.getVideoTracks()[0];
-
       screenTrack.onended = () => {
         screenStreamRef.current = null;
         setIsScreenSharing(false);
         const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
         if (cameraTrack) broadcastTrack(cameraTrack, 'video');
       };
-
       broadcastTrack(screenTrack, 'video');
       setIsScreenSharing(true);
       toast.success('Screen sharing started');
     } catch (err: any) {
-      if (err.name !== 'NotAllowedError') {
-        toast.error('Failed to start screen sharing.');
-      }
+      if (err.name !== 'NotAllowedError') toast.error('Failed to start screen sharing.');
     }
   };
 
+  // ── Session control ───────────────────────────────────────────────────────
   const handleTeacherEndSession = () => {
-    if (!window.confirm('Are you sure you want to end this live class for all participants?')) return;
+    if (!window.confirm('End this live class for all participants?')) return;
     socket.emit('end-session', { sessionCode: code });
-    // Don't cleanup yet — wait for session-ended event to show podium first
+  };
+
+  const approveJoin = (targetSocketId: string) => {
+    socket.emit('approve-join', { sessionCode: code, targetSocketId });
+    setWaitingRoom(prev => prev.filter(w => w.socketId !== targetSocketId));
+    toast.success('Student admitted to class');
+  };
+
+  const denyJoin = (targetSocketId: string) => {
+    socket.emit('deny-join', { sessionCode: code, targetSocketId });
+    setWaitingRoom(prev => prev.filter(w => w.socketId !== targetSocketId));
+  };
+
+  const requestMedia = (targetSocketId: string, type: 'camera' | 'mic') => {
+    socket.emit('request-permission', { sessionCode: code, targetSocketId, type });
+    toast(`Requesting ${type} permission from student...`, { icon: '📡' });
   };
 
   const sendChat = () => {
@@ -1163,34 +1207,14 @@ const LiveSessionPage: React.FC = () => {
     setChatInput('');
   };
 
-  // Legacy quiz submission
   const handleSubmitQuiz = (autoSubmit = false) => {
     if (quizSubmitted) return;
     const timeTaken = Math.floor((Date.now() - quizStartTime) / 1000);
-    const answers = Object.entries(selectedAnswers).map(([qi, opt]) => ({
-      questionIndex: parseInt(qi),
-      selectedOption: opt,
-    }));
+    const answers = Object.entries(selectedAnswers).map(([qi, opt]) => ({ questionIndex: parseInt(qi), selectedOption: opt }));
     socket.emit('submit-live-quiz', { sessionCode: code, answers, timeTaken });
     setQuizSubmitted(true);
     if (autoSubmit) toast('⏰ Time up! Quiz auto-submitted.', { icon: '⏰' });
     else toast.success('Quiz submitted!');
-  };
-
-  // MCQ handlers
-  const handleRaiseMcq = (question: string, options: string[], correctIndex: number) => {
-    socket.emit('raise-mcq', { sessionCode: code, question, options, correctIndex });
-  };
-
-  const handleSelectMcqOption = (i: number) => {
-    if (mcqAnswerLocked) return;
-    setMcqSelectedOption(i);
-  };
-
-  const handleSubmitMcqAnswer = () => {
-    if (mcqAnswerLocked || mcqSelectedOption === null) return;
-    socket.emit('submit-mcq-answer', { sessionCode: code, selectedOption: mcqSelectedOption });
-    setMcqAnswerLocked(true);
   };
 
   const handleOpenScoreboard = () => {
@@ -1199,25 +1223,31 @@ const LiveSessionPage: React.FC = () => {
   };
 
   const copySessionCode = () => {
-    if (code) {
-      navigator.clipboard.writeText(code);
-      toast.success(`Session code ${code} copied!`);
-    }
+    if (code) { navigator.clipboard.writeText(code); toast.success(`Code ${code} copied!`); }
   };
 
   const formatTime = (sec: number) => `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')}`;
 
-  const getMedalColor = (pos: number) => {
-    if (pos === 0) return 'text-yellow-400';
-    if (pos === 1) return 'text-gray-300';
-    if (pos === 2) return 'text-amber-600';
-    return 'text-text-muted';
+  const activeLocalStream = screenStreamRef.current || localStreamRef.current;
+
+  // Build local participant entry for VideoGrid
+  const mySocketId = socket.id || '';
+  const localParticipant: Participant = participants.find(p => p.socketId === mySocketId) || {
+    userId: user?._id || '',
+    name: user?.name || 'You',
+    role: user?.role || 'student',
+    isTeacher,
+    isCameraOn: isCamOn,
+    isMicOn,
+    socketId: mySocketId,
   };
 
-  const otherParticipants = participants.filter(p => p.socketId !== socket.id);
-  const primaryRemoteParticipant = otherParticipants[0] || null;
-  const primaryRemoteStream = primaryRemoteParticipant ? remoteStreams[primaryRemoteParticipant.socketId] || null : null;
-  const activeLocalStream = screenStreamRef.current || localStreamRef.current;
+  // All participants including local (for VideoGrid)
+  const allParticipantsForGrid: Participant[] = participants.length > 0
+    ? participants
+    : [localParticipant];
+
+  // ── Render guards ─────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -1230,73 +1260,98 @@ const LiveSessionPage: React.FC = () => {
     );
   }
 
-  // ---- Podium screen (full-page takeover) ----
+  if (isWaitingApproval) {
+    return (
+      <WaitingScreen
+        sessionTitle={session?.title}
+        onLeave={() => { cleanup(); navigate('/live-sessions'); }}
+      />
+    );
+  }
+
+  if (joinDenied) {
+    return <DeniedScreen onLeave={() => { cleanup(); navigate('/live-sessions'); }} />;
+  }
+
   if (showPodium) {
     return (
       <PodiumScreen
         podium={podium}
         currentUserId={user?._id}
-        onDismiss={() => {
-          setShowPodium(false);
-          cleanup();
-          navigate('/live-sessions');
-        }}
+        onDismiss={() => { setShowPodium(false); cleanup(); navigate('/live-sessions'); }}
       />
     );
   }
 
+  // ── Main session UI ───────────────────────────────────────────────────────
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-page text-text-primary flex flex-col select-none">
 
-      {/* ---- MODALS & OVERLAYS (rendered above everything) ---- */}
+      {/* ── Modals & Overlays ── */}
 
-      {/* MCQ Form Modal (teacher) */}
       {showMcqForm && (
-        <McqFormModal
-          onClose={() => setShowMcqForm(false)}
-          onLaunch={handleRaiseMcq}
-        />
+        <McqFormModal onClose={() => setShowMcqForm(false)} onLaunch={(q, o, c) => socket.emit('raise-mcq', { sessionCode: code, question: q, options: o, correctIndex: c })} />
       )}
-
-      {/* MCQ Live Overlay (everyone, while question is active) */}
       {activeMcq && (
-        <McqOverlay
-          mcq={activeMcq}
-          isTeacher={isTeacher}
-          teacherCorrectIndex={teacherCorrectIndex}
-          timeLeft={mcqTimeLeft}
-          selectedOption={mcqSelectedOption}
-          isLocked={mcqAnswerLocked}
-          onSelect={handleSelectMcqOption}
-          onSubmit={handleSubmitMcqAnswer}
+        <McqOverlay mcq={activeMcq} isTeacher={isTeacher} teacherCorrectIndex={teacherCorrectIndex}
+          timeLeft={mcqTimeLeft} selectedOption={mcqSelectedOption} isLocked={mcqAnswerLocked}
+          onSelect={i => { if (!mcqAnswerLocked) setMcqSelectedOption(i); }}
+          onSubmit={() => { if (!mcqAnswerLocked && mcqSelectedOption !== null) { socket.emit('submit-mcq-answer', { sessionCode: code, selectedOption: mcqSelectedOption }); setMcqAnswerLocked(true); } }}
         />
       )}
-
-      {/* MCQ Results Popup */}
       {showMcqResults && mcqClosedResults && (
-        <McqResultsPopup
-          results={mcqClosedResults.results}
-          correctIndex={mcqClosedResults.correctIndex}
-          options={mcqClosedResults.options.length > 0
-            ? mcqClosedResults.options
-            : mcqClosedResults.results.length > 0
-              ? Array(4).fill('') // fallback — options stored in activeMcq before close
-              : []}
-          currentUserId={user?._id}
-          onClose={() => setShowMcqResults(false)}
-        />
+        <McqResultsPopup results={mcqClosedResults.results} correctIndex={mcqClosedResults.correctIndex}
+          options={mcqClosedResults.options.length > 0 ? mcqClosedResults.options : Array(4).fill('')}
+          currentUserId={user?._id} onClose={() => setShowMcqResults(false)} />
       )}
-
-      {/* Scoreboard Modal */}
       {showScoreboard && (
-        <ScoreboardModal
-          scoreboard={scoreboard}
-          currentUserId={user?._id}
-          onClose={() => setShowScoreboard(false)}
-        />
+        <ScoreboardModal scoreboard={scoreboard} currentUserId={user?._id} onClose={() => setShowScoreboard(false)} />
       )}
 
-      {/* 1. Header */}
+      {/* Permission request — full modal for students */}
+      {permRequest && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-border-subtle rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-slide-up">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center">
+                {permRequest.type === 'camera' ? <Video className="w-5 h-5 text-brand-primary" /> : <Mic className="w-5 h-5 text-brand-primary" />}
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-text-primary text-sm">Teacher Request</h3>
+                <p className="text-text-muted text-xs">{permRequest.from}</p>
+              </div>
+            </div>
+            <p className="text-text-secondary text-sm mb-5">
+              <strong className="text-text-primary">{permRequest.from}</strong> is asking you to turn on your{' '}
+              <strong className="text-brand-primary">{permRequest.type}</strong>.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => {
+                  socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: true });
+                  if (permRequest.type === 'camera') toggleCamera(true);
+                  else toggleMic(true);
+                  setPermRequest(null);
+                }}
+                className="btn-primary flex-1 py-2.5 text-sm flex items-center justify-center gap-2"
+              >
+                <UserCheck className="w-4 h-4" /> Allow
+              </button>
+              <button
+                onClick={() => {
+                  socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: false });
+                  setPermRequest(null);
+                }}
+                className="flex-1 py-2.5 bg-surface-alt border border-border-subtle text-text-secondary text-sm rounded-xl hover:bg-surface transition-all flex items-center justify-center gap-2"
+              >
+                <UserX className="w-4 h-4" /> Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Header ── */}
       <div className="flex-shrink-0 bg-surface border-b border-border-subtle px-4 py-2.5 flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
           <div className="live-dot" />
@@ -1307,13 +1362,8 @@ const LiveSessionPage: React.FC = () => {
             <div className="flex items-center gap-2 text-text-muted text-xs">
               <span>{session?.subject} • Std {session?.standard}</span>
               <span>•</span>
-              <button
-                onClick={copySessionCode}
-                className="flex items-center gap-1 font-mono text-brand-primary hover:underline"
-                title="Click to copy session code"
-              >
-                <span>Code: {code}</span>
-                <Copy className="w-3 h-3" />
+              <button onClick={copySessionCode} className="flex items-center gap-1 font-mono text-brand-primary hover:underline" title="Copy code">
+                Code: {code} <Copy className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -1325,10 +1375,24 @@ const LiveSessionPage: React.FC = () => {
             <span>{participants.length}</span>
           </div>
 
+          {/* Waiting room badge — teacher only */}
+          {isTeacher && waitingRoom.length > 0 && (
+            <button
+              onClick={() => setShowWaitingRoomPanel(v => !v)}
+              className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] rounded-xl text-xs font-semibold hover:bg-[#FDE68A] transition-all"
+              title={`${waitingRoom.length} student(s) waiting`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{waitingRoom.length} waiting</span>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-bounce">
+                {waitingRoom.length}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => { cleanup(); navigate('/live-sessions'); }}
             className="px-3 py-1.5 bg-[#FFE4EC] text-[#E1447A] hover:bg-[#FFE4EC]/80 rounded-xl transition-all text-xs font-semibold flex items-center gap-1.5"
-            title="Leave Session"
           >
             <PhoneOff className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Leave</span>
@@ -1336,126 +1400,89 @@ const LiveSessionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Permission Request Banner */}
-      {permRequest && (
-        <div className="flex-shrink-0 bg-brand-primary/10 border-b border-brand-primary/20 px-4 py-2 flex items-center justify-between text-xs animate-slide-down z-20">
-          <p className="text-text-primary">
-            <strong className="text-brand-primary">{permRequest.from}</strong> requested to enable your <strong>{permRequest.type}</strong>.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: true });
-                setPermRequest(null);
-              }}
-              className="btn-primary px-3 py-1 text-xs"
-            >
-              Allow
+      {/* ── Waiting Room Panel (teacher) ── */}
+      {isTeacher && showWaitingRoomPanel && waitingRoom.length > 0 && (
+        <div className="flex-shrink-0 bg-[#FFFBEB] border-b border-[#FDE68A] px-4 py-3 z-20 animate-slide-down">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[#92400E] text-xs font-bold flex items-center gap-1.5">
+              <Bell className="w-3.5 h-3.5" /> Students waiting to join
+            </p>
+            <button onClick={() => setShowWaitingRoomPanel(false)} className="text-[#92400E]/60 hover:text-[#92400E] p-0.5">
+              <X className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={() => {
-                socket.emit('permission-response', { sessionCode: code, targetSocketId: permRequest.fromSocketId, type: permRequest.type, granted: false });
-                setPermRequest(null);
-              }}
-              className="px-3 py-1 bg-surface-alt border border-border-subtle text-text-secondary text-xs rounded-xl hover:bg-surface"
-            >
-              Decline
-            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {waitingRoom.map(entry => (
+              <div key={entry.socketId} className="flex items-center gap-2 bg-white border border-[#FDE68A] rounded-xl px-3 py-2 shadow-xs">
+                <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  {entry.name?.[0]?.toUpperCase() || '?'}
+                </div>
+                <span className="text-text-primary text-xs font-semibold">{entry.name}</span>
+                <button
+                  onClick={() => approveJoin(entry.socketId)}
+                  className="ml-1 p-1.5 bg-[#DCFCE7] text-[#16A34A] rounded-lg hover:bg-[#16A34A] hover:text-white transition-all"
+                  title="Admit"
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => denyJoin(entry.socketId)}
+                  className="p-1.5 bg-[#FFE4EC] text-[#E1447A] rounded-lg hover:bg-[#E1447A] hover:text-white transition-all"
+                  title="Deny"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 2. Main Content Stage + Chat */}
+      {/* ── Main Content: VideoGrid + Chat ── */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Stage Area */}
-        <div className="flex-1 min-h-0 p-3 sm:p-4 flex flex-col overflow-y-auto">
+
+        {/* Stage */}
+        <div className="flex-1 min-h-0 p-2 sm:p-3 flex flex-col overflow-hidden">
+
           {view === 'session' && (
-            <div className="flex-1 flex flex-col justify-center items-center relative w-full h-full max-w-5xl mx-auto">
-              {/* Main Stage Video Container */}
-              <div className="relative w-full h-full max-h-[75vh] aspect-video bg-[#0D0E1A] rounded-2xl overflow-hidden shadow-soft flex items-center justify-center border border-border-subtle">
-                {primaryRemoteParticipant && primaryRemoteStream && (primaryRemoteParticipant.isCameraOn || primaryRemoteStream.getVideoTracks().length > 0) ? (
-                  <StreamVideo stream={primaryRemoteStream} className="w-full h-full object-cover" />
-                ) : primaryRemoteParticipant ? (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="w-20 h-20 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-2xl font-bold mb-3 border border-brand-primary/30">
-                      {primaryRemoteParticipant.name?.[0] || 'U'}
-                    </div>
-                    <p className="text-white text-base font-semibold font-heading">{primaryRemoteParticipant.name}</p>
-                    <p className="text-white/50 text-xs mt-1">Camera is off</p>
-                    {primaryRemoteParticipant.isMicOn ? (
-                      <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-accent-mint font-medium">
-                        <Mic className="w-3 h-3" /> Speaking
-                      </span>
-                    ) : (
-                      <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-white/40 font-medium">
-                        <MicOff className="w-3 h-3" /> Muted
-                      </span>
-                    )}
-                  </div>
-                ) : isCamOn || isScreenSharing ? (
-                  <StreamVideo stream={activeLocalStream} muted className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mb-3">
-                      <VideoOff className="w-8 h-8 text-white/40" />
-                    </div>
-                    <p className="text-white/80 text-sm font-medium">Camera is off</p>
-                    <p className="text-white/40 text-xs mt-1 max-w-xs">
-                      Click the camera button below to start your video stream.
-                    </p>
-                    <div className="mt-4 px-3.5 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs text-white/70">
-                      Waiting for others to join • Session code: <strong className="text-brand-primary">{code}</strong>
-                    </div>
-                  </div>
-                )}
-
-                {primaryRemoteParticipant && (
-                  <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white text-xs z-10">
-                    <span className="font-semibold">{primaryRemoteParticipant.name}</span>
-                    {primaryRemoteParticipant.isTeacher && <Crown className="w-3.5 h-3.5 text-accent-amber" />}
-                    {!primaryRemoteParticipant.isMicOn && <MicOff className="w-3 h-3 text-red-400" />}
-                  </div>
-                )}
-
-                {primaryRemoteParticipant && (
-                  <div className="absolute bottom-3 right-3 w-36 sm:w-48 aspect-video bg-[#1B1C2E] rounded-xl overflow-hidden shadow-lg border-2 border-white/20 z-20 flex items-center justify-center">
-                    {isCamOn || isScreenSharing ? (
-                      <StreamVideo stream={activeLocalStream} muted className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-2 text-center">
-                        <VideoOff className="w-5 h-5 text-white/40 mb-1" />
-                        <span className="text-white/60 text-[10px]">Your camera is off</span>
-                      </div>
-                    )}
-                    <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 bg-black/70 rounded-md text-[10px] text-white font-medium flex items-center gap-1">
-                      <span>You</span>
-                      {!isMicOn && <MicOff className="w-2.5 h-2.5 text-red-400" />}
-                    </div>
-                  </div>
-                )}
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              {/* VideoGrid */}
+              <div className="flex-1 min-h-0">
+                <VideoGrid
+                  participants={allParticipantsForGrid}
+                  remoteStreams={remoteStreams}
+                  localStream={activeLocalStream}
+                  mySocketId={mySocketId}
+                  pinnedSocketId={pinnedSocketId}
+                  onPin={setPinnedSocketId}
+                  isViewerTeacher={isTeacher}
+                  onRequestMedia={requestMedia}
+                  isCamOn={isCamOn || isScreenSharing}
+                  isMicOn={isMicOn}
+                />
               </div>
 
-              {/* Participants Roster Chips */}
-              <div className="w-full mt-3 flex items-center justify-between gap-2 flex-wrap">
+              {/* Session info bar */}
+              <div className="flex-shrink-0 flex items-center justify-between gap-2 flex-wrap px-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-text-secondary text-xs font-semibold">Active in class:</span>
-                  {participants.map(p => (
-                    <div
-                      key={p.socketId}
-                      className="flex items-center gap-1.5 px-2.5 py-1 bg-surface border border-border-subtle rounded-xl text-xs shadow-xs"
+                  {participants.length <= 1 && (
+                    <p className="text-text-muted text-xs">
+                      🎓 Waiting for students to join · Code:{' '}
+                      <strong className="text-brand-primary font-mono">{code}</strong>
+                    </p>
+                  )}
+                  {pinnedSocketId && (
+                    <button
+                      onClick={() => setPinnedSocketId(null)}
+                      className="flex items-center gap-1 text-xs text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-xl px-2.5 py-1 hover:bg-brand-primary/15"
                     >
-                      <div className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[10px] font-bold">
-                        {p.name?.[0] || '?'}
-                      </div>
-                      <span className="text-text-primary text-xs font-medium">
-                        {p.name} {p.socketId === socket.id && '(You)'}
-                      </span>
-                      {p.isTeacher && <Crown className="w-3 h-3 text-accent-amber" />}
-                      {p.isMicOn ? <Mic className="w-3 h-3 text-accent-mint" /> : <MicOff className="w-3 h-3 text-text-muted" />}
-                      {p.isCameraOn ? <Video className="w-3 h-3 text-brand-primary" /> : <VideoOff className="w-3 h-3 text-text-muted" />}
-                    </div>
-                  ))}
+                      <PinOff className="w-3 h-3" /> Exit spotlight
+                    </button>
+                  )}
                 </div>
+                <p className="text-text-muted text-xs hidden sm:block">
+                  Click any tile to pin it to spotlight
+                </p>
               </div>
             </div>
           )}
@@ -1467,57 +1494,34 @@ const LiveSessionPage: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-heading text-text-primary font-bold text-lg">📝 {activeQuiz.title}</h2>
                   <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono font-bold text-sm ${quizTimeLeft < 60 ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-brand-primary/10 text-brand-primary'}`}>
-                    <Clock className="w-4 h-4" />
-                    {formatTime(quizTimeLeft)}
+                    <Clock className="w-4 h-4" />{formatTime(quizTimeLeft)}
                   </div>
                 </div>
-
                 {quizSubmitted && quizResult ? (
-                  <div className="text-center py-8 animate-bounce-in">
+                  <div className="text-center py-8">
                     <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl ${quizResult.percentage >= 60 ? 'bg-accent-mint/20' : 'bg-[#FFE4EC]'}`}>
                       {quizResult.percentage >= 60 ? '🎉' : '📚'}
                     </div>
                     <p className="text-3xl font-heading font-bold text-text-primary mb-2">{quizResult.score}/{quizResult.totalMarks}</p>
-                    <p className={`text-xl font-semibold mb-2 ${quizResult.percentage >= 60 ? 'text-[#16A34A]' : 'text-[#E1447A]'}`}>
-                      {quizResult.percentage}%
-                    </p>
-                    <p className="text-text-secondary text-sm font-medium">
-                      {quizResult.percentage >= 80 ? 'Excellent! 🏆' : quizResult.percentage >= 60 ? 'Good job! 👍' : 'Keep practicing! 💪'}
-                    </p>
-                    <p className="text-text-muted text-xs mt-3">Waiting for quiz to end and leaderboard...</p>
+                    <p className={`text-xl font-semibold ${quizResult.percentage >= 60 ? 'text-[#16A34A]' : 'text-[#E1447A]'}`}>{quizResult.percentage}%</p>
+                    <p className="text-text-muted text-xs mt-3">Waiting for leaderboard...</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     {(activeQuiz.questions as Question[]).map((q, qi) => (
-                      <div key={qi} className="animate-slide-up" style={{ animationDelay: `${qi * 0.1}s` }}>
-                        <p className="text-text-primary font-medium mb-3">
-                          <span className="text-brand-primary font-bold mr-2">Q{qi + 1}.</span>{q.question}
-                          <span className="text-text-muted text-xs ml-2 font-normal">({q.marks} mark{q.marks > 1 ? 's' : ''})</span>
-                        </p>
+                      <div key={qi}>
+                        <p className="text-text-primary font-medium mb-3"><span className="text-brand-primary font-bold mr-2">Q{qi + 1}.</span>{q.question}<span className="text-text-muted text-xs ml-2">({q.marks} mark{q.marks > 1 ? 's' : ''})</span></p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {q.options.map((opt, oi) => (
-                            <button
-                              key={oi}
-                              onClick={() => setSelectedAnswers(prev => ({ ...prev, [qi]: oi }))}
-                              className={`p-3 rounded-xl border text-left text-xs font-medium transition-all ${
-                                selectedAnswers[qi] === oi
-                                  ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold shadow-xs'
-                                  : 'bg-surface-alt border-border-subtle text-text-secondary hover:bg-surface hover:text-text-primary'
-                              }`}
-                            >
-                              <span className="font-bold text-brand-primary mr-2">{['A', 'B', 'C', 'D'][oi]}.</span>
-                              {opt}
+                            <button key={oi} onClick={() => setSelectedAnswers(prev => ({ ...prev, [qi]: oi }))}
+                              className={`p-3 rounded-xl border text-left text-xs font-medium transition-all ${selectedAnswers[qi] === oi ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-semibold shadow-xs' : 'bg-surface-alt border-border-subtle text-text-secondary hover:bg-surface'}`}>
+                              <span className="font-bold text-brand-primary mr-2">{['A', 'B', 'C', 'D'][oi]}.</span>{opt}
                             </button>
                           ))}
                         </div>
                       </div>
                     ))}
-
-                    <button
-                      onClick={() => handleSubmitQuiz()}
-                      disabled={quizSubmitted}
-                      className="btn-primary w-full py-3 mt-4 flex items-center justify-center gap-2"
-                    >
+                    <button onClick={() => handleSubmitQuiz()} disabled={quizSubmitted} className="btn-primary w-full py-3 mt-4 flex items-center justify-center gap-2">
                       <CheckCircle className="w-5 h-5" /> Submit Quiz
                     </button>
                   </div>
@@ -1530,46 +1534,19 @@ const LiveSessionPage: React.FC = () => {
           {view === 'leaderboard' && (
             <div className="max-w-xl mx-auto w-full my-auto animate-slide-up">
               <div className="card-soft p-6 shadow-soft">
-                <div className="text-center mb-6">
-                  <div className="text-4xl mb-2">🏆</div>
-                  <h2 className="font-heading font-black text-2xl text-text-primary">Live Quiz Results!</h2>
-                  <p className="text-text-secondary text-sm">Final Session Leaderboard</p>
-                </div>
-
+                <div className="text-center mb-6"><div className="text-4xl mb-2">🏆</div><h2 className="font-heading font-black text-2xl text-text-primary">Quiz Results!</h2><p className="text-text-secondary text-sm">Final Leaderboard</p></div>
                 <div className="space-y-3">
                   {leaderboard.map((entry, i) => (
-                    <div
-                      key={entry.studentId}
-                      className={`flex items-center gap-3.5 p-4 rounded-xl border transition-all ${
-                        i === 0 ? 'bg-[#FEF3C7]/40 border-[#FDE68A]' :
-                        i === 1 ? 'bg-surface-alt border-border-subtle' :
-                        i === 2 ? 'bg-[#FFE4EC]/40 border-[#FF8FA3]/30' :
-                        'bg-surface border-border-subtle'
-                      }`}
-                    >
-                      <span className={`text-2xl font-black ${getMedalColor(i)} w-8 text-center`}>
-                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                      </span>
-                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
-                        {entry.studentName?.[0] || '?'}
-                      </div>
-                      <div className="flex-1">
-                        <p className={`font-semibold text-sm ${entry.studentId === user?._id ? 'text-brand-primary font-bold' : 'text-text-primary'}`}>
-                          {entry.studentName} {entry.studentId === user?._id && '(You)'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-heading font-bold text-base text-text-primary">{entry.score}/{entry.totalMarks}</p>
-                        <p className="text-text-muted text-xs font-medium">{entry.percentage}%</p>
-                      </div>
+                    <div key={entry.studentId} className={`flex items-center gap-3.5 p-4 rounded-xl border transition-all ${i === 0 ? 'bg-[#FEF3C7]/40 border-[#FDE68A]' : i === 1 ? 'bg-surface-alt border-border-subtle' : 'bg-surface border-border-subtle'}`}>
+                      <span className={`text-2xl font-black w-8 text-center ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-text-muted text-sm'}`}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-sm font-bold flex-shrink-0">{entry.studentName?.[0] || '?'}</div>
+                      <p className={`font-semibold text-sm flex-1 ${entry.studentId === user?._id ? 'text-brand-primary font-bold' : 'text-text-primary'}`}>{entry.studentName} {entry.studentId === user?._id && '(You)'}</p>
+                      <div className="text-right"><p className="font-heading font-bold text-base text-text-primary">{entry.score}/{entry.totalMarks}</p><p className="text-text-muted text-xs">{entry.percentage}%</p></div>
                     </div>
                   ))}
-                  {leaderboard.length === 0 && (
-                    <p className="text-text-muted text-center py-8 text-sm">No submissions recorded yet.</p>
-                  )}
+                  {leaderboard.length === 0 && <p className="text-text-muted text-center py-8 text-sm">No submissions.</p>}
                 </div>
-
-                <p className="text-text-muted text-xs text-center mt-4">Returning to live class in 30 seconds...</p>
+                <p className="text-text-muted text-xs text-center mt-4">Returning to class in 30s...</p>
               </div>
             </div>
           )}
@@ -1577,182 +1554,102 @@ const LiveSessionPage: React.FC = () => {
 
         {/* Chat Drawer */}
         {showChat && (
-          <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10 transition-colors">
+          <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10">
             <div className="p-3 border-b border-border-subtle flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-brand-primary" />
-                <span className="font-heading text-text-primary text-sm font-semibold">Class Chat</span>
-              </div>
-              <button
-                onClick={() => setShowChat(false)}
-                className="text-text-muted hover:text-text-primary p-1 transition-all"
-                title="Close chat"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-brand-primary" /><span className="font-heading text-text-primary text-sm font-semibold">Class Chat</span></div>
+              <button onClick={() => setShowChat(false)} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
             </div>
-
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`${msg.senderRole === 'teacher' ? 'bg-brand-primary/10 border border-brand-primary/20' : 'bg-surface-alt border border-border-subtle'} rounded-xl p-2.5`}
-                >
+                <div key={i} className={`${msg.senderRole === 'teacher' ? 'bg-brand-primary/10 border border-brand-primary/20' : 'bg-surface-alt border border-border-subtle'} rounded-xl p-2.5`}>
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`text-xs font-semibold ${msg.senderRole === 'teacher' ? 'text-brand-primary' : 'text-text-primary'}`}>
-                      {msg.senderName}
-                    </span>
+                    <span className={`text-xs font-semibold ${msg.senderRole === 'teacher' ? 'text-brand-primary' : 'text-text-primary'}`}>{msg.senderName}</span>
                     {msg.senderRole === 'teacher' && <Crown className="w-3 h-3 text-accent-amber" />}
-                    <span className="text-text-muted text-[10px] ml-auto font-mono">
-                      {new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <span className="text-text-muted text-[10px] ml-auto font-mono">{new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <p className="text-text-secondary text-xs leading-relaxed break-words">{msg.message}</p>
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
-
             <div className="p-3 border-t border-border-subtle">
               <div className="flex gap-2">
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') sendChat(); }}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-surface-alt border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
-                />
-                <button
-                  onClick={sendChat}
-                  className="p-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl transition-all shadow-xs"
-                  title="Send message"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendChat(); }} placeholder="Type a message..." className="flex-1 bg-surface-alt border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30" />
+                <button onClick={sendChat} className="p-2 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl transition-all shadow-xs"><Send className="w-4 h-4" /></button>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* 3. Call Controls Bar */}
-      <div className="flex-shrink-0 bg-surface border-t border-border-subtle px-4 py-3 z-30 transition-colors">
-        <div className="flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
-          {/* Microphone Toggle */}
-          <button
-            onClick={() => toggleMic()}
-            className={`p-3 rounded-xl transition-all shadow-xs flex items-center justify-center ${
-              isMicOn
-                ? 'bg-brand-primary text-white shadow-md'
-                : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'
-            }`}
-            title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
-          >
+      {/* ── Controls Bar ── */}
+      <div className="flex-shrink-0 bg-surface border-t border-border-subtle px-4 py-3 z-30">
+        <div className="flex items-center justify-center gap-2.5 sm:gap-3.5 flex-wrap">
+
+          {/* Mic */}
+          <button onClick={() => toggleMic()} title={isMicOn ? 'Mute' : 'Unmute'}
+            className={`p-3 rounded-xl transition-all shadow-xs ${isMicOn ? 'bg-brand-primary text-white shadow-md' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
             {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5 text-red-500" />}
           </button>
 
-          {/* Camera Toggle */}
-          <button
-            onClick={() => toggleCamera()}
-            className={`p-3 rounded-xl transition-all shadow-xs flex items-center justify-center ${
-              isCamOn
-                ? 'bg-brand-primary text-white shadow-md'
-                : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'
-            }`}
-            title={isCamOn ? 'Turn Off Camera' : 'Turn On Camera'}
-          >
+          {/* Camera */}
+          <button onClick={() => toggleCamera()} title={isCamOn ? 'Camera off' : 'Camera on'}
+            className={`p-3 rounded-xl transition-all shadow-xs ${isCamOn ? 'bg-brand-primary text-white shadow-md' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
             {isCamOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5 text-red-500" />}
           </button>
 
-          {/* Screen Sharing Toggle */}
-          <button
-            onClick={toggleScreenShare}
-            className={`p-3 rounded-xl transition-all shadow-xs flex items-center justify-center ${
-              isScreenSharing
-                ? 'bg-accent-mint text-slate-900 font-bold shadow-md'
-                : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'
-            }`}
-            title={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
-          >
+          {/* Screen share */}
+          <button onClick={toggleScreenShare} title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            className={`p-3 rounded-xl transition-all shadow-xs ${isScreenSharing ? 'bg-accent-mint text-slate-900 shadow-md' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
             {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
           </button>
 
-          {/* Toggle Chat Drawer */}
-          <button
-            onClick={() => setShowChat(!showChat)}
-            className={`p-3 rounded-xl transition-all shadow-xs flex items-center justify-center ${
-              showChat
-                ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30'
-                : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'
-            }`}
-            title="Toggle Live Chat"
-          >
+          {/* Chat */}
+          <button onClick={() => setShowChat(!showChat)} title="Toggle chat"
+            className={`p-3 rounded-xl transition-all shadow-xs ${showChat ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
             <MessageSquare className="w-5 h-5" />
           </button>
 
-          {/* Scoreboard — visible to everyone */}
-          <button
-            onClick={handleOpenScoreboard}
-            className="p-3 bg-surface-alt text-text-muted border border-border-subtle hover:text-brand-primary hover:border-brand-primary/30 rounded-xl transition-all shadow-xs flex items-center justify-center"
-            title="Show Session Scoreboard"
-          >
+          {/* Scoreboard */}
+          <button onClick={handleOpenScoreboard} title="Session scoreboard"
+            className="p-3 bg-surface-alt text-text-muted border border-border-subtle hover:text-brand-primary hover:border-brand-primary/30 rounded-xl transition-all shadow-xs">
             <BarChart2 className="w-5 h-5" />
           </button>
 
           {/* Teacher: Raise MCQ */}
           {isTeacher && (
-            <button
-              onClick={() => setShowMcqForm(true)}
-              disabled={!!activeMcq}
-              className="px-3.5 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all"
-              title={activeMcq ? 'MCQ already active' : 'Raise MCQ Question'}
-            >
-              <HelpCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{activeMcq ? 'MCQ Active...' : 'Raise MCQ'}</span>
+            <button onClick={() => setShowMcqForm(true)} disabled={!!activeMcq} title={activeMcq ? 'MCQ active' : 'Raise MCQ'}
+              className="px-3.5 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all">
+              <HelpCircle className="w-4 h-4" /><span className="hidden sm:inline">{activeMcq ? 'MCQ Active...' : 'Raise MCQ'}</span>
             </button>
           )}
 
-          {/* Teacher: Launch Legacy Quiz */}
+          {/* Teacher: Launch Quiz */}
           {isTeacher && (
             <button
-              onClick={() => {
-                if (activeQuiz) socket.emit('launch-quiz', { sessionCode: code, quizId: activeQuiz._id, durationSeconds: 60 });
-                else toast('No active quiz selected for this course');
-              }}
-              className="px-3.5 py-2.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-95 flex items-center gap-1.5"
-              title="Launch Quiz to All Students"
-            >
-              <Trophy className="w-4 h-4" />
-              <span className="hidden sm:inline">Launch Quiz</span>
+              onClick={() => { if (activeQuiz) socket.emit('launch-quiz', { sessionCode: code, quizId: activeQuiz._id }); else toast('No quiz assigned to this session'); }}
+              className="px-3.5 py-2.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-95 flex items-center gap-1.5">
+              <Trophy className="w-4 h-4" /><span className="hidden sm:inline">Launch Quiz</span>
             </button>
           )}
 
-          {/* Teacher: End Session */}
+          {/* Teacher: End class */}
           {isTeacher && (
-            <button
-              onClick={handleTeacherEndSession}
-              className="px-3.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all"
-              title="End Live Class for Everyone"
-            >
-              <Square className="w-4 h-4" />
-              <span className="hidden sm:inline">End Class</span>
+            <button onClick={handleTeacherEndSession}
+              className="px-3.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all">
+              <Square className="w-4 h-4" /><span className="hidden sm:inline">End Class</span>
             </button>
           )}
 
-          {/* Leave Session */}
-          <button
-            onClick={() => { cleanup(); navigate('/live-sessions'); }}
-            className="p-3 bg-[#FFE4EC] text-[#E1447A] hover:bg-[#FFE4EC]/80 border border-[#FFE4EC] rounded-xl transition-all"
-            title="Leave Call"
-          >
+          {/* Leave */}
+          <button onClick={() => { cleanup(); navigate('/live-sessions'); }} title="Leave call"
+            className="p-3 bg-[#FFE4EC] text-[#E1447A] hover:bg-[#FFE4EC]/80 border border-[#FFE4EC] rounded-xl transition-all">
             <PhoneOff className="w-5 h-5" />
           </button>
         </div>
 
         <p className="text-center text-text-muted text-[11px] mt-1.5">
-          {isCamOn || isMicOn || isScreenSharing
-            ? 'Broadcast active • Your audio/video is shared with class'
-            : 'Camera and microphone are currently off'}
+          {isCamOn || isMicOn || isScreenSharing ? 'Broadcast active • Your audio/video is shared' : 'Camera and mic are off'}
         </p>
       </div>
     </div>
