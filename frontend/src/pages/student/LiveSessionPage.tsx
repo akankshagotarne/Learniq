@@ -13,7 +13,24 @@ import {
   LiveSession, ChatMessage, Participant, LeaderboardEntry, Quiz, Question,
   LiveMcq, McqResultEntry, ScoreboardEntry, PodiumEntry,
 } from '../../types';
-import toast from 'react-hot-toast';
+import toastLib from 'react-hot-toast';
+
+// This page's own "Class Chat" panel sits in the same top-right corner
+// where the app's global <Toaster/> (configured in App.tsx, position
+// "top-right") renders notifications -- so on this page any toast (e.g.
+// "Camera turned on", "<name> wants to join") would otherwise render
+// directly on top of the chat panel's header, overlapping it. Route
+// every toast call in this file through a small wrapper that defaults to
+// the bottom-right corner instead (clear of both the chat panel and the
+// bottom control bar) without touching the global Toaster config that
+// the rest of the app still uses as-is.
+const toast = Object.assign(
+  (message: any, opts?: any) => toastLib(message, { position: 'bottom-right', ...opts }),
+  {
+    success: (message: any, opts?: any) => toastLib.success(message, { position: 'bottom-right', ...opts }),
+    error: (message: any, opts?: any) => toastLib.error(message, { position: 'bottom-right', ...opts }),
+  }
+);
 
 // ======================= TYPES =======================
 
