@@ -27,11 +27,26 @@ interface WaitingEntry {
 
 // ======================= CONSTANTS =======================
 
+// STUN servers alone are not enough once participants are on different
+// networks (school WiFi vs. mobile data/hotspot, symmetric NAT, campus
+// firewalls that block UDP). Without a TURN relay, those specific peer
+// pairs silently fail to connect while others succeed -- which looks
+// exactly like a "some people can see each other, some can't" bug even
+// though the signaling/offer-answer code is correct. Adding a TURN
+// server (including a TCP/443 option, which gets through almost any
+// firewall) fixes that class of failure.
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun.services.mozilla.com' },
+  // Free public TURN relay (Open Relay Project / Metered.ca) - fine for
+  // testing and small live classes. For production at scale, replace
+  // with a paid TURN provider (Twilio, Xirsys, metered.ca paid tier) and
+  // move the credentials to environment variables instead of hardcoding.
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ];
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
