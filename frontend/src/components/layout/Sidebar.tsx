@@ -39,6 +39,7 @@ const adminNav: NavItem[] = [
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
   { label: 'Courses', href: '/admin/courses', icon: BookOpen },
   { label: 'Live Sessions', href: '/admin/live', icon: Radio },
+  { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'About Page', href: '/about', icon: Building2 },
 ];
 

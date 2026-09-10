@@ -37,6 +37,11 @@ const ExamResultsPage = lazy(() => import('./pages/teacher/ExamResultsPage'));
 
 // Admin pages
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminStudents = lazy(() => import('./pages/admin/AdminStudents'));
+const AdminTeachers = lazy(() => import('./pages/admin/AdminTeachers'));
+const AdminCourses = lazy(() => import('./pages/admin/AdminCourses'));
+const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -192,6 +197,31 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin" element={
         <ProtectedRoute roles={['admin']}>
           <AdminDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/students" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminStudents />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/teachers" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminTeachers />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/courses" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminCourses />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/live" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminLiveSessions />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/payments" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminPayments />
         </ProtectedRoute>
       } />
 
