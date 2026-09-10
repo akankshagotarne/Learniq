@@ -98,17 +98,44 @@ const StreamVideo: React.FC<{
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    let cancelled = false;
+    let gotValidReading = false;
+
     const updateOrientation = () => {
       if (video.videoWidth && video.videoHeight) {
+        gotValidReading = true;
         setIsPortraitSource(video.videoHeight > video.videoWidth);
       }
     };
+
     video.addEventListener('loadedmetadata', updateOrientation);
     video.addEventListener('resize', updateOrientation);
     updateOrientation();
+
+    // loadedmetadata/resize firing (and when) for a REMOTE WebRTC <video>
+    // (as opposed to a local getUserMedia one) is not consistent across
+    // browsers/devices -- on some desktop browsers videoWidth/videoHeight
+    // can stay 0 well after the element visibly has frames, so the
+    // orientation check above can silently miss and the tile falls back to
+    // the default object-cover crop forever. Poll for a little while as a
+    // safety net so every viewer (laptop, tablet, phone) eventually gets
+    // the correct reading, not just the ones whose browser fired the
+    // events promptly.
+    const pollId = window.setInterval(() => {
+      if (cancelled || gotValidReading) {
+        window.clearInterval(pollId);
+        return;
+      }
+      updateOrientation();
+    }, 300);
+    const stopPollId = window.setTimeout(() => window.clearInterval(pollId), 8000);
+
     return () => {
+      cancelled = true;
       video.removeEventListener('loadedmetadata', updateOrientation);
       video.removeEventListener('resize', updateOrientation);
+      window.clearInterval(pollId);
+      window.clearTimeout(stopPollId);
     };
   }, [stream]);
 
