@@ -1694,32 +1694,95 @@ const LiveSessionPage: React.FC = () => {
     }
   };
 
-  // ── Re-check camera orientation if the device is physically rotated
-  // mid-call (phone/tablet turned from portrait to landscape or back)
-  // while the camera stays on -- keeps everyone else's view of us correct
-  // without needing to toggle the camera off/on, same as Meet/Zoom.
+  // ── Re-acquire the camera when the device is physically rotated mid-call
+  // (phone/tablet turned from portrait to landscape or back) -----------------
+  // Important: just re-reading track.getSettings() on the SAME already-running
+  // video track (what we tried before) does NOT work -- an active
+  // getUserMedia video track does not re-orient itself just because the
+  // phone was physically turned; it keeps outputting frames in whatever
+  // orientation it was captured in when the camera was first opened. That's
+  // exactly why rotating the phone "did nothing" in testing. Meet/Zoom (and
+  // any mobile WebRTC app that handles this correctly) actually STOP and
+  // RE-START the camera capture on a rotation, so the new capture reflects
+  // the device's current orientation, then swap the new track into the
+  // existing peer connections (replaceTrack -- no renegotiation, no
+  // dropped call) and re-broadcast the new orientation.
   useEffect(() => {
     if (!isCamOn) return;
-    const recheckOrientation = () => {
-      const videoTrack = localStreamRef.current?.getVideoTracks()[0];
-      if (!videoTrack) return;
-      const settings = videoTrack.getSettings();
-      const portrait = !!(settings.width && settings.height && settings.height > settings.width);
-      setLocalIsPortrait(prev => {
-        if (prev === portrait) return prev;
+
+    let lastKnownPortrait: boolean | null = null;
+    let reacquiring = false;
+    let settleTimer: number | null = null;
+
+    const getCurrentDevicePortrait = (): boolean | null => {
+      const orientationType = (window.screen as any)?.orientation?.type as string | undefined;
+      if (orientationType) return orientationType.startsWith('portrait');
+      if (typeof window.innerHeight === 'number' && typeof window.innerWidth === 'number') {
+        return window.innerHeight > window.innerWidth;
+      }
+      return null;
+    };
+
+    const reacquireForOrientation = async () => {
+      if (reacquiring) return;
+      reacquiring = true;
+      try {
+        const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+        const freshStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        const newVideoTrack = freshStream.getVideoTracks()[0];
+        if (oldVideoTrack) {
+          oldVideoTrack.stop();
+          localStreamRef.current?.removeTrack(oldVideoTrack);
+        }
+        localStreamRef.current?.addTrack(newVideoTrack);
+
+        const settings = newVideoTrack.getSettings();
+        const portrait = !!(settings.width && settings.height && settings.height > settings.width);
+        setLocalIsPortrait(portrait);
+        broadcastLocalTracks();
         socket.emit('camera-state', { sessionCode: code, isOn: true, isPortrait: portrait });
         setParticipants(p => p.map(pt => (pt.socketId === socket.id || pt.userId === user?._id) ? ({ ...pt, isPortrait: portrait } as any) : pt));
-        return portrait;
-      });
+      } catch (e) {
+        console.warn('[Camera] re-acquire on orientation change failed:', e);
+      } finally {
+        reacquiring = false;
+      }
     };
-    window.addEventListener('orientationchange', recheckOrientation);
+
+    const handlePossibleOrientationChange = () => {
+      // Give the OS a moment to settle right after a physical rotation
+      // before re-reading anything.
+      if (settleTimer) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        const nowPortrait = getCurrentDevicePortrait();
+        if (nowPortrait === null) return;
+        if (lastKnownPortrait !== null && nowPortrait !== lastKnownPortrait) {
+          reacquireForOrientation();
+        }
+        lastKnownPortrait = nowPortrait;
+      }, 400);
+    };
+
+    lastKnownPortrait = getCurrentDevicePortrait();
+
+    window.addEventListener('orientationchange', handlePossibleOrientationChange);
     const screenOrientation = (window.screen as any)?.orientation;
-    screenOrientation?.addEventListener?.('change', recheckOrientation);
+    screenOrientation?.addEventListener?.('change', handlePossibleOrientationChange);
+    // Fallback safety net: orientationchange / screen.orientation "change"
+    // are not fired consistently across every mobile browser -- poll the
+    // device's own orientation cheaply (no camera access) so a rotation is
+    // never silently missed.
+    const pollId = window.setInterval(handlePossibleOrientationChange, 1500);
+
     return () => {
-      window.removeEventListener('orientationchange', recheckOrientation);
-      screenOrientation?.removeEventListener?.('change', recheckOrientation);
+      window.removeEventListener('orientationchange', handlePossibleOrientationChange);
+      screenOrientation?.removeEventListener?.('change', handlePossibleOrientationChange);
+      window.clearInterval(pollId);
+      if (settleTimer) window.clearTimeout(settleTimer);
     };
-  }, [isCamOn, socket, code, user]);
+  }, [isCamOn, socket, code, user, broadcastLocalTracks]);
 
   // ── toggleMic: cleanly enable/disable audio without renegotiation glare ───
   const toggleMic = async (force?: boolean) => {
