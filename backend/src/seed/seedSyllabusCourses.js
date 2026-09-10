@@ -1,6 +1,5 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
@@ -25,7 +24,11 @@ async function seedSyllabusCourses() {
     await connectDB();
 
     console.log(`Upserting ${TEACHERS_SPEC.length} Subject Teachers...`);
-    const passwordHash = await bcrypt.hash('teacher123', 10);
+    // NOTE: pass the PLAIN password here, not a pre-hashed one. The User
+    // model's pre('save') hook already hashes `password` whenever it's
+    // set/modified - hashing it here too would double-hash it and lock
+    // everyone out with "Invalid email or password."
+    const DEFAULT_TEACHER_PASSWORD = 'teacher123';
     const teacherMap = {};
 
     for (const tSpec of TEACHERS_SPEC) {
@@ -34,7 +37,7 @@ async function seedSyllabusCourses() {
         teacher = await User.create({
           name: tSpec.name,
           email: tSpec.email,
-          password: passwordHash,
+          password: DEFAULT_TEACHER_PASSWORD,
           role: 'teacher',
           avatar: tSpec.avatar,
           qualification: tSpec.qualification,
@@ -55,6 +58,9 @@ async function seedSyllabusCourses() {
         teacher.standards = tSpec.standards;
         teacher.isApproved = true;
         teacher.isActive = true;
+        // Re-set (and thus re-hash, correctly this time) the password for
+        // any teacher account created by the earlier double-hashing bug.
+        teacher.password = DEFAULT_TEACHER_PASSWORD;
         await teacher.save();
       }
       teacherMap[tSpec.name] = teacher;
