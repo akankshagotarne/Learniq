@@ -937,6 +937,33 @@ const PodiumScreen: React.FC<{
 
 // ======================= WEBRTC PLACEHOLDER TRACK GENERATORS =======================
 
+// Whether THIS device is currently being held/used in portrait. We use
+// this -- not the camera track's own reported width/height -- as the
+// source of truth for orientation, because track.getSettings() dimensions
+// are NOT consistent across Android phone brands: some OEM camera stacks
+// report the sensor's pre-rotation resolution (landscape-shaped numbers
+// even while the phone is held upright and CVO-rotates the actual video
+// content to display correctly), others report the already-rotated,
+// visually-correct resolution. That's exactly why this worked for a
+// Samsung phone but not a OnePlus in testing -- same code, different
+// camera driver behavior. The device's own screen orientation, on the
+// other hand, is a standard browser API and doesn't depend on camera
+// hardware at all: if the phone/tablet screen is portrait, the front (or
+// rear) camera's "up" is portrait too, for every device.
+function getDevicePortrait(): boolean {
+  try {
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia('(orientation: portrait)').matches;
+    }
+  } catch {}
+  const orientationType = (window.screen as any)?.orientation?.type as string | undefined;
+  if (orientationType) return orientationType.startsWith('portrait');
+  if (typeof window.innerHeight === 'number' && typeof window.innerWidth === 'number') {
+    return window.innerHeight > window.innerWidth;
+  }
+  return false;
+}
+
 function createBlankVideoTrack(): MediaStreamTrack | null {
   try {
     const canvas = document.createElement('canvas');
@@ -1674,13 +1701,11 @@ const LiveSessionPage: React.FC = () => {
         localStreamRef.current.addTrack(audioTrack);
       }
 
-      // Read our OWN camera's actual capture orientation directly from the
-      // track (100% reliable, unlike trying to infer it from a <video>
-      // element on someone else's browser after it's gone through WebRTC)
-      // and tell everyone else about it so their tiles can render it
-      // full-frame instead of cropping/guessing.
-      const camSettings = videoTrack.getSettings();
-      const portrait = !!(camSettings.width && camSettings.height && camSettings.height > camSettings.width);
+      // Use the DEVICE's own screen orientation, not the camera track's
+      // reported width/height -- those are NOT consistent across Android
+      // phone brands (see getDevicePortrait() above for why), which is
+      // exactly why this worked on one phone and not another in testing.
+      const portrait = getDevicePortrait();
       setLocalIsPortrait(portrait);
 
       setIsCamOn(true);
@@ -1714,15 +1739,6 @@ const LiveSessionPage: React.FC = () => {
     let reacquiring = false;
     let settleTimer: number | null = null;
 
-    const getCurrentDevicePortrait = (): boolean | null => {
-      const orientationType = (window.screen as any)?.orientation?.type as string | undefined;
-      if (orientationType) return orientationType.startsWith('portrait');
-      if (typeof window.innerHeight === 'number' && typeof window.innerWidth === 'number') {
-        return window.innerHeight > window.innerWidth;
-      }
-      return null;
-    };
-
     const reacquireForOrientation = async () => {
       if (reacquiring) return;
       reacquiring = true;
@@ -1738,8 +1754,7 @@ const LiveSessionPage: React.FC = () => {
         }
         localStreamRef.current?.addTrack(newVideoTrack);
 
-        const settings = newVideoTrack.getSettings();
-        const portrait = !!(settings.width && settings.height && settings.height > settings.width);
+        const portrait = getDevicePortrait();
         setLocalIsPortrait(portrait);
         broadcastLocalTracks();
         socket.emit('camera-state', { sessionCode: code, isOn: true, isPortrait: portrait });
@@ -1756,8 +1771,7 @@ const LiveSessionPage: React.FC = () => {
       // before re-reading anything.
       if (settleTimer) window.clearTimeout(settleTimer);
       settleTimer = window.setTimeout(() => {
-        const nowPortrait = getCurrentDevicePortrait();
-        if (nowPortrait === null) return;
+        const nowPortrait = getDevicePortrait();
         if (lastKnownPortrait !== null && nowPortrait !== lastKnownPortrait) {
           reacquireForOrientation();
         }
@@ -1765,20 +1779,22 @@ const LiveSessionPage: React.FC = () => {
       }, 400);
     };
 
-    lastKnownPortrait = getCurrentDevicePortrait();
+    lastKnownPortrait = getDevicePortrait();
 
     window.addEventListener('orientationchange', handlePossibleOrientationChange);
     const screenOrientation = (window.screen as any)?.orientation;
     screenOrientation?.addEventListener?.('change', handlePossibleOrientationChange);
-    // Fallback safety net: orientationchange / screen.orientation "change"
-    // are not fired consistently across every mobile browser -- poll the
-    // device's own orientation cheaply (no camera access) so a rotation is
-    // never silently missed.
+    const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
+    mql?.addEventListener?.('change', handlePossibleOrientationChange);
+    // Fallback safety net: none of the above events are fired consistently
+    // across every mobile browser -- poll the device's own orientation
+    // cheaply (no camera access) so a rotation is never silently missed.
     const pollId = window.setInterval(handlePossibleOrientationChange, 1500);
 
     return () => {
       window.removeEventListener('orientationchange', handlePossibleOrientationChange);
       screenOrientation?.removeEventListener?.('change', handlePossibleOrientationChange);
+      mql?.removeEventListener?.('change', handlePossibleOrientationChange);
       window.clearInterval(pollId);
       if (settleTimer) window.clearTimeout(settleTimer);
     };
