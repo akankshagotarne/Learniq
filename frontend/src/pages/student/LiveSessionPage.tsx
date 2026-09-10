@@ -228,7 +228,7 @@ const ParticipantTile: React.FC<{
   stream: MediaStream | null;
   isLocal: boolean;
   isPinned: boolean;
-  size: 'large' | 'small';
+  size: 'large' | 'small' | 'spotlight';
   onPin: () => void;
   onUnpin?: () => void;
   isViewerTeacher: boolean;
@@ -257,8 +257,10 @@ const ParticipantTile: React.FC<{
   const avatarColor = getAvatarColor(participant.name || 'U');
 
   const sizeClasses = size === 'small'
-    ? 'h-full aspect-video flex-shrink-0 min-w-[160px] w-[160px]'
-    : 'w-full h-full';
+    ? 'h-full aspect-[4/3] flex-shrink-0'
+    : size === 'spotlight'
+    ? 'h-full aspect-[4/3] max-w-full'
+    : 'w-full aspect-[4/3] self-start';
 
   return (
     <div
@@ -283,7 +285,7 @@ const ParticipantTile: React.FC<{
           `}>
             {(participant.name?.[0] || '?').toUpperCase()}
           </div>
-          {size === 'large' && (
+          {size !== 'small' && (
             <p className="text-white/60 text-xs font-medium">Camera off</p>
           )}
         </div>
@@ -306,7 +308,7 @@ const ParticipantTile: React.FC<{
       </div>
 
       {/* Pinned badge */}
-      {isPinned && size === 'large' && (
+      {isPinned && size !== 'small' && (
         <div className="absolute top-2 left-2 flex items-center gap-1 bg-brand-primary/80 text-white text-[9px] px-1.5 py-0.5 rounded-md font-semibold">
           <Pin className="w-2.5 h-2.5" />
           PINNED
@@ -314,7 +316,7 @@ const ParticipantTile: React.FC<{
       )}
 
       {/* Hover controls — large tiles only */}
-      {size === 'large' && !isLocal && (
+      {size !== 'small' && !isLocal && (
         <>
           {/* Pin / unpin */}
           <button
@@ -385,13 +387,13 @@ const VideoGrid: React.FC<{
     return (
       <div className="flex flex-col h-full gap-2">
         {/* Large spotlight */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 flex items-center justify-center">
           <ParticipantTile
             participant={pinnedP}
             stream={getStream(pinnedP)}
             isLocal={isLocalParticipant(pinnedP)}
             isPinned
-            size="large"
+            size="spotlight"
             onPin={() => onPin(pinnedP.socketId)}
             onUnpin={() => onPin(null)}
             isViewerTeacher={isViewerTeacher}
