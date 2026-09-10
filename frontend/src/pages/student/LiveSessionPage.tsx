@@ -71,6 +71,15 @@ const StreamVideo: React.FC<{
   className?: string;
 }> = ({ stream, muted = true, className = 'w-full h-full object-cover' }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Students join from laptops (landscape webcam), phones and tablets held
+  // upright (portrait camera). Forcing every source through object-cover
+  // into a wide grid tile crops a portrait video down to a tiny sliver of
+  // the frame (basically a close-up of the forehead). Track the actual
+  // video's own orientation and fall back to object-contain (full frame,
+  // letterboxed on the tile's own dark background) only for portrait
+  // sources -- landscape sources keep filling the tile edge-to-edge like
+  // before, same as Meet/Zoom do.
+  const [isPortraitSource, setIsPortraitSource] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -86,7 +95,28 @@ const StreamVideo: React.FC<{
     }
   }, [stream]);
 
-  return <video ref={videoRef} autoPlay playsInline muted={muted} className={className} />;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const updateOrientation = () => {
+      if (video.videoWidth && video.videoHeight) {
+        setIsPortraitSource(video.videoHeight > video.videoWidth);
+      }
+    };
+    video.addEventListener('loadedmetadata', updateOrientation);
+    video.addEventListener('resize', updateOrientation);
+    updateOrientation();
+    return () => {
+      video.removeEventListener('loadedmetadata', updateOrientation);
+      video.removeEventListener('resize', updateOrientation);
+    };
+  }, [stream]);
+
+  const effectiveClassName = isPortraitSource
+    ? className.replace('object-cover', 'object-contain')
+    : className;
+
+  return <video ref={videoRef} autoPlay playsInline muted={muted} className={effectiveClassName} />;
 };
 
 // ======================= RemoteAudioPool =======================
@@ -183,7 +213,11 @@ const ParticipantTile: React.FC<{
     >
       {/* Video or Avatar */}
       {showVideo ? (
-        <StreamVideo stream={stream} muted={true} className="w-full h-full object-cover" />
+        <StreamVideo
+          stream={stream}
+          muted={true}
+          className={`w-full h-full object-cover bg-[#0D0E1A] ${isLocal ? 'scale-x-[-1]' : ''}`}
+        />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-2">
           <div className={`rounded-full flex items-center justify-center font-bold border-2 ${avatarColor}
