@@ -16,8 +16,6 @@ const DEMO_VIDEOS = [
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
 ];
 
-const DURATIONS = ['14:20', '18:45', '22:10', '16:50', '25:30', '19:15', '21:40', '17:35'];
-
 async function seedSyllabusCourses() {
   try {
     console.log('Connecting to database...');
@@ -79,7 +77,8 @@ async function seedSyllabusCourses() {
 
       // Check if course already exists by title and standard
       let course = await Course.findOne({ title: cSpec.title, standard: cSpec.standard });
-      const durationHours = Math.max(1, Math.round(cSpec.chapters.length * 0.35));
+      // Each lecture is a ~1 minute placeholder video for now.
+      const totalMinutes = cSpec.chapters.length * 1;
 
       const courseData = {
         title: cSpec.title,
@@ -91,7 +90,7 @@ async function seedSyllabusCourses() {
         price: cSpec.price != null ? cSpec.price : 99,
         isFree: cSpec.isFree || false,
         totalLectures: cSpec.chapters.length,
-        duration: `${durationHours} hrs`,
+        duration: `${totalMinutes} min`,
         rating: 0,
         totalRatings: 0,
         enrolledCount: 0,
@@ -118,14 +117,14 @@ async function seedSyllabusCourses() {
 
       const lectureDocs = cSpec.chapters.map((chapterTitle, index) => ({
         title: chapterTitle,
-        description: `Comprehensive video lecture and conceptual breakdown of ${chapterTitle} mapped to the Maharashtra State Board syllabus.`,
+        description: `Video lecture on ${chapterTitle}, part of the ${cSpec.subject} syllabus for Standard ${cSpec.standard}.`,
         course: course._id,
         teacher: teacher._id,
         standard: cSpec.standard,
         subject: cSpec.subject,
         order: index + 1,
         videoUrl: DEMO_VIDEOS[index % DEMO_VIDEOS.length],
-        videoDuration: DURATIONS[index % DURATIONS.length],
+        videoDuration: '1:00', // Placeholder dummy video, ~1 minute per lecture
         isFree: index === 0, // First chapter free preview
         price: index === 0 ? 0 : 20,
         hasNotes: true,
