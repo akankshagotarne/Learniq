@@ -1087,7 +1087,26 @@ const LiveSessionPage: React.FC = () => {
   }, [socket]);
 
   // ── WebRTC: Get or Create Peer Connection ─────────────────────────────
-  const getOrCreatePeerConnection = useCallback((targetSocketId: string): RTCPeerConnection => {
+  // withInitialTracks controls whether we pre-attach transceivers/tracks at
+  // PC-creation time.
+  //   - true  (offerer path, via createOffer): we are about to build our OWN
+  //     offer, so we MUST add transceivers first or the offer SDP has no
+  //     media m-lines at all.
+  //   - false (answerer "prepare" path, and handleOffer): if we pre-add
+  //     transceivers here and THEN call setRemoteDescription(offer), the
+  //     browser is not guaranteed to reuse our pre-created transceivers --
+  //     it can instead create brand-new ones for the offer's m-lines and
+  //     leave our pre-created ones orphaned/unassociated. Any later code
+  //     that does pc.getTransceivers().find(...) can then grab the WRONG
+  //     (orphaned) transceiver and set its direction/track for nothing,
+  //     while the REAL negotiated transceiver silently stays recvonly.
+  //     This was the actual root cause of "the answerer's video/audio never
+  //     reaches the offerer" even after forcing direction='sendrecv' -- we
+  //     were forcing it on a transceiver that wasn't part of the session.
+  //     Fix: don't pre-add transceivers on the answering side at all. Let
+  //     setRemoteDescription(offer) create them fresh (guaranteed correct,
+  //     unambiguous), then attach direction + tracks to THOSE.
+  const getOrCreatePeerConnection = useCallback((targetSocketId: string, withInitialTracks: boolean = true): RTCPeerConnection => {
     const existingPc = peerConnectionsRef.current[targetSocketId];
     if (existingPc && existingPc.signalingState !== 'closed') {
       return existingPc;
@@ -1137,34 +1156,37 @@ const LiveSessionPage: React.FC = () => {
       }
     };
 
-    // Pre-allocate transceivers with sendrecv and initial tracks (real or placeholder).
-    // This is CRUCIAL: it guarantees both sides negotiate sendrecv in both directions
-    // and neither browser ever defaults to recvonly.
-    const activeStream = screenStreamRef.current || localStreamRef.current;
-    const activeVideo = activeStream?.getVideoTracks()[0] || null;
-    const activeAudio = activeStream?.getAudioTracks()[0] || null;
+    if (withInitialTracks) {
+      // Pre-allocate transceivers with sendrecv and initial tracks (real or placeholder).
+      // Only safe when WE are about to createOffer() with this exact pc --
+      // see the big comment above for why this must NOT happen on the
+      // answering side.
+      const activeStream = screenStreamRef.current || localStreamRef.current;
+      const activeVideo = activeStream?.getVideoTracks()[0] || null;
+      const activeAudio = activeStream?.getAudioTracks()[0] || null;
 
-    const initialVideoTrack = activeVideo || getOrCreateBlankVideoTrack();
-    const initialAudioTrack = activeAudio || getOrCreateSilentAudioTrack();
+      const initialVideoTrack = activeVideo || getOrCreateBlankVideoTrack();
+      const initialAudioTrack = activeAudio || getOrCreateSilentAudioTrack();
 
-    try {
-      if (initialAudioTrack) {
-        pc.addTransceiver(initialAudioTrack, { direction: 'sendrecv' });
-      } else {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
+      try {
+        if (initialAudioTrack) {
+          pc.addTransceiver(initialAudioTrack, { direction: 'sendrecv' });
+        } else {
+          pc.addTransceiver('audio', { direction: 'sendrecv' });
+        }
+      } catch (e) {
+        console.warn('[WebRTC] addTransceiver audio error:', e);
       }
-    } catch (e) {
-      console.warn('[WebRTC] addTransceiver audio error:', e);
-    }
 
-    try {
-      if (initialVideoTrack) {
-        pc.addTransceiver(initialVideoTrack, { direction: 'sendrecv' });
-      } else {
-        pc.addTransceiver('video', { direction: 'sendrecv' });
+      try {
+        if (initialVideoTrack) {
+          pc.addTransceiver(initialVideoTrack, { direction: 'sendrecv' });
+        } else {
+          pc.addTransceiver('video', { direction: 'sendrecv' });
+        }
+      } catch (e) {
+        console.warn('[WebRTC] addTransceiver video error:', e);
       }
-    } catch (e) {
-      console.warn('[WebRTC] addTransceiver video error:', e);
     }
 
     peerConnectionsRef.current[targetSocketId] = pc;
@@ -1188,7 +1210,7 @@ const LiveSessionPage: React.FC = () => {
 
   const handleOffer = useCallback(async (fromSocketId: string, offer: RTCSessionDescriptionInit) => {
     try {
-      const pc = getOrCreatePeerConnection(fromSocketId);
+      const pc = getOrCreatePeerConnection(fromSocketId, false);
 
       // Handle glare (simultaneous offers)
       if (pc.signalingState !== 'stable') {
@@ -1381,7 +1403,7 @@ const LiveSessionPage: React.FC = () => {
       if (participant && participant.socketId && participant.socketId !== socket.id) {
         console.log(`[WebRTC] Existing participant notified of newcomer: ${participant.socketId} (${participant.name}). Preparing connection...`);
         // Prepare RTCPeerConnection for newcomer B so it is ready to receive & answer B's incoming offer
-        getOrCreatePeerConnection(participant.socketId);
+        getOrCreatePeerConnection(participant.socketId, false);
       }
     });
 
