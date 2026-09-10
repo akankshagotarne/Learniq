@@ -24,7 +24,7 @@ async function seedSyllabusCourses() {
     console.log('Connecting to database...');
     await connectDB();
 
-    console.log('Upserting 7 Subject Teachers...');
+    console.log(`Upserting ${TEACHERS_SPEC.length} Subject Teachers...`);
     const passwordHash = await bcrypt.hash('teacher123', 10);
     const teacherMap = {};
 
@@ -61,7 +61,7 @@ async function seedSyllabusCourses() {
       console.log(`✓ Teacher: ${tSpec.name} (${tSpec.subjects.join(', ')})`);
     }
 
-    console.log('\nSeeding 59 Maharashtra State Board Syllabus Courses...');
+    console.log(`\nSeeding ${COURSES_SPEC.length} Olympiad Syllabus Courses...`);
     let totalLecturesCreated = 0;
 
     for (const cSpec of COURSES_SPEC) {
@@ -82,17 +82,19 @@ async function seedSyllabusCourses() {
         standard: cSpec.standard,
         teacher: teacher._id,
         thumbnail: teacher.avatar,
-        price: 99,
-        isFree: false,
+        price: cSpec.price != null ? cSpec.price : 99,
+        isFree: cSpec.isFree || false,
         totalLectures: cSpec.chapters.length,
         duration: `${durationHours} hrs`,
-        rating: 4.8,
-        totalRatings: 18 + (cSpec.chapters.length % 12),
-        enrolledCount: 120 + (cSpec.standard * 15),
-        isActive: true,
-        language: cSpec.subject === 'Marathi' ? 'Marathi' : cSpec.subject === 'Hindi' ? 'Hindi' : 'English',
+        rating: 0,
+        totalRatings: 0,
+        enrolledCount: 0,
+        // Hidden from public browsing until it has real lecture content,
+        // unless a course explicitly opts in via isActive in its spec.
+        isActive: cSpec.isActive !== undefined ? cSpec.isActive : cSpec.chapters.length > 0,
+        language: 'English',
         level: cSpec.standard <= 4 ? 'Beginner' : cSpec.standard <= 7 ? 'Intermediate' : 'Advanced',
-        tags: ['Maharashtra State Board', 'SSC', `Std ${cSpec.standard}`, cSpec.subject],
+        tags: ['Olympiad', `Std ${cSpec.standard}`, cSpec.subject],
         syllabus: cSpec.chapters,
         isFlagged: cSpec.isFlagged || false,
         flagReason: cSpec.flagReason || null,
