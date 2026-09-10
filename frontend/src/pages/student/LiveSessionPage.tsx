@@ -1216,18 +1216,53 @@ const LiveSessionPage: React.FC = () => {
       const audioToSend = activeAudio || getOrCreateSilentAudioTrack();
 
       const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
-      const vTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video');
-      const aTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+      let vTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video');
+      let aTransceiver = transceivers.find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
 
+      console.log('[WebRTC][handleOffer]', fromSocketId, 'transceivers after setRemoteDescription:',
+        transceivers.map(t => ({ mid: t.mid, kind: t.receiver?.track?.kind, direction: t.direction, currentDirection: t.currentDirection, hasSenderTrack: !!t.sender.track })));
+
+      // DEFENSIVE FIX: whatever direction was negotiated/inherited, force this
+      // answerer's transceivers back to sendrecv before creating the answer.
+      // Root cause this guards against: if the pre-created (addTransceiver)
+      // local transceiver did NOT get reused/matched against the incoming
+      // offer's m-line the way JSEP normally guarantees, the browser can end
+      // up with a transceiver whose direction resolves to recvonly -- the
+      // answer would then be technically valid but would never actually send
+      // our video/audio back to the offerer, even though ICE/DTLS connects
+      // fine and the offerer's track flows to us perfectly. That exactly
+      // matches "the newcomer/offerer never sees the existing participant".
+      try { if (vTransceiver) vTransceiver.direction = 'sendrecv'; } catch (e) { console.warn('[WebRTC] force video direction failed:', e); }
+      try { if (aTransceiver) aTransceiver.direction = 'sendrecv'; } catch (e) { console.warn('[WebRTC] force audio direction failed:', e); }
+
+      // If, after setRemoteDescription, we somehow still can't find a
+      // transceiver for a kind (should not normally happen), fall back to
+      // explicitly adding one so the answer still offers to send media.
+      if (!vTransceiver) {
+        try { vTransceiver = pc.addTransceiver(videoToSend || 'video', { direction: 'sendrecv' }); } catch (e) { console.warn('[WebRTC] fallback addTransceiver video failed:', e); }
+      }
+      if (!aTransceiver) {
+        try { aTransceiver = pc.addTransceiver(audioToSend || 'audio', { direction: 'sendrecv' }); } catch (e) { console.warn('[WebRTC] fallback addTransceiver audio failed:', e); }
+      }
+
+      const replacePromises: Promise<void>[] = [];
       if (vTransceiver && videoToSend && vTransceiver.sender.track !== videoToSend) {
-        vTransceiver.sender.replaceTrack(videoToSend).catch(() => {});
+        replacePromises.push(vTransceiver.sender.replaceTrack(videoToSend).catch((e) => { console.warn('[WebRTC] replaceTrack video (answer) failed:', e); }));
       }
       if (aTransceiver && audioToSend && aTransceiver.sender.track !== audioToSend) {
-        aTransceiver.sender.replaceTrack(audioToSend).catch(() => {});
+        replacePromises.push(aTransceiver.sender.replaceTrack(audioToSend).catch((e) => { console.warn('[WebRTC] replaceTrack audio (answer) failed:', e); }));
       }
+      // Wait for tracks to actually be attached before generating the SDP
+      // answer, instead of firing-and-forgetting (avoids a race where the
+      // answer is sent before the sender has a track).
+      await Promise.all(replacePromises);
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+
+      console.log('[WebRTC][handleOffer]', fromSocketId, 'transceivers after setLocalDescription(answer):',
+        pc.getTransceivers().map(t => ({ mid: t.mid, kind: t.receiver?.track?.kind, direction: t.direction, currentDirection: t.currentDirection, hasSenderTrack: !!t.sender.track })));
+
       socket.emit('webrtc-answer', { targetSocketId: fromSocketId, answer });
     } catch (err) {
       console.error(`[WebRTC] handleOffer error from ${fromSocketId}:`, err);
@@ -1244,6 +1279,11 @@ const LiveSessionPage: React.FC = () => {
           try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
         }
         pendingCandidatesRef.current[fromSocketId] = [];
+
+        console.log('[WebRTC][handleAnswer]', fromSocketId, 'transceivers after setRemoteDescription(answer):',
+          pc.getTransceivers().map(t => ({ mid: t.mid, kind: t.receiver?.track?.kind, direction: t.direction, currentDirection: t.currentDirection, hasSenderTrack: !!t.sender.track })));
+      } else {
+        console.warn(`[WebRTC] handleAnswer: unexpected state for ${fromSocketId}`, pc?.signalingState);
       }
     } catch (err) {
       console.error(`[WebRTC] handleAnswer error from ${fromSocketId}:`, err);
