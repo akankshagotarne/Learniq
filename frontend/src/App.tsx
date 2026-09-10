@@ -28,6 +28,7 @@ const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
+const TeacherCourses = lazy(() => import('./pages/teacher/TeacherCourses'));
 const TeacherLiveSessions = lazy(() => import('./pages/teacher/TeacherLiveSessions'));
 const TeacherStudents = lazy(() => import('./pages/teacher/TeacherStudents'));
 const TeacherExamsPage = lazy(() => import('./pages/teacher/TeacherExamsPage'));
@@ -153,6 +154,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/teacher/live" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
           <TeacherLiveSessions />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/courses" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <TeacherCourses />
         </ProtectedRoute>
       } />
       <Route path="/teacher/students" element={
