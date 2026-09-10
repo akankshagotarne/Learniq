@@ -81,6 +81,7 @@ const setupSocket = (io) => {
           isTeacher: true,
           isCameraOn: false,
           isMicOn: false,
+          isPortrait: false,
           socketId: socket.id,
         };
         room.teacherSocketId = socket.id;
@@ -182,6 +183,7 @@ const setupSocket = (io) => {
         isTeacher: false,
         isCameraOn: false,
         isMicOn: false,
+        isPortrait: false,
         socketId: targetSocketId,
       };
 
@@ -297,15 +299,20 @@ const setupSocket = (io) => {
 
     // ==================== MEDIA CONTROLS ====================
 
-    socket.on('camera-state', ({ sessionCode, isOn }) => {
-      if (sessionRooms[sessionCode]?.participants[socket.id]) {
-        sessionRooms[sessionCode].participants[socket.id].isCameraOn = !!isOn;
+    socket.on('camera-state', ({ sessionCode, isOn, isPortrait }) => {
+      const p = sessionRooms[sessionCode]?.participants[socket.id];
+      if (p) {
+        p.isCameraOn = !!isOn;
+        if (typeof isPortrait === 'boolean') {
+          p.isPortrait = isPortrait;
+        }
       }
       io.to(`session:${sessionCode}`).emit('participant-camera', {
         socketId: socket.id,
         userId: socket.user?._id,
         name: socket.user?.name,
         isOn: !!isOn,
+        isPortrait: typeof isPortrait === 'boolean' ? isPortrait : (p ? p.isPortrait : false),
       });
     });
 

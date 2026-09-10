@@ -69,7 +69,11 @@ const StreamVideo: React.FC<{
   stream: MediaStream | null;
   muted?: boolean;
   className?: string;
-}> = ({ stream, muted = true, className = 'w-full h-full object-cover' }) => {
+  /** Explicit orientation from the sender's own camera (via signaling) --
+   *  preferred over the auto-detected fallback below, since it's the one
+   *  source of truth that's actually reliable across browsers/devices. */
+  isPortrait?: boolean;
+}> = ({ stream, muted = true, className = 'w-full h-full object-cover', isPortrait }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   // Students join from laptops (landscape webcam), phones and tablets held
   // upright (portrait camera). Forcing every source through object-cover
@@ -139,7 +143,12 @@ const StreamVideo: React.FC<{
     };
   }, [stream]);
 
-  const effectiveClassName = isPortraitSource
+  // Prefer the explicit, signaled orientation (reliable, sender-reported)
+  // over the auto-detected one (kept only as a fallback for the brief
+  // window before a fresh camera-state signal arrives, or for an older
+  // cached client).
+  const effectivePortrait = typeof isPortrait === 'boolean' ? isPortrait : isPortraitSource;
+  const effectiveClassName = effectivePortrait
     ? className.replace('object-cover', 'object-contain')
     : className;
 
@@ -214,12 +223,18 @@ const ParticipantTile: React.FC<{
   /** Override isCameraOn for local tile */
   localCamOn?: boolean;
   localMicOn?: boolean;
+  /** This device's own camera orientation (getUserMedia track.getSettings()) -- used only for the local tile. */
+  localIsPortrait?: boolean;
 }> = ({
   participant, stream, isLocal, isPinned, size, onPin, onUnpin,
-  isViewerTeacher, onRequestMedia, localCamOn, localMicOn,
+  isViewerTeacher, onRequestMedia, localCamOn, localMicOn, localIsPortrait,
 }) => {
   const isCamEffective = isLocal ? (localCamOn ?? false) : participant.isCameraOn;
   const isMicEffective = isLocal ? (localMicOn ?? false) : participant.isMicOn;
+  // Remote participants report their own camera orientation over the
+  // signaling channel (see camera-state / participant-camera); the local
+  // tile uses the orientation we just read off our own camera.
+  const isPortraitEffective = isLocal ? !!localIsPortrait : !!(participant as any).isPortrait;
   
   // Video is only shown if the participant has actively turned their camera on.
   // When camera is off, avatar is displayed even though a placeholder track keeps the WebRTC pipeline active.
@@ -244,6 +259,7 @@ const ParticipantTile: React.FC<{
           stream={stream}
           muted={true}
           className={`w-full h-full object-cover bg-[#0D0E1A] ${isLocal ? 'scale-x-[-1]' : ''}`}
+          isPortrait={isPortraitEffective}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-2">
@@ -337,9 +353,10 @@ const VideoGrid: React.FC<{
   onRequestMedia: (targetSocketId: string, type: 'camera' | 'mic') => void;
   isCamOn: boolean;
   isMicOn: boolean;
+  isPortrait: boolean;
 }> = ({
   participants, remoteStreams, localStream, mySocketId, isLocalParticipant,
-  pinnedSocketId, onPin, isViewerTeacher, onRequestMedia, isCamOn, isMicOn,
+  pinnedSocketId, onPin, isViewerTeacher, onRequestMedia, isCamOn, isMicOn, isPortrait,
 }) => {
   const pinnedP = participants.find(p => p.socketId === pinnedSocketId);
   const others = participants.filter(p => p.socketId !== pinnedSocketId);
@@ -366,6 +383,7 @@ const VideoGrid: React.FC<{
             onRequestMedia={(type) => onRequestMedia(pinnedP.socketId, type)}
             localCamOn={isCamOn}
             localMicOn={isMicOn}
+            localIsPortrait={isPortrait}
           />
         </div>
         {/* Filmstrip */}
@@ -384,6 +402,7 @@ const VideoGrid: React.FC<{
                 onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
                 localCamOn={isCamOn}
                 localMicOn={isMicOn}
+                localIsPortrait={isPortrait}
               />
             ))}
           </div>
@@ -417,6 +436,7 @@ const VideoGrid: React.FC<{
           onRequestMedia={(type) => onRequestMedia(p.socketId, type)}
           localCamOn={isCamOn}
           localMicOn={isMicOn}
+          localIsPortrait={isPortrait}
         />
       ))}
     </div>
@@ -995,6 +1015,11 @@ const LiveSessionPage: React.FC = () => {
   // Media states
   const [isCamOn, setIsCamOn] = useState(false);
   const [isMicOn, setIsMicOn] = useState(false);
+  // Our own camera's actual capture orientation (from track.getSettings()),
+  // broadcast to everyone else over 'camera-state' so their tiles know
+  // whether to show our video full-frame-vertical or full-frame-horizontal
+  // instead of guessing from the received video element.
+  const [localIsPortrait, setLocalIsPortrait] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
@@ -1479,8 +1504,10 @@ const LiveSessionPage: React.FC = () => {
       setPinnedSocketId(prev => prev === leftId ? null : prev);
     });
 
-    socket.on('participant-camera', ({ socketId: sid, isOn }: { socketId: string; isOn: boolean }) => {
-      setParticipants(prev => prev.map(p => p.socketId === sid ? { ...p, isCameraOn: isOn } : p));
+    socket.on('participant-camera', ({ socketId: sid, isOn, isPortrait: pIsPortrait }: { socketId: string; isOn: boolean; isPortrait?: boolean }) => {
+      setParticipants(prev => prev.map(p => p.socketId === sid
+        ? ({ ...p, isCameraOn: isOn, ...(typeof pIsPortrait === 'boolean' ? { isPortrait: pIsPortrait } : {}) } as any)
+        : p));
     });
 
     socket.on('participant-mic', ({ socketId: sid, isOn }: { socketId: string; isOn: boolean }) => {
@@ -1647,16 +1674,52 @@ const LiveSessionPage: React.FC = () => {
         localStreamRef.current.addTrack(audioTrack);
       }
 
+      // Read our OWN camera's actual capture orientation directly from the
+      // track (100% reliable, unlike trying to infer it from a <video>
+      // element on someone else's browser after it's gone through WebRTC)
+      // and tell everyone else about it so their tiles can render it
+      // full-frame instead of cropping/guessing.
+      const camSettings = videoTrack.getSettings();
+      const portrait = !!(camSettings.width && camSettings.height && camSettings.height > camSettings.width);
+      setLocalIsPortrait(portrait);
+
       setIsCamOn(true);
       broadcastLocalTracks();
-      socket.emit('camera-state', { sessionCode: code, isOn: true });
-      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isCameraOn: true } : p));
+      socket.emit('camera-state', { sessionCode: code, isOn: true, isPortrait: portrait });
+      setParticipants(prev => prev.map(p => (p.socketId === socket.id || p.userId === user?._id) ? { ...p, isCameraOn: true, isPortrait: portrait } as any : p));
       toast.success('Camera turned on');
     } catch (err) {
       console.error('Camera access error:', err);
       toast.error('Could not access camera. Please allow camera permissions.');
     }
   };
+
+  // ── Re-check camera orientation if the device is physically rotated
+  // mid-call (phone/tablet turned from portrait to landscape or back)
+  // while the camera stays on -- keeps everyone else's view of us correct
+  // without needing to toggle the camera off/on, same as Meet/Zoom.
+  useEffect(() => {
+    if (!isCamOn) return;
+    const recheckOrientation = () => {
+      const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+      if (!videoTrack) return;
+      const settings = videoTrack.getSettings();
+      const portrait = !!(settings.width && settings.height && settings.height > settings.width);
+      setLocalIsPortrait(prev => {
+        if (prev === portrait) return prev;
+        socket.emit('camera-state', { sessionCode: code, isOn: true, isPortrait: portrait });
+        setParticipants(p => p.map(pt => (pt.socketId === socket.id || pt.userId === user?._id) ? ({ ...pt, isPortrait: portrait } as any) : pt));
+        return portrait;
+      });
+    };
+    window.addEventListener('orientationchange', recheckOrientation);
+    const screenOrientation = (window.screen as any)?.orientation;
+    screenOrientation?.addEventListener?.('change', recheckOrientation);
+    return () => {
+      window.removeEventListener('orientationchange', recheckOrientation);
+      screenOrientation?.removeEventListener?.('change', recheckOrientation);
+    };
+  }, [isCamOn, socket, code, user]);
 
   // ── toggleMic: cleanly enable/disable audio without renegotiation glare ───
   const toggleMic = async (force?: boolean) => {
@@ -2038,6 +2101,7 @@ const LiveSessionPage: React.FC = () => {
                   onRequestMedia={requestMedia}
                   isCamOn={isCamOn || isScreenSharing}
                   isMicOn={isMicOn}
+                  isPortrait={localIsPortrait}
                 />
               </div>
 
