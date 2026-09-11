@@ -70,11 +70,11 @@ const Footer: React.FC = () => {
             </ul>
 
             <div className="space-y-2">
-              <a href="mailto:hello@learniq.in" className="flex items-center gap-2 text-text-secondary hover:text-brand-primary text-xs transition-colors">
-                <Mail className="w-3.5 h-3.5 text-brand-primary" /> hello@learniq.in
+              <a href="mailto:learniq.admin@gmail.com" className="flex items-center gap-2 text-text-secondary hover:text-brand-primary text-xs transition-colors">
+                <Mail className="w-3.5 h-3.5 text-brand-primary" /> learniq.admin@gmail.com
               </a>
-              <a href="tel:+919876543210" className="flex items-center gap-2 text-text-secondary hover:text-brand-primary text-xs transition-colors">
-                <Phone className="w-3.5 h-3.5 text-accent-mint" /> +91 98765 43210
+              <a href="tel:+919552441233" className="flex items-center gap-2 text-text-secondary hover:text-brand-primary text-xs transition-colors">
+                <Phone className="w-3.5 h-3.5 text-accent-mint" /> +91 95524 41233
               </a>
               <p className="flex items-start gap-2 text-text-muted text-xs">
                 <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-brand-secondary" /> Baner, Pune, Maharashtra

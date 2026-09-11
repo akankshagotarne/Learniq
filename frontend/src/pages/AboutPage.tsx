@@ -25,8 +25,8 @@ const AboutPage: React.FC = () => {
     mission: 'To make quality education accessible to every student across India.',
     vision: 'A future where every child has access to world-class education.',
     about: 'Learniq is an innovative EdTech platform founded in 2024, dedicated to transforming how students from Standard 1 to 10 learn and grow.',
-    email: 'hello@learniq.in',
-    phone: '+91 98765 43210',
+    email: 'learniq.admin@gmail.com',
+    phone: '+91 95524 41233',
     address: 'Baner, Pune, Maharashtra',
     founded: '2024',
     founders: [

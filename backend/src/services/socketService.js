@@ -255,6 +255,38 @@ const setupSocket = (io) => {
       console.log(`[WaitingRoom] Student denied from session ${sessionCode}`);
     });
 
+    // ── REMOVE a participant from the session (teacher/host only) ────────
+    socket.on('remove-participant', ({ sessionCode, targetSocketId }) => {
+      if (!socket.user || (socket.user.role !== 'teacher' && socket.user.role !== 'admin')) return;
+      if (targetSocketId === socket.id) return; // can't remove yourself
+
+      const room = sessionRooms[sessionCode];
+      if (!room || !room.participants[targetSocketId]) return;
+
+      const removed = room.participants[targetSocketId];
+      delete room.participants[targetSocketId];
+
+      // Tell the removed participant so their client can leave the call
+      io.to(targetSocketId).emit('removed-from-session', {
+        message: 'You have been removed from the session by the host.',
+      });
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.leave(`session:${sessionCode}`);
+        targetSocket.sessionCode = null;
+      }
+
+      // Notify everyone else still in the room
+      socket.to(`session:${sessionCode}`).emit('participant-left', {
+        socketId: targetSocketId,
+        userId: removed.userId,
+        name: removed.name,
+        participants: Object.values(room.participants),
+      });
+
+      console.log(`[LiveSession] ${socket.user.name} removed ${removed.name || targetSocketId} from session ${sessionCode}`);
+    });
+
     // ==================== WEBRTC SIGNALING ====================
 
     socket.on('webrtc-offer', ({ targetSocketId, offer }) => {

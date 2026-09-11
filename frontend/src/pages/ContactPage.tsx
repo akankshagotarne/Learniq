@@ -85,17 +85,17 @@ const ContactPage: React.FC = () => {
               {
                 icon: Phone,
                 title: 'Call Support',
-                value: '+91 98765 43210',
+                value: '+91 95524 41233',
                 sub: 'Mon - Sat: 9 AM - 8 PM',
-                action: 'tel:+919876543210',
+                action: 'tel:+919552441233',
                 chipBg: 'bg-[#4ADE9A]/15 text-[#4ADE9A]'
               },
               {
                 icon: Mail,
                 title: 'Email Us',
-                value: 'hello@learniq.in',
+                value: 'learniq.admin@gmail.com',
                 sub: 'Quick response in 2 hours',
-                action: 'mailto:hello@learniq.in',
+                action: 'mailto:learniq.admin@gmail.com',
                 chipBg: 'bg-[#6C63F2]/10 text-[#6C63F2]'
               },
               {

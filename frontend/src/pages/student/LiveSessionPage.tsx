@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Users, X, Send, PhoneOff,
-  Trophy, Clock, CheckCircle, Crown, Monitor, MonitorOff, Square, Sparkles, Copy,
+  Clock, CheckCircle, Crown, Monitor, MonitorOff, Square, Sparkles, Copy,
   BarChart2, HelpCircle, Bell, UserCheck, UserX, Maximize2, Minimize2, Loader,
   Pin, PinOff,
 } from 'lucide-react';
@@ -786,8 +786,9 @@ const ParticipantsDrawer: React.FC<{
   isViewerTeacher: boolean;
   isLocalParticipant: (p: Participant) => boolean;
   onRequestMedia: (targetSocketId: string, type: 'camera' | 'mic') => void;
+  onRemoveParticipant: (targetSocketId: string) => void;
   onClose: () => void;
-}> = ({ participants, mySocketId, isViewerTeacher, isLocalParticipant, onRequestMedia, onClose }) => {
+}> = ({ participants, mySocketId, isViewerTeacher, isLocalParticipant, onRequestMedia, onRemoveParticipant, onClose }) => {
   return (
     <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10 animate-slide-left">
       <div className="p-3.5 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
@@ -839,6 +840,17 @@ const ParticipantsDrawer: React.FC<{
 
               {/* Status Icons & Host Request Actions */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Remove from session (host only) */}
+                {isViewerTeacher && isStudent && !isLocal && (
+                  <button
+                    onClick={() => onRemoveParticipant(p.socketId)}
+                    title={`Remove ${p.name} from the class`}
+                    className="w-7 h-7 rounded-lg bg-[#FFE4EC]/40 hover:bg-[#FFE4EC] border border-[#FFE4EC] text-[#E1447A] flex items-center justify-center transition-all"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
                 {/* Camera Status & Request Button */}
                 {p.isCameraOn ? (
                   <div
@@ -1252,7 +1264,7 @@ const LiveSessionPage: React.FC = () => {
       'webrtc-offer', 'webrtc-answer', 'webrtc-ice-candidate',
       'chat-message', 'chat-deleted',
       'quiz-started', 'quiz-result', 'leaderboard-update', 'quiz-ended',
-      'session-ended', 'permission-request', 'permission-response', 'error',
+      'session-ended', 'removed-from-session', 'permission-request', 'permission-response', 'error',
       'waiting-for-approval', 'join-approved', 'join-denied', 'join-request', 'waiting-room-update',
       'mcq-raised', 'mcq-teacher-info', 'mcq-closed', 'mcq-results', 'mcq-answer-locked',
       'mcq-error', 'scoreboard-update',
@@ -1641,6 +1653,12 @@ const LiveSessionPage: React.FC = () => {
       else { cleanup(); navigate('/live-sessions'); }
     });
 
+    socket.on('removed-from-session', ({ message }: { message?: string }) => {
+      toast.error(message || 'You have been removed from the session by the host.');
+      cleanup();
+      navigate('/live-sessions');
+    });
+
     // Permission request (Part 3)
     socket.on('permission-request', (req) => { setPermRequest(req); });
     socket.on('permission-response', ({ type, granted, from }: { type: string; granted: boolean; from?: string }) => {
@@ -1951,6 +1969,14 @@ const LiveSessionPage: React.FC = () => {
     const targetName = target?.name || 'student';
     socket.emit('request-permission', { sessionCode: code, targetSocketId, type });
     toast(`Requested ${targetName} to turn on ${type === 'camera' ? 'camera' : 'microphone'}`, { icon: '📡' });
+  };
+
+  const removeParticipant = (targetSocketId: string) => {
+    const target = participants.find(p => p.socketId === targetSocketId);
+    const targetName = target?.name || 'this student';
+    if (!window.confirm(`Remove ${targetName} from the class? They can rejoin from the waiting room.`)) return;
+    socket.emit('remove-participant', { sessionCode: code, targetSocketId });
+    toast(`Removed ${targetName} from the class`, { icon: '🚫' });
   };
 
   const sendChat = () => {
@@ -2372,6 +2398,7 @@ const LiveSessionPage: React.FC = () => {
             isViewerTeacher={isTeacher}
             isLocalParticipant={isLocalParticipant}
             onRequestMedia={requestMedia}
+            onRemoveParticipant={removeParticipant}
             onClose={() => setShowParticipants(false)}
           />
         )}
@@ -2422,15 +2449,6 @@ const LiveSessionPage: React.FC = () => {
             <button onClick={() => setShowMcqForm(true)} disabled={!!activeMcq} title={activeMcq ? 'MCQ active' : 'Raise MCQ'}
               className="px-3.5 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all">
               <HelpCircle className="w-4 h-4" /><span className="hidden sm:inline">{activeMcq ? 'MCQ Active...' : 'Raise MCQ'}</span>
-            </button>
-          )}
-
-          {/* Teacher: Launch Quiz */}
-          {isTeacher && (
-            <button
-              onClick={() => { if (activeQuiz) socket.emit('launch-quiz', { sessionCode: code, quizId: activeQuiz._id }); else toast('No quiz assigned to this session'); }}
-              className="px-3.5 py-2.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl text-xs font-semibold shadow-xs hover:opacity-95 flex items-center gap-1.5">
-              <Trophy className="w-4 h-4" /><span className="hidden sm:inline">Launch Quiz</span>
             </button>
           )}
 
