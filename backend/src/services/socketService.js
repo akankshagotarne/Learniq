@@ -276,8 +276,11 @@ const setupSocket = (io) => {
         targetSocket.sessionCode = null;
       }
 
-      // Notify everyone else still in the room
-      socket.to(`session:${sessionCode}`).emit('participant-left', {
+      // Notify everyone still in the room, including the host who issued
+      // the removal -- io.to() (not socket.to()) so the host's own tile
+      // list and participants panel also drop the removed student instead
+      // of only everyone else's.
+      io.to(`session:${sessionCode}`).emit('participant-left', {
         socketId: targetSocketId,
         userId: removed.userId,
         name: removed.name,
