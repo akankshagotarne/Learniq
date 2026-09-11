@@ -363,84 +363,29 @@ const CourseDetailPage: React.FC = () => {
         {/* Hero */}
         <div className="bg-surface border-b border-border-subtle py-10 transition-colors">
           <div className="page-container">
-            <div className="grid lg:grid-cols-3 gap-8 items-start">
-              <div className="lg:col-span-2">
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className={`badge ${getSubjectBadge(course.subject)} font-medium`}>{course.subject}</span>
-                  <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">Standard {course.standard}</span>
-                  <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">{course.level}</span>
-                  {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
-                </div>
-                <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-4 leading-tight">{course.title}</h1>
-                <p className="text-text-secondary text-sm leading-relaxed mb-6">{course.description}</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <span className={`badge ${getSubjectBadge(course.subject)} font-medium`}>{course.subject}</span>
+              <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">Standard {course.standard}</span>
+              <span className="badge bg-surface-alt border border-border-subtle text-text-secondary font-medium">{course.level}</span>
+              {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
+            </div>
+            <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-4 leading-tight">{course.title}</h1>
+            <p className="text-text-secondary text-sm leading-relaxed mb-6 max-w-3xl">{course.description}</p>
 
-                <div className="flex flex-wrap items-center gap-6 text-sm text-text-secondary">
-                  <div className="flex items-center gap-1.5 font-semibold text-text-primary">
-                    <Star className="w-4 h-4 text-accent-amber fill-accent-amber" />
-                    <span>{course.rating || '4.8'}</span>
-                    <span className="text-text-muted font-normal">({course.totalRatings || 24} ratings)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-accent-mint" /> {course.enrolledCount} students
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} lectures
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-accent-sky" /> {course.duration}
-                  </div>
-                </div>
+            <div className="flex flex-wrap items-center gap-6 text-sm text-text-secondary">
+              <div className="flex items-center gap-1.5 font-semibold text-text-primary">
+                <Star className="w-4 h-4 text-accent-amber fill-accent-amber" />
+                <span>{course.rating || '4.8'}</span>
+                <span className="text-text-muted font-normal">({course.totalRatings || 24} ratings)</span>
               </div>
-
-              {/* Course Card - desktop */}
-              <div className="hidden lg:block">
-                <div className="bg-surface border border-border-subtle rounded-card overflow-hidden shadow-soft sticky top-24 transition-colors">
-                  <img
-                    src={getCourseThumbnail(course)}
-                    alt={course.title}
-                    className="w-full aspect-[4/3] object-cover object-top"
-                    onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
-                  />
-                  <div className="p-6">
-                    {course.isFree ? (
-                      <p className="text-2xl font-heading font-bold text-accent-mint mb-4">Free</p>
-                    ) : (
-                      <p className="text-2xl font-heading font-bold text-text-primary mb-4">₹{course.price}</p>
-                    )}
-
-                    {isEnrolled ? (
-                      <Link to={`/courses/${id}/lecture/${lectures[0]?._id}`} className="btn-primary w-full text-center py-3 flex items-center justify-center gap-2">
-                        <Play className="w-4 h-4" /> Continue Learning
-                      </Link>
-                    ) : (
-                      <button onClick={handleEnroll} disabled={enrolling} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
-                        {enrolling ? (
-                          <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Enrolling...</>
-                        ) : course.isFree ? (
-                          <><CheckCircle className="w-4 h-4" /> Enroll Free</>
-                        ) : (
-                          <>Buy Now — ₹{course.price}</>
-                        )}
-                      </button>
-                    )}
-                    <p className="text-text-muted text-xs text-center mt-3">30-day money-back guarantee</p>
-
-                    <button
-                      onClick={handleDownloadNotes}
-                      className="w-full mt-3.5 py-2.5 px-3 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/25 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download Syllabus & Notes (PDF)</span>
-                    </button>
-
-                    <div className="mt-5 pt-4 border-t border-border-subtle space-y-2.5 text-xs text-text-secondary">
-                      <div className="flex items-center gap-2.5"><BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} comprehensive lectures</div>
-                      <div className="flex items-center gap-2.5"><Clock className="w-4 h-4 text-accent-sky" /> {course.duration} total duration</div>
-                      <div className="flex items-center gap-2.5"><FileText className="w-4 h-4 text-accent-amber" /> Downloadable notes & summaries</div>
-                      <div className="flex items-center gap-2.5"><Award className="w-4 h-4 text-accent-mint" /> Certificate on completion</div>
-                    </div>
-                  </div>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-accent-mint" /> {course.enrolledCount} students
+              </div>
+              <div className="flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} lectures
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-accent-sky" /> {course.duration}
               </div>
             </div>
           </div>
@@ -448,7 +393,7 @@ const CourseDetailPage: React.FC = () => {
 
         {/* Content */}
         <div className="page-container py-8">
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid lg:grid-cols-3 gap-8 items-start">
             <div className="lg:col-span-2 space-y-8">
               {/* Teacher Profile */}
               {teacher && (
@@ -630,6 +575,57 @@ const CourseDetailPage: React.FC = () => {
                     {showAllLectures ? <><ChevronUp className="w-4 h-4" /> Show Less</> : <><ChevronDown className="w-4 h-4" /> Show All {lectures.length} Lessons</>}
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Course Card - desktop */}
+            <div className="hidden lg:block">
+              <div className="bg-surface border border-border-subtle rounded-card overflow-hidden shadow-soft sticky top-24 transition-colors">
+                <img
+                  src={getCourseThumbnail(course)}
+                  alt={course.title}
+                  className="w-full aspect-[4/3] object-cover object-top"
+                  onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
+                />
+                <div className="p-6">
+                  {course.isFree ? (
+                    <p className="text-2xl font-heading font-bold text-accent-mint mb-4">Free</p>
+                  ) : (
+                    <p className="text-2xl font-heading font-bold text-text-primary mb-4">₹{course.price}</p>
+                  )}
+
+                  {isEnrolled ? (
+                    <Link to={`/courses/${id}/lecture/${lectures[0]?._id}`} className="btn-primary w-full text-center py-3 flex items-center justify-center gap-2">
+                      <Play className="w-4 h-4" /> Continue Learning
+                    </Link>
+                  ) : (
+                    <button onClick={handleEnroll} disabled={enrolling} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
+                      {enrolling ? (
+                        <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Enrolling...</>
+                      ) : course.isFree ? (
+                        <><CheckCircle className="w-4 h-4" /> Enroll Free</>
+                      ) : (
+                        <>Buy Now — ₹{course.price}</>
+                      )}
+                    </button>
+                  )}
+                  <p className="text-text-muted text-xs text-center mt-3">30-day money-back guarantee</p>
+
+                  <button
+                    onClick={handleDownloadNotes}
+                    className="w-full mt-3.5 py-2.5 px-3 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/25 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Syllabus & Notes (PDF)</span>
+                  </button>
+
+                  <div className="mt-5 pt-4 border-t border-border-subtle space-y-2.5 text-xs text-text-secondary">
+                    <div className="flex items-center gap-2.5"><BookOpen className="w-4 h-4 text-brand-primary" /> {course.totalLectures} comprehensive lectures</div>
+                    <div className="flex items-center gap-2.5"><Clock className="w-4 h-4 text-accent-sky" /> {course.duration} total duration</div>
+                    <div className="flex items-center gap-2.5"><FileText className="w-4 h-4 text-accent-amber" /> Downloadable notes & summaries</div>
+                    <div className="flex items-center gap-2.5"><Award className="w-4 h-4 text-accent-mint" /> Certificate on completion</div>
+                  </div>
+                </div>
               </div>
             </div>
 
