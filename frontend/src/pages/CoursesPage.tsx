@@ -206,10 +206,7 @@ const CoursesPage: React.FC = () => {
                           className="w-full aspect-[4/3] object-cover object-top group-hover:scale-105 transition-transform duration-500"
                           onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                        <div className="absolute top-0 inset-x-0 h-14 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
                         <div className="absolute top-3 left-3 flex gap-2">
-                          {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
                           <span className="badge bg-white/90 text-[#22243A] backdrop-blur-sm border border-white/40 shadow-xs font-semibold">
                             Std {course.standard}
                           </span>
@@ -220,9 +217,12 @@ const CoursesPage: React.FC = () => {
                           <span className={`badge ${getSubjectBadge(course.subject)} font-medium`}>{course.subject}</span>
                           <span className="text-text-muted text-xs">{course.level}</span>
                         </div>
-                        <h3 className="font-heading font-semibold text-text-primary text-base leading-snug mb-3 line-clamp-2 group-hover:text-brand-primary transition-colors">
+                        <h3 className="font-heading font-semibold text-text-primary text-base leading-snug mb-2 line-clamp-2 group-hover:text-brand-primary transition-colors">
                           {course.title}
                         </h3>
+                        <div className="mb-3">
+                          {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
+                        </div>
                         {course.teacher && (
                           <div className="flex items-center gap-2 mb-4">
                             <img

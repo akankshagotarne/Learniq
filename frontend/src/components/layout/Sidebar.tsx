@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
-  Layers, CreditCard, Settings, Building2, Radio, MessageCircle
+  Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -18,6 +18,7 @@ interface NavItem {
 
 const studentNav: NavItem[] = [
   { label: 'Dashboard', href: '/student', icon: Home },
+  { label: 'My Courses', href: '/student/my-courses', icon: GraduationCap },
   { label: 'My Standard', href: '/student/standard', icon: Layers },
   { label: 'Courses', href: '/courses', icon: BookOpen },
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },

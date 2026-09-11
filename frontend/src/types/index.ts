@@ -188,8 +188,10 @@ export interface Enrollment {
   student: User | string;
   course: Course;
   enrolledAt: string;
+  completedLectures?: string[];
   completionPercentage: number;
   isCompleted: boolean;
+  lastAccessedAt?: string;
 }
 
 export interface Payment {

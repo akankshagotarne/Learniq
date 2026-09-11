@@ -267,27 +267,24 @@ const HomePage: React.FC = () => {
                       className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
                       onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                     />
-                    <div className="absolute top-0 inset-x-0 h-14 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
                     <div className="absolute top-3 left-3">
                       <span className={`badge ${getSubjectBadgeClass(course.subject)} text-xs shadow-sm`}>
                         {course.subject}
                       </span>
-                    </div>
-                    <div className="absolute top-3 right-3">
-                      {course.isFree ? (
-                        <span className="badge-free text-xs shadow-sm">FREE</span>
-                      ) : (
-                        <span className="badge-paid text-xs shadow-sm">₹{course.price}</span>
-                      )}
                     </div>
                   </div>
 
                   <div className="p-5 flex-1 flex flex-col justify-between">
                     <div>
                       <span className="text-[11px] font-semibold text-[#6C63F2] dark:text-[#8B82FF]">Std {course.standard}</span>
-                      <h3 className="font-display font-semibold text-base text-[#22243A] dark:text-[#F4F4FA] leading-snug mt-1 line-clamp-2 group-hover:text-[#6C63F2] dark:group-hover:text-[#8B82FF] transition-colors">
+                      <h3 className="font-display font-semibold text-base text-[#22243A] dark:text-[#F4F4FA] leading-snug mt-1 mb-2 line-clamp-2 group-hover:text-[#6C63F2] dark:group-hover:text-[#8B82FF] transition-colors">
                         {course.title}
                       </h3>
+                      {course.isFree ? (
+                        <span className="badge-free text-xs">FREE</span>
+                      ) : (
+                        <span className="badge-paid text-xs">₹{course.price}</span>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-[#6B6E8C] dark:text-[#A6A8C4] pt-4 mt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A]">

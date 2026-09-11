@@ -22,6 +22,7 @@ const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
 // Student pages
 const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelectionPage'));
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
+const MyCoursesPage = lazy(() => import('./pages/student/MyCoursesPage'));
 const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
 const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
@@ -134,6 +135,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/standard" element={
         <ProtectedRoute roles={['student']}>
           <StandardSelectionPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/my-courses" element={
+        <ProtectedRoute roles={['student']}>
+          <MyCoursesPage />
         </ProtectedRoute>
       } />
       <Route path="/student/progress" element={
