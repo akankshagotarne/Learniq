@@ -10,6 +10,7 @@ import Navbar from '../components/layout/Navbar';
 import api from '../services/api';
 import { Course, Lecture, Quiz } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { resolveFileUrl } from '../utils/fileUrl';
 import toast from 'react-hot-toast';
 
 interface Flashcard {
@@ -36,8 +37,17 @@ const LecturePlayerPage: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [videoProgress, setVideoProgress] = useState(25);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [durationSecs, setDurationSecs] = useState(0);
+  const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const formatTime = (secs: number) => {
+    if (!isFinite(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   // Quiz state
   const [quiz, setQuiz] = useState<any | null>(null);
@@ -105,6 +115,29 @@ const LecturePlayerPage: React.FC = () => {
   const currentIndex = lectures.findIndex(l => l._id === currentLecture?._id);
   const prevLecture = currentIndex > 0 ? lectures[currentIndex - 1] : null;
   const nextLecture = currentIndex >= 0 && currentIndex < lectures.length - 1 ? lectures[currentIndex + 1] : null;
+  const videoSrc = currentLecture?.videoUrl ? resolveFileUrl(currentLecture.videoUrl) : null;
+
+  // Reset the player whenever the student switches lectures (Next/Previous,
+  // or the sidebar playlist) so playback doesn't carry over.
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDurationSecs(0);
+    setVideoError(false);
+    setPlaybackSpeed(1);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+      videoRef.current.playbackRate = 1;
+    }
+  }, [currentLecture?._id]);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => setVideoError(true));
+    else v.pause();
+  };
 
   const handleMarkComplete = async () => {
     if (!currentLecture) return;
@@ -207,42 +240,74 @@ const LecturePlayerPage: React.FC = () => {
           <div className="lg:col-span-8 xl:col-span-9 flex flex-col bg-page border-r border-border-subtle">
             {/* Video Container - Focused player viewport */}
             <div className="relative aspect-video w-full bg-[#0D0E1A] flex items-center justify-center overflow-hidden group">
-              {/* Dynamic Video Player Simulation */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
+              {videoSrc ? (
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  className="w-full h-full object-contain bg-black"
+                  muted={isMuted}
+                  playsInline
+                  onClick={togglePlay}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={e => setDurationSecs(e.currentTarget.duration)}
+                  onError={() => setVideoError(true)}
+                />
+              ) : (
+                <div className="w-full h-full relative flex items-center justify-center bg-gradient-to-br from-[#121224] via-[#1A1A33] to-[#251E40]">
+                  <div className="text-center p-6 z-10">
+                    <div className="w-16 h-16 rounded-full bg-white/10 border border-white/15 flex items-center justify-center mx-auto mb-4">
+                      <Play className="w-6 h-6 text-white/50 ml-0.5" />
+                    </div>
+                    <h3 className="text-lg font-heading font-bold text-white mb-1">{currentLecture.title}</h3>
+                    <p className="text-xs text-white/60 font-medium">Video not uploaded for this lecture yet.</p>
+                  </div>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-primary/15 rounded-full blur-3xl pointer-events-none" />
+                </div>
+              )}
 
-              {/* Decorative Animated Learning Canvas / Video Screen */}
-              <div className="w-full h-full relative flex items-center justify-center bg-gradient-to-br from-[#121224] via-[#1A1A33] to-[#251E40]">
-                <div className="text-center p-6 z-10">
-                  <div className="w-20 h-20 rounded-full bg-brand-primary/30 border border-brand-primary/40 flex items-center justify-center mx-auto mb-4 backdrop-blur-md group-hover:scale-110 transition-transform shadow-2xl shadow-brand-primary/30 cursor-pointer"
-                       onClick={() => setIsPlaying(!isPlaying)}>
+              {videoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0D0E1A] text-center px-6">
+                  <div>
+                    <p className="text-white/90 text-sm font-semibold mb-1">This video couldn't be played.</p>
+                    <p className="text-white/50 text-xs">Please refresh, or try again in a moment.</p>
+                  </div>
+                </div>
+              )}
+
+              {videoSrc && !videoError && (
+                <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 pointer-events-none ${isPlaying ? 'opacity-0' : 'opacity-100 bg-black/25'}`}>
+                  <button
+                    onClick={togglePlay}
+                    className="pointer-events-auto w-20 h-20 rounded-full bg-brand-primary/30 border border-brand-primary/40 flex items-center justify-center backdrop-blur-md group-hover:scale-110 transition-transform shadow-2xl shadow-brand-primary/30 cursor-pointer"
+                  >
                     {isPlaying ? (
                       <Pause className="w-8 h-8 text-white" />
                     ) : (
                       <Play className="w-8 h-8 text-white ml-1 fill-white" />
                     )}
-                  </div>
-                  <h3 className="text-lg font-heading font-bold text-white mb-1">{currentLecture.title}</h3>
-                  <p className="text-xs text-white/60 font-medium">{course.subject} • Lecture {currentIndex + 1} of {lectures.length}</p>
+                  </button>
                 </div>
-
-                {/* Ambient Glow */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-primary/15 rounded-full blur-3xl pointer-events-none" />
-              </div>
+              )}
 
               {/* Player Controls Bar */}
               <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col gap-2">
                 {/* Progress Bar */}
-                <div 
+                <div
                   className="w-full h-1.5 bg-white/20 hover:h-2.5 rounded-full cursor-pointer transition-all relative"
                   onClick={(e) => {
+                    if (!videoRef.current || !durationSecs) return;
                     const rect = e.currentTarget.getBoundingClientRect();
-                    const pos = ((e.clientX - rect.left) / rect.width) * 100;
-                    setVideoProgress(Math.max(0, Math.min(100, pos)));
+                    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                    videoRef.current.currentTime = pos * durationSecs;
+                    setCurrentTime(pos * durationSecs);
                   }}
                 >
-                  <div 
-                    className="h-full bg-gradient-to-r from-brand-primary to-brand-secondary rounded-full relative" 
-                    style={{ width: `${videoProgress}%` }}
+                  <div
+                    className="h-full bg-gradient-to-r from-brand-primary to-brand-secondary rounded-full relative"
+                    style={{ width: `${durationSecs ? (currentTime / durationSecs) * 100 : 0}%` }}
                   >
                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow" />
                   </div>
@@ -251,40 +316,48 @@ const LecturePlayerPage: React.FC = () => {
                 {/* Bottom Row Controls */}
                 <div className="flex items-center justify-between text-white/90 text-xs">
                   <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => setIsPlaying(!isPlaying)} 
+                    <button
+                      onClick={togglePlay}
                       className="p-1.5 hover:text-white transition-colors"
                       title={isPlaying ? 'Pause' : 'Play'}
                     >
                       {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
                     </button>
-                    
-                    <button 
-                      onClick={() => setIsMuted(!isMuted)} 
+
+                    <button
+                      onClick={() => {
+                        if (!videoRef.current) return;
+                        videoRef.current.muted = !videoRef.current.muted;
+                        setIsMuted(videoRef.current.muted);
+                      }}
                       className="p-1.5 hover:text-white transition-colors"
                       title={isMuted ? 'Unmute' : 'Mute'}
                     >
                       {isMuted ? <VolumeX className="w-4 h-4 text-brand-secondary" /> : <Volume2 className="w-4 h-4" />}
                     </button>
 
-                    <span className="font-mono">12:45 / {currentLecture.videoDuration || '25:00'}</span>
+                    <span className="font-mono">{formatTime(currentTime)} / {formatTime(durationSecs || 0)}</span>
                   </div>
 
                   <div className="flex items-center gap-3">
                     {/* Speed Selector */}
-                    <button 
+                    <button
                       onClick={() => {
                         const speeds = [1, 1.25, 1.5, 2];
                         const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
                         setPlaybackSpeed(next);
+                        if (videoRef.current) videoRef.current.playbackRate = next;
                       }}
                       className="px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded-md font-semibold text-[11px] transition-colors"
                     >
                       {playbackSpeed}x
                     </button>
 
-                    <button 
-                      onClick={() => toast('Fullscreen mode')}
+                    <button
+                      onClick={() => {
+                        if (videoRef.current?.requestFullscreen) videoRef.current.requestFullscreen();
+                        else toast('Fullscreen is not supported here.');
+                      }}
                       className="p-1.5 hover:text-white transition-colors"
                       title="Fullscreen"
                     >
