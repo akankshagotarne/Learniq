@@ -46,7 +46,7 @@ const StudentDashboard: React.FC = () => {
     return (
       <div className="flex min-h-screen bg-[#F8F8FC] dark:bg-[#12121F]">
         <Sidebar />
-        <div className="flex-1 ml-16 md:ml-64 p-6 lg:p-8">
+        <div className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 p-6 lg:p-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-28 rounded-2xl" />)}
           </div>
@@ -88,7 +88,7 @@ const StudentDashboard: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#F8F8FC] dark:bg-[#12121F]">
       <Sidebar />
-      <main className="flex-1 ml-16 md:ml-64 transition-all duration-300">
+      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
         <div className="p-6 lg:p-8 max-w-7xl">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">

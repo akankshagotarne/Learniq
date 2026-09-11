@@ -238,7 +238,7 @@ const ExamBuilderPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-16 md:ml-64 transition-all duration-300">
+      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
         <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
           {/* Top Bar Navigation */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-subtle pb-4">

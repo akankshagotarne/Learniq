@@ -76,7 +76,7 @@ const Navbar: React.FC = () => {
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Search */}
             <form onSubmit={handleSearch} className="hidden md:flex items-center">
               <div className="relative">
@@ -181,7 +181,7 @@ const Navbar: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="hidden lg:flex items-center gap-2">
                 <Link to="/login" className="text-sm font-medium text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] px-3.5 py-2 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all">
                   Log In
                 </Link>
@@ -226,6 +226,25 @@ const Navbar: React.FC = () => {
                 <button type="submit" className="btn-primary py-2 px-3"><Search className="w-4 h-4" /></button>
               </form>
             </div>
+
+            {!user && (
+              <div className="flex items-center gap-2 pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">
+                <Link
+                  to="/login"
+                  className="flex-1 text-center text-sm font-medium text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] px-3.5 py-2.5 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+                  onClick={() => setIsMobileOpen(false)}
+                >
+                  Log In
+                </Link>
+                <Link
+                  to="/register"
+                  className="flex-1 btn-primary text-sm py-2.5 px-4 text-center shadow-sm"
+                  onClick={() => setIsMobileOpen(false)}
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>

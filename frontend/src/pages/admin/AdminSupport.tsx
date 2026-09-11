@@ -145,7 +145,7 @@ const AdminSupport: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-16 md:ml-64 transition-all duration-300">
+      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-6">
             <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Admin</p>
