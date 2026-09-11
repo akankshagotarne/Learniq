@@ -4,7 +4,7 @@ import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Users, X, Send, PhoneOff,
   Clock, CheckCircle, Crown, Monitor, MonitorOff, Square, Sparkles, Copy,
   BarChart2, HelpCircle, Bell, UserCheck, UserX, Maximize2, Minimize2, Loader,
-  Pin, PinOff,
+  Pin, PinOff, Smile,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getSocket } from '../../services/socket';
@@ -35,6 +35,9 @@ const toast = Object.assign(
 // ======================= TYPES =======================
 
 type LiveView = 'session' | 'quiz' | 'leaderboard';
+
+// Quick-reaction emoji set, same idea as Google Meet / Zoom's floating reactions.
+const REACTION_EMOJIS = ['👍', '❤️', '👏', '😂', '🎉', '🙌'];
 
 interface WaitingEntry {
   socketId: string;
@@ -1127,6 +1130,10 @@ const LiveSessionPage: React.FC = () => {
   // Video grid state
   const [pinnedSocketId, setPinnedSocketId] = useState<string | null>(null);
 
+  // Emoji reactions (Google Meet / Zoom style floating reactions)
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string; name: string }[]>([]);
+
   // Permission request (student receives from teacher)
   const [permRequest, setPermRequest] = useState<{ type: string; from: string; fromSocketId: string } | null>(null);
 
@@ -1264,7 +1271,7 @@ const LiveSessionPage: React.FC = () => {
       'webrtc-offer', 'webrtc-answer', 'webrtc-ice-candidate',
       'chat-message', 'chat-deleted',
       'quiz-started', 'quiz-result', 'leaderboard-update', 'quiz-ended',
-      'session-ended', 'removed-from-session', 'permission-request', 'permission-response', 'error',
+      'session-ended', 'removed-from-session', 'permission-request', 'permission-response', 'error', 'reaction-received',
       'waiting-for-approval', 'join-approved', 'join-denied', 'join-request', 'waiting-room-update',
       'mcq-raised', 'mcq-teacher-info', 'mcq-closed', 'mcq-results', 'mcq-answer-locked',
       'mcq-error', 'scoreboard-update',
@@ -1659,6 +1666,15 @@ const LiveSessionPage: React.FC = () => {
       navigate('/live-sessions');
     });
 
+    // Floating emoji reactions (Google Meet / Zoom style)
+    socket.on('reaction-received', ({ emoji, name }: { emoji: string; name: string }) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setFloatingReactions(prev => [...prev, { id, emoji, name }]);
+      setTimeout(() => {
+        setFloatingReactions(prev => prev.filter(r => r.id !== id));
+      }, 2800);
+    });
+
     // Permission request (Part 3)
     socket.on('permission-request', (req) => { setPermRequest(req); });
     socket.on('permission-response', ({ type, granted, from }: { type: string; granted: boolean; from?: string }) => {
@@ -1979,6 +1995,11 @@ const LiveSessionPage: React.FC = () => {
     toast(`Removed ${targetName} from the class`, { icon: '🚫' });
   };
 
+  const sendReaction = (emoji: string) => {
+    socket.emit('send-reaction', { sessionCode: code, emoji });
+    setShowReactionPicker(false);
+  };
+
   const sendChat = () => {
     if (!chatInput.trim()) return;
     socket.emit('send-chat', { sessionCode: code, message: chatInput.trim() });
@@ -2246,7 +2267,23 @@ const LiveSessionPage: React.FC = () => {
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
         {/* Stage */}
-        <div className="flex-1 min-h-0 p-2 sm:p-3 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 p-2 sm:p-3 flex flex-col overflow-hidden relative">
+
+          {/* Floating emoji reactions overlay */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-full z-20 overflow-hidden">
+            {floatingReactions.map((r, i) => (
+              <div
+                key={r.id}
+                className="absolute bottom-16 animate-float-reaction flex flex-col items-center"
+                style={{ left: `${15 + ((i * 37) % 70)}%` }}
+              >
+                <span className="text-4xl drop-shadow-md">{r.emoji}</span>
+                <span className="mt-0.5 text-[10px] font-semibold text-text-primary bg-surface/90 border border-border-subtle rounded-full px-2 py-0.5 shadow-xs whitespace-nowrap">
+                  {r.name}
+                </span>
+              </div>
+            ))}
+          </div>
 
           {view === 'session' && (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
@@ -2443,6 +2480,28 @@ const LiveSessionPage: React.FC = () => {
             className="p-3 bg-surface-alt text-text-muted border border-border-subtle hover:text-brand-primary hover:border-brand-primary/30 rounded-xl transition-all shadow-xs">
             <BarChart2 className="w-5 h-5" />
           </button>
+
+          {/* Reactions */}
+          <div className="relative">
+            {showReactionPicker && (
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-surface border border-border-subtle rounded-2xl shadow-soft-hover p-2 flex items-center gap-1 z-30 animate-fade-in">
+                {REACTION_EMOJIS.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => sendReaction(emoji)}
+                    className="w-10 h-10 flex items-center justify-center text-2xl rounded-xl hover:bg-surface-alt hover:scale-110 transition-all"
+                    title={`React with ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setShowReactionPicker(v => !v)} title="Send a reaction"
+              className={`p-3 rounded-xl transition-all shadow-xs ${showReactionPicker ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'bg-surface-alt text-text-muted border border-border-subtle hover:text-text-primary'}`}>
+              <Smile className="w-5 h-5" />
+            </button>
+          </div>
 
           {/* Teacher: Raise MCQ */}
           {isTeacher && (

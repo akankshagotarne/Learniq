@@ -23,6 +23,7 @@ const studentNav: NavItem[] = [
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
+  { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];
 
 const teacherNav: NavItem[] = [
@@ -31,6 +32,7 @@ const teacherNav: NavItem[] = [
   { label: 'Live Sessions', href: '/teacher/live', icon: Radio },
   { label: 'Students', href: '/teacher/students', icon: Users },
   { label: 'Exams', href: '/teacher/exams', icon: ClipboardList },
+  { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];
 
 const adminNav: NavItem[] = [
@@ -40,6 +42,7 @@ const adminNav: NavItem[] = [
   { label: 'Courses', href: '/admin/courses', icon: BookOpen },
   { label: 'Live Sessions', href: '/admin/live', icon: Radio },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
+  { label: 'Help & Support', href: '/admin/support', icon: HelpCircle },
   { label: 'About Page', href: '/about', icon: Building2 },
 ];
 

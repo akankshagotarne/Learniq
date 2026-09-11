@@ -365,3 +365,28 @@ export interface ExamQuestionReview {
   marks: number;
   explanation?: string;
 }
+
+export interface SupportMessage {
+  _id?: string;
+  sender: string;
+  senderName: string;
+  senderRole: 'student' | 'teacher' | 'admin';
+  message: string;
+  attachmentUrl?: string | null;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  _id: string;
+  user: string;
+  userName: string;
+  userRole: 'student' | 'teacher';
+  subject: string;
+  category: 'bug' | 'glitch' | 'live-class' | 'payment' | 'course-content' | 'account' | 'other';
+  status: 'open' | 'in-progress' | 'resolved';
+  messages: SupportMessage[];
+  lastMessageAt: string;
+  firstRespondedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -287,6 +287,21 @@ const setupSocket = (io) => {
       console.log(`[LiveSession] ${socket.user.name} removed ${removed.name || targetSocketId} from session ${sessionCode}`);
     });
 
+    // ── REACTIONS: floating emoji, like Google Meet / Zoom ────────────────
+    const ALLOWED_REACTIONS = new Set(['👍', '❤️', '👏', '😂', '🎉', '🙌']);
+    socket.on('send-reaction', ({ sessionCode, emoji }) => {
+      if (!socket.user) return;
+      const room = sessionRooms[sessionCode];
+      if (!room || !room.participants[socket.id]) return;
+      if (!ALLOWED_REACTIONS.has(emoji)) return;
+
+      io.to(`session:${sessionCode}`).emit('reaction-received', {
+        emoji,
+        name: socket.user.name,
+        socketId: socket.id,
+      });
+    });
+
     // ==================== WEBRTC SIGNALING ====================
 
     socket.on('webrtc-offer', ({ targetSocketId, offer }) => {

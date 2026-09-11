@@ -4,11 +4,16 @@ const { protect, authorize } = require('../middleware/auth');
 const userCtrl = require('../controllers/userController');
 const courseCtrl = require('../controllers/courseController');
 const { Company, Notification, Payment } = require('../models/index');
+const supportCtrl = require('../controllers/supportController');
 
 const adminAuth = [protect, authorize('admin')];
 
 // Stats
 router.get('/stats', ...adminAuth, userCtrl.getAdminStats);
+
+// Help & Support inbox
+router.get('/support/tickets', ...adminAuth, supportCtrl.getAllTicketsAdmin);
+router.patch('/support/tickets/:id/status', ...adminAuth, supportCtrl.updateTicketStatusAdmin);
 
 // Users
 router.get('/users', ...adminAuth, userCtrl.getAllUsers);

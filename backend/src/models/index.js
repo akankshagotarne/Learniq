@@ -28,7 +28,7 @@ const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   title: { type: String, required: true },
   message: { type: String, required: true },
-  type: { type: String, enum: ['info', 'success', 'warning', 'quiz', 'live', 'assignment', 'payment', 'announcement'], default: 'info' },
+  type: { type: String, enum: ['info', 'success', 'warning', 'quiz', 'live', 'assignment', 'payment', 'announcement', 'support'], default: 'info' },
   isRead: { type: Boolean, default: false },
   link: { type: String },
   relatedId: { type: mongoose.Schema.Types.ObjectId },

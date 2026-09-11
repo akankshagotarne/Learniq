@@ -17,6 +17,7 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const PaymentPage = lazy(() => import('./pages/PaymentPage'));
 const LecturePlayerPage = lazy(() => import('./pages/LecturePlayerPage'));
+const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
 
 // Student pages
 const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelectionPage'));
@@ -42,6 +43,7 @@ const AdminTeachers = lazy(() => import('./pages/admin/AdminTeachers'));
 const AdminCourses = lazy(() => import('./pages/admin/AdminCourses'));
 const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
+const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -150,6 +152,13 @@ const AppRoutes: React.FC = () => (
       } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
 
+      {/* Help & Support (student + teacher) */}
+      <Route path="/help-support" element={
+        <ProtectedRoute roles={['student', 'teacher']}>
+          <HelpSupportPage />
+        </ProtectedRoute>
+      } />
+
       {/* Teacher routes */}
       <Route path="/teacher" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
@@ -212,6 +221,16 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/courses" element={
         <ProtectedRoute roles={['admin']}>
           <AdminCourses />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/support" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminSupport />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/support/:id" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminSupport />
         </ProtectedRoute>
       } />
       <Route path="/admin/live" element={

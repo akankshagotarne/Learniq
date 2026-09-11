@@ -47,6 +47,13 @@ const uploadAssignment = multer({
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
 });
 
+// Screenshots/photos attached to Help & Support ticket messages
+const uploadSupportAttachment = multer({
+  storage: createStorage('support'),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+  fileFilter: fileFilter(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']),
+});
+
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -60,4 +67,4 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
-module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadAssignment, handleMulterError };
+module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadAssignment, uploadSupportAttachment, handleMulterError };
