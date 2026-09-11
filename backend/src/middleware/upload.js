@@ -54,6 +54,13 @@ const uploadSupportAttachment = multer({
   fileFilter: fileFilter(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']),
 });
 
+// Screenshots/photos attached to course doubt-chat messages (student <-> teacher)
+const uploadDoubtAttachment = multer({
+  storage: createStorage('doubts'),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+  fileFilter: fileFilter(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']),
+});
+
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -67,4 +74,4 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
-module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadAssignment, uploadSupportAttachment, handleMulterError };
+module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadAssignment, uploadSupportAttachment, uploadDoubtAttachment, handleMulterError };

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
-const { uploadVideo, uploadPDF, uploadAssignment } = require('../middleware/upload');
+const { uploadVideo, uploadPDF, uploadAssignment, uploadDoubtAttachment } = require('../middleware/upload');
+const doubtCtrl = require('../controllers/courseDoubtController');
 const courseCtrl = require('../controllers/courseController');
 const lectureCtrl = require('../controllers/lectureController');
 const quizCtrl = require('../controllers/quizController');
@@ -11,6 +12,11 @@ const liveCtrl = require('../controllers/liveSessionController');
 const userCtrl = require('../controllers/userController');
 
 const teacherAuth = [protect, authorize('teacher', 'admin')];
+
+// Student doubts (course Q&A)
+router.get('/doubts', ...teacherAuth, doubtCtrl.getTeacherDoubts);
+router.get('/doubts/:id', ...teacherAuth, doubtCtrl.getTeacherDoubtThread);
+router.post('/doubts/:id/reply', ...teacherAuth, uploadDoubtAttachment.single('attachment'), doubtCtrl.replyToDoubt);
 
 // Courses
 router.get('/courses', ...teacherAuth, courseCtrl.getTeacherCourses);

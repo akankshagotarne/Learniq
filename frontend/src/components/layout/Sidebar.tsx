@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
-  Layers, CreditCard, Settings, Building2, Radio
+  Layers, CreditCard, Settings, Building2, Radio, MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -31,6 +31,7 @@ const teacherNav: NavItem[] = [
   { label: 'My Courses', href: '/teacher/courses', icon: BookOpen },
   { label: 'Live Sessions', href: '/teacher/live', icon: Radio },
   { label: 'Students', href: '/teacher/students', icon: Users },
+  { label: 'Student Questions', href: '/teacher/doubts', icon: MessageCircle },
   { label: 'Exams', href: '/teacher/exams', icon: ClipboardList },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];

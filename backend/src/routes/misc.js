@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize, optionalAuth } = require('../middleware/auth');
 const liveCtrl = require('../controllers/liveSessionController');
-const { uploadAssignment, uploadSupportAttachment } = require('../middleware/upload');
+const { uploadAssignment, uploadSupportAttachment, uploadDoubtAttachment } = require('../middleware/upload');
 const assignmentCtrl = require('../controllers/assignmentController');
 const supportCtrl = require('../controllers/supportController');
+const doubtCtrl = require('../controllers/courseDoubtController');
 const paymentCtrl = require('../controllers/paymentController');
 const userCtrl = require('../controllers/userController');
 const { Notification } = require('../models/index');
@@ -15,6 +16,10 @@ router.get('/live-sessions/code/:code', optionalAuth, liveCtrl.getSession);
 router.post('/live-sessions', protect, authorize('teacher', 'admin'), liveCtrl.createSession);
 router.get('/live-sessions/:id', optionalAuth, liveCtrl.getSession);
 router.post('/live-sessions/:code/join', protect, liveCtrl.joinSession);
+
+// Course doubts: student asks the course's teacher a question (enrollment required)
+router.get('/courses/:courseId/doubts', protect, authorize('student'), doubtCtrl.getMyDoubtThread);
+router.post('/courses/:courseId/doubts', protect, authorize('student'), uploadDoubtAttachment.single('attachment'), doubtCtrl.sendDoubtMessage);
 
 // Help & Support tickets (student / teacher raise + reply; admin uses /admin/support/*)
 router.post('/support/tickets', protect, authorize('student', 'teacher'), uploadSupportAttachment.single('attachment'), supportCtrl.createTicket);

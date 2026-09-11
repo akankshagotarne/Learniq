@@ -390,3 +390,27 @@ export interface SupportTicket {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface DoubtMessage {
+  _id?: string;
+  sender: string;
+  senderName: string;
+  senderRole: 'student' | 'teacher';
+  message: string;
+  attachmentUrl?: string | null;
+  createdAt: string;
+}
+
+export interface CourseDoubtThread {
+  _id: string;
+  course: string | { _id: string; title: string; subject: string; standard: number };
+  student: string;
+  studentName: string;
+  teacher: string;
+  teacherName: string;
+  messages: DoubtMessage[];
+  lastMessageAt: string;
+  lastSenderRole: 'student' | 'teacher';
+  createdAt: string;
+  updatedAt: string;
+}

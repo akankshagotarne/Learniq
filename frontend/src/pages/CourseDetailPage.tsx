@@ -1,18 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Star, BookOpen, Clock, Users, Play, Lock, FileText, CheckCircle,
-  Award, ChevronDown, ChevronUp, Download, AlertCircle, Sparkles, Check
+  Award, ChevronDown, ChevronUp, Download, AlertCircle, Sparkles, Check,
+  MessageCircle, Paperclip, Send, X, Loader, Image as ImageIcon,
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
-import { Course, Lecture, Note } from '../types';
+import { Course, Lecture, Note, CourseDoubtThread } from '../types';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { loadRazorpayScript } from '../utils/razorpay';
 import { generateCourseNotes } from '../utils/generateCourseNotes';
 import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
+import { resolveFileUrl } from '../utils/fileUrl';
 
 const getSubjectBadge = (subject: string) => {
   const lower = subject.toLowerCase();
@@ -28,6 +30,160 @@ const getSubjectBadge = (subject: string) => {
   return 'bg-[#EDE9FE] text-[#6C63F2] dark:bg-[#2E2856] dark:text-[#B69CF2]';
 };
 
+// ======================= DOUBT CHAT MODAL =======================
+// Lets an enrolled student ask the course's teacher a question and keep
+// chatting in one thread, with optional screenshot/photo attachments.
+
+const DoubtChatModal: React.FC<{
+  courseId: string;
+  courseTitle: string;
+  teacherName: string;
+  onClose: () => void;
+}> = ({ courseId, courseTitle, teacherName, onClose }) => {
+  const { user } = useAuth();
+  const [thread, setThread] = useState<CourseDoubtThread | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [messageText, setMessageText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [sending, setSending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchThread = () => {
+    api.get(`/courses/${courseId}/doubts`)
+      .then(r => setThread(r.data.thread))
+      .catch(() => toast.error('Could not load your conversation.'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchThread(); }, [courseId]);
+
+  // Light polling while the chat is open, so the teacher's reply shows up
+  // without needing a manual refresh.
+  useEffect(() => {
+    const interval = setInterval(fetchThread, 15000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread?.messages.length]);
+
+  const send = async () => {
+    if (!messageText.trim() && !file) { toast.error('Write a question, or attach a screenshot.'); return; }
+
+    const fd = new FormData();
+    fd.append('message', messageText.trim());
+    if (file) fd.append('attachment', file);
+
+    setSending(true);
+    try {
+      const res = await api.post(`/courses/${courseId}/doubts`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setThread(res.data.thread);
+      setMessageText('');
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Could not send your question.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-surface border border-border-subtle rounded-2xl shadow-xl w-full max-w-lg h-[80vh] flex flex-col animate-slide-up">
+        {/* Header */}
+        <div className="p-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-text-primary font-bold text-base font-heading flex items-center gap-2">
+              <MessageCircle className="w-4.5 h-4.5 text-brand-primary flex-shrink-0" /> Ask {teacherName}
+            </h2>
+            <p className="text-text-muted text-xs mt-0.5 truncate">{courseTitle}</p>
+          </div>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 flex-shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-text-muted text-sm gap-2">
+              <Loader className="w-4 h-4 animate-spin" /> Loading...
+            </div>
+          ) : !thread || thread.messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center px-4">
+              <MessageCircle className="w-10 h-10 text-text-muted mb-3" />
+              <p className="text-text-secondary text-sm">No questions yet.</p>
+              <p className="text-text-muted text-xs mt-1">Ask {teacherName} anything about this course below.</p>
+            </div>
+          ) : (
+            thread.messages.map((m, i) => {
+              const isMine = m.sender === user?._id;
+              return (
+                <div key={m._id || i} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${isMine ? 'bg-brand-primary text-white' : 'bg-surface-alt text-text-primary'}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`text-[11px] font-semibold ${isMine ? 'text-white/90' : 'text-text-secondary'}`}>
+                        {isMine ? 'You' : m.senderName}
+                      </span>
+                    </div>
+                    {m.message && <p className="text-sm whitespace-pre-wrap break-words">{m.message}</p>}
+                    {m.attachmentUrl && (
+                      <a href={resolveFileUrl(m.attachmentUrl)} target="_blank" rel="noopener noreferrer" className="block mt-2">
+                        <img src={resolveFileUrl(m.attachmentUrl)} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-white/20" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={threadEndRef} />
+        </div>
+
+        {/* Composer */}
+        <div className="p-3 border-t border-border-subtle flex-shrink-0">
+          {file && (
+            <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 bg-surface-alt rounded-lg text-xs text-text-secondary w-fit">
+              <ImageIcon className="w-3.5 h-3.5" /> {file.name}
+              <button onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                <X className="w-3.5 h-3.5 text-text-muted hover:text-[#E1447A]" />
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach a screenshot"
+              className="p-2.5 bg-surface-alt text-text-muted hover:text-brand-primary border border-border-subtle rounded-xl transition-all flex-shrink-0"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+            <input
+              value={messageText}
+              onChange={e => setMessageText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') send(); }}
+              placeholder="Type your question..."
+              className="flex-1 bg-surface-alt border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+            />
+            <button
+              onClick={send}
+              disabled={sending}
+              className="p-2.5 bg-brand-primary hover:bg-brand-primary-hover text-white rounded-xl transition-all shadow-xs disabled:opacity-60 flex-shrink-0"
+            >
+              {sending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CourseDetailPage: React.FC = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -38,6 +194,7 @@ const CourseDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [showAllLectures, setShowAllLectures] = useState(false);
+  const [showDoubtChat, setShowDoubtChat] = useState(false);
 
   useEffect(() => {
     api.get(`/courses/${id}`).then(r => {
@@ -339,6 +496,15 @@ const CourseDetailPage: React.FC = () => {
                           <span key={s} className="badge bg-surface-alt border border-border-subtle text-text-secondary text-xs font-medium">Std {s}</span>
                         ))}
                       </div>
+
+                      {isEnrolled && user?.role === 'student' && (
+                        <button
+                          onClick={() => setShowDoubtChat(true)}
+                          className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/25 rounded-xl text-xs font-semibold transition-all"
+                        >
+                          <MessageCircle className="w-4 h-4" /> Ask {teacher.name} a Question
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -498,6 +664,15 @@ const CourseDetailPage: React.FC = () => {
         </div>
       </div>
       <Footer />
+
+      {showDoubtChat && course && teacher && (
+        <DoubtChatModal
+          courseId={course._id}
+          courseTitle={course.title}
+          teacherName={teacher.name}
+          onClose={() => setShowDoubtChat(false)}
+        />
+      )}
     </div>
   );
 };
