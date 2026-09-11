@@ -241,7 +241,7 @@ const CourseDetailPage: React.FC = () => {
                   <img
                     src={getCourseThumbnail(course)}
                     alt={course.title}
-                    className="w-full aspect-video object-cover"
+                    className="w-full aspect-[4/3] object-cover object-top"
                     onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                   />
                   <div className="p-6">
@@ -301,7 +301,7 @@ const CourseDetailPage: React.FC = () => {
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>Assigned Subject Faculty</span>
                     </span>
-                    <span className="text-xs text-text-muted font-medium">Maharashtra State Board Mentor</span>
+                    <span className="text-xs text-text-muted font-medium">Verified Olympiad Mentor</span>
                   </div>
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">

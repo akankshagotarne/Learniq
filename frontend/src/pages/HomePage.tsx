@@ -260,13 +260,14 @@ const HomePage: React.FC = () => {
                   to={`/courses/${course._id}`}
                   className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(34,36,58,0.06)] hover:shadow-[0_8px_28px_rgba(34,36,58,0.10)] hover:-translate-y-1 transition-all duration-200 group flex flex-col"
                 >
-                  <div className="aspect-video w-full overflow-hidden relative bg-[#F1F1FA] dark:bg-[#242540]">
+                  <div className="aspect-[4/3] w-full overflow-hidden relative bg-[#F1F1FA] dark:bg-[#242540]">
                     <img
                       src={getCourseThumbnail(course)}
                       alt={course.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
                       onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                     />
+                    <div className="absolute top-0 inset-x-0 h-14 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
                     <div className="absolute top-3 left-3">
                       <span className={`badge ${getSubjectBadgeClass(course.subject)} text-xs shadow-sm`}>
                         {course.subject}

@@ -203,10 +203,11 @@ const CoursesPage: React.FC = () => {
                         <img
                           src={getCourseThumbnail(course)}
                           alt={course.title}
-                          className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500"
+                          className="w-full aspect-[4/3] object-cover object-top group-hover:scale-105 transition-transform duration-500"
                           onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(course); }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                        <div className="absolute top-0 inset-x-0 h-14 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
                         <div className="absolute top-3 left-3 flex gap-2">
                           {course.isFree ? <span className="badge-free">FREE</span> : <span className="badge-paid">₹{course.price}</span>}
                           <span className="badge bg-white/90 text-[#22243A] backdrop-blur-sm border border-white/40 shadow-xs font-semibold">

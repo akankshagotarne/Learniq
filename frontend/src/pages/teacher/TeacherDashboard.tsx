@@ -101,7 +101,7 @@ const TeacherDashboard: React.FC = () => {
                       <img
                         src={getCourseThumbnail(c)}
                         alt={c.title}
-                        className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                        className="w-14 h-14 rounded-xl object-cover object-top flex-shrink-0"
                         onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(c); }}
                       />
                       <div className="flex-1 min-w-0">

@@ -333,12 +333,14 @@
 
   .badge-paid {
     background-color: #FFE4EC;
-    color: #E1447A;
+    color: #14151F;
+    font-weight: 700;
   }
 
   .dark .badge-paid {
-    background-color: rgba(255, 143, 163, 0.2);
-    color: #FF8FA3;
+    background-color: rgba(255, 143, 163, 0.25);
+    color: #FFF5F7;
+    font-weight: 700;
   }
 
   .badge-live {

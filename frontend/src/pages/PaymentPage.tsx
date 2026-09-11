@@ -436,7 +436,7 @@ const PaymentPage: React.FC = () => {
                     <img
                       src={getCourseThumbnail(itemDetails)}
                       alt={itemDetails.title}
-                      className="w-20 h-14 rounded-lg object-cover flex-shrink-0"
+                      className="w-20 h-14 rounded-lg object-cover object-top flex-shrink-0"
                       onError={e => { (e.target as HTMLImageElement).src = getCourseThumbnail(itemDetails); }}
                     />
                     <div className="flex-1 min-w-0">
