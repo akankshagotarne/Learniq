@@ -1,7 +1,14 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { Resend } = require('resend');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
+
+// Resend is only initialised when an API key is configured, so the server
+// still boots (and forgotPassword still works in a dev fallback mode) before
+// RESEND_API_KEY is set up.
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'LearnIQ <onboarding@resend.dev>';
 
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
 
@@ -172,14 +179,45 @@ const forgotPassword = async (req, res) => {
     user.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 min
     await user.save({ validateBeforeSave: false });
 
-    // In production: send email with reset link
-    // For demo: return the token directly
     const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+
+    if (!resend) {
+      // RESEND_API_KEY not configured yet - fall back to returning the link
+      // directly so the flow still works during local setup.
+      console.warn('RESEND_API_KEY is not set - returning reset link in the API response instead of emailing it.');
+      return res.json({
+        success: true,
+        message: 'Password reset link generated. (Configure RESEND_API_KEY to send emails instead.)',
+        resetUrl, // Dev fallback only
+      });
+    }
+
+    try {
+      await resend.emails.send({
+        from: RESEND_FROM,
+        to: user.email,
+        subject: 'Reset your LearnIQ password',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #1a1a2e;">Reset your password</h2>
+            <p>Hi ${user.name || 'there'},</p>
+            <p>We received a request to reset your LearnIQ password. Click the button below to choose a new one. This link expires in 15 minutes.</p>
+            <p style="margin: 24px 0;">
+              <a href="${resetUrl}" style="background: #8B03ED; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Reset Password</a>
+            </p>
+            <p>If you didn't request this, you can safely ignore this email.</p>
+            <p style="color: #888; font-size: 12px;">If the button doesn't work, copy and paste this link: ${resetUrl}</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('Resend email send failed:', emailError);
+      return res.status(500).json({ success: false, message: 'Could not send the reset email. Please try again later.' });
+    }
 
     res.json({
       success: true,
-      message: 'Password reset link generated. (Configure email provider to send emails.)',
-      resetUrl, // Demo only - remove in production
+      message: 'Password reset link sent to your email.',
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });

@@ -10,6 +10,8 @@ import RegisterPage from './pages/RegisterPage';
 
 // Lazy loaded pages
 const HomePage = lazy(() => import('./pages/HomePage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const CoursesPage = lazy(() => import('./pages/CoursesPage'));
 const CourseDetailPage = lazy(() => import('./pages/CourseDetailPage'));
 const LiveSessionsListPage = lazy(() => import('./pages/LiveSessionsListPage'));
@@ -103,6 +105,8 @@ const AppRoutes: React.FC = () => (
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
 
       {/* Payment & Checkout route */}
