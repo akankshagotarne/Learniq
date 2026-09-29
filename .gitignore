@@ -46,3 +46,7 @@ Thumbs.db
 
 # Local DB backups from one-time seed/wipe scripts
 backend/backups/
+
+# Assistant / AI tool outputs
+Claude outputs/
+

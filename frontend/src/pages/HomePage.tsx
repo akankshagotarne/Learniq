@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+import OlympiadShowcase from '../components/olympiad/promo/OlympiadShowcase';
 import api from '../services/api';
 import { Course, LiveSession } from '../types';
 import { getCourseThumbnail } from '../utils/courseImage';
@@ -199,6 +200,9 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* All India Olympiad Test 2026 — campaign showcase */}
+      <OlympiadShowcase />
 
       {/* Standards Selection Section */}
       <section className="section bg-white dark:bg-[#1B1C2E] border-t border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
