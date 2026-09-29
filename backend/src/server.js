@@ -154,9 +154,9 @@ const startServer = async () => {
   try {
     await connectDB();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
-    // Make sure the Standard 10 Olympiad exam exists (no-op when it is already there)
-    require('./seed/seedOlympiad10')({ ifMissing: true })
-      .then((exam) => console.log(`🏆 Olympiad exam ready: ${exam.title}`))
+    // Make sure the Standard 9 and Standard 10 Olympiad exams exist (no-op when they are already there)
+    require('./seed/seedOlympiadAll')({ ifMissing: true })
+      .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
       .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

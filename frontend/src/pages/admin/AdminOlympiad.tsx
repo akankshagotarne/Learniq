@@ -48,10 +48,10 @@ const AdminOlympiad: React.FC = () => {
     setSeeding(true);
     try {
       await olympiadApi.adminSeed();
-      toast.success('Olympiad exam created.');
+      toast.success('Olympiad exams created.');
       await loadExams();
     } catch (err: any) {
-      toast.error(olympiadErrorMessage(err, 'Could not create the Olympiad exam.'));
+      toast.error(olympiadErrorMessage(err, 'Could not create the Olympiad exams.'));
     } finally {
       setSeeding(false);
     }
@@ -104,13 +104,13 @@ const AdminOlympiad: React.FC = () => {
             <div className="card-soft h-40 rounded-2xl animate-pulse bg-surface-alt" />
           ) : !exam ? (
             <div className="card-soft p-10 text-center text-sm text-text-secondary">
-              <p className="mb-4">No Olympiad exam exists in the database yet.</p>
+              <p className="mb-4">No Olympiad exams exist in the database yet.</p>
               <button
                 onClick={() => void createExam()}
                 disabled={seeding}
                 className="btn-primary text-xs py-2.5 px-5 rounded-xl font-bold disabled:opacity-60"
               >
-                {seeding ? 'Creating…' : 'Create Standard 10 Olympiad Exam'}
+                {seeding ? 'Creating…' : 'Create Olympiad Exams (Std 9 & 10)'}
               </button>
             </div>
           ) : (

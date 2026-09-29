@@ -832,18 +832,22 @@ const adminListExams = handler(async (req, res) => {
   res.json({ success: true, exams: out });
 });
 
-// POST /api/olympiad/admin/seed — creates / refreshes the Standard 10 exam and its 60 questions (idempotent)
+// POST /api/olympiad/admin/seed — creates / refreshes the Standard 9 and Standard 10 exams and their questions (idempotent)
 const adminSeedExam = handler(async (req, res) => {
-  const seedOlympiad10 = require('../seed/seedOlympiad10');
-  try {
-    const exam = await seedOlympiad10({});
-    res.json({ success: true, message: 'Olympiad exam is ready.', examId: exam._id });
-  } catch (err) {
-    if (/refusing to modify/i.test(err.message)) {
-      throw new ApiError(409, 'Students have already attempted this exam, so its questions cannot be changed.', 'HAS_ATTEMPTS');
+  const seedOlympiadAll = require('../seed/seedOlympiadAll');
+  const { exams, errors } = await seedOlympiadAll({});
+  if (exams.length === 0 && errors.length > 0) {
+    if (errors.every((e) => /refusing to modify/i.test(e.err.message))) {
+      throw new ApiError(409, 'Students have already attempted these exams, so their questions cannot be changed.', 'HAS_ATTEMPTS');
     }
-    throw err;
+    throw errors[0].err;
   }
+  res.json({
+    success: true,
+    message: 'Olympiad exams are ready.',
+    exams: exams.map((e) => ({ _id: e._id, title: e.title, standard: e.standard })),
+    skipped: errors.map((e) => e.label),
+  });
 });
 
 // GET /api/olympiad/admin/exams/:id/attempts
