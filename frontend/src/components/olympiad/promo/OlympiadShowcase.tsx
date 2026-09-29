@@ -12,7 +12,7 @@ import './olympiadShowcase.css';
  * Landing-page campaign section for the LearnIQ All India Olympiad Test 2026.
  *
  * No animation library: deck positions are CSS transitions keyed off `data-pos`;
- * pointer effects (tilt, spotlight, cursor dot, info-card depth) are CSS custom
+ * pointer effects (tilt, spotlight, info-card depth) are CSS custom
  * properties written straight to the section element from one requestAnimationFrame
  * loop that only runs while something is still settling. Autoplay is driven by the
  * progress bar's own CSS animation (`animationend` → next), so pausing is just
@@ -23,10 +23,11 @@ const TESTS = OLYMPIAD_PROMO_TESTS;
 const N = TESTS.length;
 const MAX_TILT = 6; // degrees
 
-type Motion = { rx: number; ry: number; h: number; sx: number; sy: number; ox: number; oy: number; hx: number; hy: number; oo: number };
-const ZERO: Motion = { rx: 0, ry: 0, h: 0, sx: 0, sy: 0, ox: 0, oy: 0, hx: 0, hy: 0, oo: 0 };
-// smoothing per property at 60 fps (higher = snappier); scaled by real frame time below
-const EASE: Motion = { rx: 0.12, ry: 0.12, h: 0.12, sx: 0.2, sy: 0.2, ox: 0.24, oy: 0.24, hx: 0.08, hy: 0.08, oo: 0.12 };
+type Motion = { rx: number; ry: number; h: number; sx: number; sy: number };
+const ZERO: Motion = { rx: 0, ry: 0, h: 0, sx: 0, sy: 0 };
+// smoothing per property at 60 fps (higher = snappier); scaled by real frame time below.
+// Tuned for low latency: the tilt reaches ~90% of its target in ~4 frames, the spotlight in ~2.
+const EASE: Motion = { rx: 0.42, ry: 0.42, h: 0.34, sx: 0.7, sy: 0.7 };
 const KEYS = Object.keys(ZERO) as (keyof Motion)[];
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -87,7 +88,6 @@ const OlympiadShowcase: React.FC = () => {
 
   const sectionRef = useRef<HTMLElement>(null);
   const deckRef = useRef<HTMLDivElement>(null);
-  const rectRef = useRef<DOMRect | null>(null);
 
   /* ---------- pointer-driven motion (one rAF loop, stops when settled) ---------- */
   const target = useRef<Motion>({ ...ZERO });
@@ -119,11 +119,6 @@ const OlympiadShowcase: React.FC = () => {
       s.setProperty('--h', c.h.toFixed(3));
       s.setProperty('--sx', c.sx.toFixed(1));
       s.setProperty('--sy', c.sy.toFixed(1));
-      s.setProperty('--ox', c.ox.toFixed(1));
-      s.setProperty('--oy', c.oy.toFixed(1));
-      s.setProperty('--hx', c.hx.toFixed(1));
-      s.setProperty('--hy', c.hy.toFixed(1));
-      s.setProperty('--oo', c.oo.toFixed(3));
     }
     frame.current = moving ? requestAnimationFrame(tick) : null;
   }, []);
@@ -170,33 +165,6 @@ const OlympiadShowcase: React.FC = () => {
     kick();
   };
 
-  const onSectionEnter = () => {
-    if (pointerFx) rectRef.current = sectionRef.current?.getBoundingClientRect() ?? null;
-  };
-  const onSectionMove = (e: React.PointerEvent<HTMLElement>) => {
-    if (!pointerFx || e.pointerType !== 'mouse') return;
-    const r = rectRef.current ?? (rectRef.current = sectionRef.current?.getBoundingClientRect() ?? null);
-    if (!r) return;
-    const t = target.current;
-    const c = current.current;
-    t.ox = e.clientX - r.left;
-    t.oy = e.clientY - r.top;
-    t.hx = t.ox;
-    t.hy = t.oy;
-    if (c.oo < 0.02) { // appear where the cursor is instead of flying in
-      c.ox = c.hx = t.ox;
-      c.oy = c.hy = t.oy;
-    }
-    // step aside over posters and controls — they have their own hover feedback
-    const overUi = !!(e.target as Element | null)?.closest?.('a, button, .oly-slide');
-    t.oo = overUi ? 0 : 1;
-    kick();
-  };
-  const onSectionLeave = () => {
-    target.current.oo = 0;
-    kick();
-  };
-
   /* ---------- visibility: reveal once, pause autoplay off-screen, scroll parallax ---------- */
   useEffect(() => {
     const el = sectionRef.current;
@@ -212,7 +180,7 @@ const OlympiadShowcase: React.FC = () => {
         setRevealed(true);
         revealIO.disconnect();
       }
-    }, { rootMargin: '0px 0px -12% 0px', threshold: 0 });
+    }, { rootMargin: '0px 0px -4% 0px', threshold: 0 });
     viewIO.observe(el);
     revealIO.observe(el);
     return () => { viewIO.disconnect(); revealIO.disconnect(); };
@@ -225,7 +193,6 @@ const OlympiadShowcase: React.FC = () => {
     const update = () => {
       queued = false;
       const r = el.getBoundingClientRect();
-      rectRef.current = r;
       const vh = window.innerHeight || 1;
       const p = clamp((r.top + r.height / 2 - vh / 2) / (vh / 2 + r.height / 2), -1, 1);
       el.style.setProperty('--p', p.toFixed(4));
@@ -351,9 +318,6 @@ const OlympiadShowcase: React.FC = () => {
       aria-labelledby="olympiad-2026-heading"
       className={`oly-section ${revealed ? 'oly-in' : ''}`}
       style={vars({ '--oly-accent': t.accent })}
-      onPointerEnter={onSectionEnter}
-      onPointerMove={onSectionMove}
-      onPointerLeave={onSectionLeave}
       onFocus={e => { if ((e.target as HTMLElement).matches?.(':focus-visible')) setKeyboardFocus(true); }}
       onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setKeyboardFocus(false); }}
     >
@@ -366,12 +330,6 @@ const OlympiadShowcase: React.FC = () => {
         <div className="oly-blob oly-blob--pink" style={vars({ '--depth': '40px' })} />
         <div className="oly-watermark hidden md:block">2026</div>
       </div>
-      {pointerFx && (
-        <>
-          <div className="oly-halo" aria-hidden="true" />
-          <div className="oly-orb" aria-hidden="true" />
-        </>
-      )}
 
       <div className="page-container relative z-10 pt-10 pb-16 sm:pt-16 sm:pb-20 lg:pt-16 lg:pb-20">
         <div className="grid lg:grid-cols-12 gap-x-10 xl:gap-x-14 gap-y-9 lg:gap-y-7">
