@@ -824,7 +824,7 @@ const examStats = async (exam) => {
 
 // GET /api/olympiad/admin/exams
 const adminListExams = handler(async (req, res) => {
-  const exams = await OlympiadExam.find().sort({ startDate: -1 });
+  const exams = await OlympiadExam.find().sort({ standard: 1 });
   const out = [];
   for (const exam of exams) {
     out.push({ ...examPublic(exam), window: windowState(exam), stats: await examStats(exam) });

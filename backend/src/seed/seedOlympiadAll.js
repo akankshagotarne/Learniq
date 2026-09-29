@@ -1,22 +1,22 @@
 /**
- * Seeds every Olympiad exam (Standard 9 and Standard 10). Idempotent.
+ * Seeds every Olympiad exam (Standards 4–10). Idempotent.
  * Usage: npm run seed:olympiad   (from /backend)
  */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const connectDB = require('../config/db');
-const seedOlympiad10 = require('./seedOlympiad10');
-const seedOlympiad9 = require('./seedOlympiad9');
+const { seedOlympiadExam } = require('./seedOlympiadExam');
+const { STANDARDS, configFor } = require('./olympiadConfigs');
 
-/** Runs each seeder independently so one failure never blocks the other. Returns the exams that are ready. */
+/** Runs each seeder independently so one failure never blocks the others. Returns the exams that are ready. */
 async function seedOlympiadAll({ standalone = false, ifMissing = false } = {}) {
   if (standalone) await connectDB();
-  const seeders = [['Standard 10', seedOlympiad10], ['Standard 9', seedOlympiad9]];
   const exams = [];
   const errors = [];
-  for (const [label, fn] of seeders) {
+  for (const standard of [...STANDARDS].reverse()) {
+    const label = `Standard ${standard}`;
     try {
-      exams.push(await fn({ ifMissing }));
+      exams.push(await seedOlympiadExam(configFor(standard), { ifMissing }));
     } catch (err) {
       errors.push({ label, err });
       console.error(`⚠️  Olympiad ${label} seed problem: ${err.message}`);

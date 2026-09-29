@@ -1,22 +1,14 @@
 /**
- * Seeds "LearnIQ – All India Olympiad Examination 2026" for Standard 9 (60 questions from the 9th standard paper).
+ * Seeds the Standard 9 Olympiad exam (60 questions).
  * Safe to re-run. Usage: npm run seed:olympiad9   (from /backend)
  * Config: OLYMPIAD_9_DURATION_MINUTES (default 60) — the paper does not state a duration.
  */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const { seedOlympiadExam } = require('./seedOlympiadExam');
+const { configFor } = require('./olympiadConfigs');
 
-const config = {
-  slug: 'learniq-all-india-olympiad-2026-std-9',
-  standard: 9,
-  title: 'LearnIQ – All India Olympiad Examination 2026',
-  description:
-    'Standard 9 Olympiad covering Mathematics, Science, English, Social Science / Reasoning and Achievers (HOTS) questions. Exam by Nikhil Sir.',
-  durationEnv: 'OLYMPIAD_9_DURATION_MINUTES',
-  fee: 20,
-  data: require('../data/olympiad9Questions'),
-};
+const config = configFor(9);
 
 const seedOlympiad9 = (opts = {}) => seedOlympiadExam(config, opts);
 

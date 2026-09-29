@@ -121,7 +121,7 @@ const AdminOlympiad: React.FC = () => {
                   onChange={e => setSelectedId(e.target.value)}
                   className="mb-4 px-3 py-2 bg-surface border border-border-subtle rounded-xl text-sm text-text-primary"
                 >
-                  {exams.map(e => <option key={e._id} value={e._id}>{e.title}</option>)}
+                  {exams.map(e => <option key={e._id} value={e._id}>Standard {e.standard} — {e.title}</option>)}
                 </select>
               )}
 
