@@ -797,3 +797,45 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
   assert.equal(a.startDate.toISOString(), '2026-09-28T18:30:00.000Z');
   assert.equal(a.endDate.toISOString(), '2026-10-05T18:29:59.999Z');
 });
+
+// ── 10. auto-seed on server start (fresh / production database) ─────────
+test('auto-seed creates the exam on an empty database and students then see it', { skip: USE_REAL }, async () => {
+  await M.OlympiadAttempt.deleteMany({});
+  await M.OlympiadPayment.deleteMany({});
+  await M.OlympiadQuestion.deleteMany({});
+  await M.OlympiadExam.deleteMany({});
+
+  const student = await mkUser({ standard: 10 });
+  const before = await api('GET', '/exams', { token: student.token });
+  assert.equal(before.status, 200);
+  assert.deepEqual(before.body.exams, []); // exactly the "No exams found" situation
+
+  const seed = require('../seed/seedOlympiad10');
+  const a = await seed({ ifMissing: true });
+  const b = await seed({ ifMissing: true });
+  assert.equal(String(a._id), String(b._id), 'second start-up must not create a duplicate');
+  assert.equal(await M.OlympiadExam.countDocuments({}), 1);
+  assert.equal(await M.OlympiadQuestion.countDocuments({ exam: a._id }), 60);
+
+  const after = await api('GET', '/exams', { token: student.token });
+  assert.equal(after.body.exams.length, 1);
+  assert.equal(after.body.exams[0].title, 'LearnIQ – All India Olympiad Examination 2026');
+  assert.equal(after.body.exams[0].fee, 20);
+  assert.equal(after.body.exams[0].state, 'pay');
+  assertNoAnswerKeyLeak(after, 'listing after auto-seed');
+
+  const std9 = await mkUser({ standard: 9 });
+  assert.deepEqual((await api('GET', '/exams', { token: std9.token })).body.exams, []);
+});
+
+test('admin seed endpoint: admin can create/refresh the exam, students cannot', { skip: USE_REAL }, async () => {
+  const student = await mkUser({ standard: 10 });
+  const forbidden = await api('POST', '/admin/seed', { token: student.token });
+  assert.equal(forbidden.status, 403);
+
+  const admin = await mkUser({ role: 'admin' });
+  const ok = await api('POST', '/admin/seed', { token: admin.token });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(await M.OlympiadExam.countDocuments({}), 1);
+  assert.equal(await M.OlympiadQuestion.countDocuments({}), 60);
+});

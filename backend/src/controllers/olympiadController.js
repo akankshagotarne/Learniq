@@ -832,6 +832,20 @@ const adminListExams = handler(async (req, res) => {
   res.json({ success: true, exams: out });
 });
 
+// POST /api/olympiad/admin/seed — creates / refreshes the Standard 10 exam and its 60 questions (idempotent)
+const adminSeedExam = handler(async (req, res) => {
+  const seedOlympiad10 = require('../seed/seedOlympiad10');
+  try {
+    const exam = await seedOlympiad10({});
+    res.json({ success: true, message: 'Olympiad exam is ready.', examId: exam._id });
+  } catch (err) {
+    if (/refusing to modify/i.test(err.message)) {
+      throw new ApiError(409, 'Students have already attempted this exam, so its questions cannot be changed.', 'HAS_ATTEMPTS');
+    }
+    throw err;
+  }
+});
+
 // GET /api/olympiad/admin/exams/:id/attempts
 const adminAttempts = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
@@ -914,7 +928,7 @@ module.exports = {
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
   startExam, getAttempt, saveAnswers, submitExam,
   getResult, getReview,
-  adminListExams, adminAttempts, adminPayments,
+  adminListExams, adminAttempts, adminPayments, adminSeedExam,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // exported for tests
   _internals: { evaluate, windowState, finalizeAttempt },

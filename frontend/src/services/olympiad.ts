@@ -56,6 +56,7 @@ export const olympiadApi = {
 
   // admin
   adminExams: async (): Promise<(OlympiadExam & { stats: OlympiadAdminStats })[]> => (await api.get('/olympiad/admin/exams')).data.exams || [],
+  adminSeed: async () => (await api.post('/olympiad/admin/seed')).data,
   adminAttempts: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/attempts`)).data.attempts || [],
   adminPayments: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/payments`)).data.payments || [],
 };

@@ -27,6 +27,7 @@ const AdminOlympiad: React.FC = () => {
   const [tab, setTab] = useState<'results' | 'payments'>('results');
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   const loadExams = useCallback(async () => {
     setLoading(true);
@@ -42,6 +43,19 @@ const AdminOlympiad: React.FC = () => {
   }, []);
 
   useEffect(() => { void loadExams(); }, [loadExams]);
+
+  const createExam = async () => {
+    setSeeding(true);
+    try {
+      await olympiadApi.adminSeed();
+      toast.success('Olympiad exam created.');
+      await loadExams();
+    } catch (err: any) {
+      toast.error(olympiadErrorMessage(err, 'Could not create the Olympiad exam.'));
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedId) return;
@@ -90,7 +104,14 @@ const AdminOlympiad: React.FC = () => {
             <div className="card-soft h-40 rounded-2xl animate-pulse bg-surface-alt" />
           ) : !exam ? (
             <div className="card-soft p-10 text-center text-sm text-text-secondary">
-              No Olympiad exam found. Run <code className="px-1.5 py-0.5 rounded bg-surface-alt">npm run seed:olympiad</code> in the backend to create it.
+              <p className="mb-4">No Olympiad exam exists in the database yet.</p>
+              <button
+                onClick={() => void createExam()}
+                disabled={seeding}
+                className="btn-primary text-xs py-2.5 px-5 rounded-xl font-bold disabled:opacity-60"
+              >
+                {seeding ? 'Creating…' : 'Create Standard 10 Olympiad Exam'}
+              </button>
             </div>
           ) : (
             <>

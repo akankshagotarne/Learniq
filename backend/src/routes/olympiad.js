@@ -21,6 +21,7 @@ router.post('/payments/webhook', ctrl.razorpayWebhook);
 
 // Admin
 router.get('/admin/exams', ...adminAuth, ctrl.adminListExams);
+router.post('/admin/seed', ...adminAuth, perUser(5), ctrl.adminSeedExam);
 router.get('/admin/exams/:id/attempts', ...adminAuth, ctrl.adminAttempts);
 router.get('/admin/exams/:id/payments', ...adminAuth, ctrl.adminPayments);
 

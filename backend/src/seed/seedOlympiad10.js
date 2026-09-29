@@ -32,13 +32,25 @@ const instructions = [
   'Your result and question-wise review are available immediately after submission.',
 ];
 
-async function seedOlympiad10({ standalone = false } = {}) {
+/**
+ * @param {object}  opts
+ * @param {boolean} opts.standalone  connect to MongoDB first (CLI usage)
+ * @param {boolean} opts.ifMissing   only create the exam when it is not there yet (used on server start-up,
+ *                                   so a fresh / production database gets the exam without running any command)
+ */
+async function seedOlympiad10({ standalone = false, ifMissing = false } = {}) {
   if (standalone) await connectDB();
 
   const durationMinutes = Number(process.env.OLYMPIAD_10_DURATION_MINUTES) || 60;
   const totalMarks = questions.reduce((s, q) => s + q.marks, 0);
 
   const existing = await OlympiadExam.findOne({ slug: SLUG });
+  if (existing && ifMissing) {
+    const have = await OlympiadQuestion.countDocuments({ exam: existing._id });
+    if (have === questions.length) return existing; // already seeded — leave it (and any admin edits) alone
+    const attempted = await OlympiadAttempt.countDocuments({ exam: existing._id });
+    if (attempted > 0) return existing; // never touch questions under a live attempt
+  }
   if (existing) {
     const attempts = await OlympiadAttempt.countDocuments({ exam: existing._id });
     if (attempts > 0) {

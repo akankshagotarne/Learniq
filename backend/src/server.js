@@ -154,6 +154,10 @@ const startServer = async () => {
   try {
     await connectDB();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
+    // Make sure the Standard 10 Olympiad exam exists (no-op when it is already there)
+    require('./seed/seedOlympiad10')({ ifMissing: true })
+      .then((exam) => console.log(`🏆 Olympiad exam ready: ${exam.title}`))
+      .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);

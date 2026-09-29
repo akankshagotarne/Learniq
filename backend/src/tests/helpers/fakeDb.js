@@ -166,7 +166,13 @@ class FakeModel {
   async findOneAndUpdate(filter, update, opts = {}) {
     const doc = this.docs.find((d) => matches(d, filter));
     if (!doc) {
-      if (opts.upsert) throw new Error('fakeDb: upsert not supported');
+      if (opts.upsert) {
+        const base = {};
+        Object.entries(filter).forEach(([k, v]) => { if (!k.startsWith('$') && (v === null || typeof v !== 'object' || v instanceof ObjectId)) base[k] = v; });
+        const fresh = { ...this.defaults(), ...base };
+        applyUpdate(fresh, update);
+        return opts.new ? this.create(fresh) : (await this.create(fresh), null);
+      }
       return null;
     }
     const before = this.project(doc, null);
@@ -187,6 +193,16 @@ class FakeModel {
     Object.keys(doc).forEach((k) => delete doc[k]);
     Object.assign(doc, next);
     return { matchedCount: 1, modifiedCount: 1 };
+  }
+
+  async bulkWrite(ops) {
+    for (const op of ops) {
+      if (op.updateOne) {
+        const { filter, update, upsert } = op.updateOne;
+        await this.findOneAndUpdate(filter, update, { upsert: !!upsert });
+      } else throw new Error('fakeDb: bulkWrite op not supported');
+    }
+    return { ok: 1 };
   }
 
   async deleteOne(filter) {
