@@ -110,7 +110,7 @@ const AdminOlympiad: React.FC = () => {
                 disabled={seeding}
                 className="btn-primary text-xs py-2.5 px-5 rounded-xl font-bold disabled:opacity-60"
               >
-                {seeding ? 'Creating…' : 'Create Olympiad Exams (Std 9 & 10)'}
+                {seeding ? 'Creating…' : 'Create Olympiad Exams (Std 1–10)'}
               </button>
             </div>
           ) : (

@@ -1,5 +1,5 @@
 /**
- * Seeds every Olympiad exam (Standards 4–10). Idempotent.
+ * Seeds every Olympiad exam (Standards 1–10). Idempotent.
  * Usage: npm run seed:olympiad   (from /backend)
  */
 const path = require('path');

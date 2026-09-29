@@ -1,9 +1,9 @@
 /**
- * One config per Olympiad exam (Standards 4–10). All exams share the same schedule, fee and format:
- * 60 MCQs, 60 marks, ₹20, 29 Sep 2026 00:00 → 5 Oct 2026 11:59 PM IST (see seedOlympiadExam.js).
+ * One config per Olympiad exam (Standards 1–10). All exams share the same schedule, fee and format:
+ * MCQs (60 for Std 4–10, 40 for Std 1–3), 1 mark each, ₹20, 29 Sep 2026 00:00 → 5 Oct 2026 11:59 PM IST (see seedOlympiadExam.js).
  * The papers do not state a duration — set OLYMPIAD_<std>_DURATION_MINUTES (default 60).
  */
-const STANDARDS = [4, 5, 6, 7, 8, 9, 10];
+const STANDARDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const configFor = (standard) => {
   const data = require(`../data/olympiad${standard}Questions`);

@@ -88,6 +88,7 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
             options: q.options,
             correctAnswer: q.correctAnswer,
             marks: q.marks,
+            ...(q.explanation ? { explanation: q.explanation } : {}),
           },
         },
         upsert: true,

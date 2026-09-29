@@ -799,15 +799,16 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
 });
 
 // ── 10. auto-seed on server start (fresh / production database) ─────────
-const ALL_STANDARDS = [4, 5, 6, 7, 8, 9, 10];
-test('auto-seed creates the Std 4-10 exams on an empty database and each student sees only their own', { skip: USE_REAL }, async () => {
+const ALL_STANDARDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const QUESTIONS_IN = (std) => (std <= 3 ? 40 : 60);
+test('auto-seed creates the Std 1-10 exams on an empty database and each student sees only their own', { skip: USE_REAL }, async () => {
   await M.OlympiadAttempt.deleteMany({});
   await M.OlympiadPayment.deleteMany({});
   await M.OlympiadQuestion.deleteMany({});
   await M.OlympiadExam.deleteMany({});
 
   const students = {};
-  for (const std of [3, ...ALL_STANDARDS]) students[std] = await mkUser({ standard: std });
+  for (const std of [11, ...ALL_STANDARDS]) students[std] = await mkUser({ standard: std });
   assert.deepEqual((await api('GET', '/exams', { token: students[10].token })).body.exams, []); // the "No exams found" situation
 
   const seedAll = require('../seed/seedOlympiadAll');
@@ -816,7 +817,7 @@ test('auto-seed creates the Std 4-10 exams on an empty database and each student
   assert.equal(first.errors.length, 0);
   assert.deepEqual(first.exams.map((e) => String(e._id)), second.exams.map((e) => String(e._id)), 'second start-up must not duplicate');
   assert.equal(await M.OlympiadExam.countDocuments({}), ALL_STANDARDS.length);
-  assert.equal(await M.OlympiadQuestion.countDocuments({}), ALL_STANDARDS.length * 60);
+  assert.equal(await M.OlympiadQuestion.countDocuments({}), ALL_STANDARDS.reduce((n, std) => n + QUESTIONS_IN(std), 0));
 
   for (const std of ALL_STANDARDS) {
     const r = await api('GET', '/exams', { token: students[std].token });
@@ -825,14 +826,15 @@ test('auto-seed creates the Std 4-10 exams on an empty database and each student
     assert.equal(e.standard, std);
     assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026');
     assert.equal(e.fee, 20);
-    assert.equal(e.totalQuestions, 60);
-    assert.equal(e.totalMarks, 60);
+    assert.equal(e.totalQuestions, QUESTIONS_IN(std));
+    assert.equal(e.totalMarks, QUESTIONS_IN(std));
+    assert.equal(e.durationMinutes, 60);
     assert.equal(e.state, 'pay');
     assert.equal(e.startDate, '2026-09-28T18:30:00.000Z');
     assert.equal(e.endDate, '2026-10-05T18:29:59.999Z');
     assertNoAnswerKeyLeak(r, `listing std ${std}`);
   }
-  assert.deepEqual((await api('GET', '/exams', { token: students[3].token })).body.exams, []);
+  assert.deepEqual((await api('GET', '/exams', { token: students[11].token })).body.exams, []); // a standard with no exam sees none
 
   // a student can neither open nor pay for another standard's exam
   for (const std of ALL_STANDARDS) {
@@ -884,6 +886,56 @@ test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a ful
   assert.equal(sub.body.result.unansweredCount, 20);
 });
 
+test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full attempt scores correctly', { skip: USE_REAL }, async () => {
+  for (const std of [1, 2, 3]) {
+    const paper = require(`../data/olympiad${std}Questions`);
+    assert.equal(paper.questions.length, 40, `std ${std}`);
+    assert.equal(paper.questions.reduce((s, q) => s + q.marks, 0), 40);
+    assert.deepEqual(paper.sections.map((x) => x.count), [10, 10, 10, 5, 5]);
+    assert.deepEqual(paper.sections.map((x) => x.name), ['Mathematics', 'Science / EVS', 'English', 'Logical Reasoning', 'Achievers / HOTS']);
+    paper.questions.forEach((q, i) => {
+      assert.equal(q.questionNumber, i + 1);
+      assert.equal(q.options.length, 4);
+      // Std 2 Q24 prints options A and B identically in the source paper (kept as printed)
+      if (!(std === 2 && q.questionNumber === 24)) assert.equal(new Set(q.options).size, 4, `std ${std} Q${q.questionNumber} has duplicate options`);
+      assert.ok(q.correctAnswer >= 0 && q.correctAnswer <= 3);
+      assert.ok(!/■|�/.test(q.questionText + q.options.join('')));
+      assert.ok(!/^\d+\)/.test(q.questionText), `std ${std} Q${q.questionNumber} has a stray question marker`);
+    });
+  }
+  assert.equal(require('../data/olympiad1Questions').questions[0].explanation, '4 wheels per car x 2');
+  assert.equal(require('../data/olympiad2Questions').questions[23].correctAnswer, 1);
+
+  // full attempt on the Std 2 exam: 25 correct, 5 wrong, 10 blank; the review shows the paper's explanation
+  const paper2 = require('../data/olympiad2Questions');
+  const exam2 = await M.OlympiadExam.findOne({ slug: 'learniq-all-india-olympiad-2026-std-2' });
+  assert.equal(exam2.totalQuestions, 40);
+  const student = await mkUser({ standard: 2 });
+  await M.OlympiadPayment.create({
+    student: student.user._id, exam: exam2._id, amount: 20, currency: 'INR', status: 'SUCCESS',
+    razorpayOrderId: 'order_std2_direct', razorpayPaymentId: 'pay_std2_direct', verifiedAt: new Date(), verifiedVia: 'checkout',
+  });
+  const start = await api('POST', `/exams/${exam2._id}/start`, { token: student.token });
+  assert.equal(start.status, 200, start.text);
+  assertNoAnswerKeyLeak(start, 'std 2 start');
+  assert.equal(start.body.questions.length, 40);
+  const answers = start.body.questions.slice(0, 30).map((q, i) => {
+    const key = paper2.questions[q.questionNumber - 1].correctAnswer;
+    return { questionId: q._id, selectedOption: i < 25 ? key : (key + 1) % 4 };
+  });
+  const sub = await api('POST', `/exams/${exam2._id}/submit`, { token: student.token, body: { answers } });
+  assert.equal(sub.status, 200, sub.text);
+  assert.equal(sub.body.result.score, 25);
+  assert.equal(sub.body.result.wrongCount, 5);
+  assert.equal(sub.body.result.unansweredCount, 10);
+  assert.equal(sub.body.result.totalMarks, 40);
+  const rv = await api('GET', `/exams/${exam2._id}/review`, { token: student.token });
+  assert.equal(rv.status, 200, rv.text);
+  assert.equal(rv.body.review.length, 40);
+  const withExpl = rv.body.review.find((r) => r.explanation === '45 + 32 = 77');
+  assert.ok(withExpl, 'the paper\'s explanation is shown in the review');
+});
+
 test('Std 9 paper: 60 questions, key intact, a full attempt scores correctly', { skip: USE_REAL }, async () => {
   const paper9 = require('../data/olympiad9Questions');
   assert.equal(paper9.questions.length, 60);
@@ -930,9 +982,9 @@ test('admin seed endpoint: admin can create/refresh the exams, students cannot',
   const admin = await mkUser({ role: 'admin' });
   const ok = await api('POST', '/admin/seed', { token: admin.token });
   assert.equal(ok.status, 200, ok.text);
-  // the Std 7 and Std 9 exams already have an attempt (previous tests) -> their questions are protected and they are skipped;
+  // the Std 2, 7 and 9 exams already have an attempt (previous tests) -> their questions are protected and they are skipped;
   // the others have none -> refreshed
-  assert.deepEqual(ok.body.exams.map((e) => e.standard).sort((a, b) => a - b), [4, 5, 6, 8, 10]);
-  assert.deepEqual(ok.body.skipped.sort(), ['Standard 7', 'Standard 9']);
-  assert.equal(await M.OlympiadQuestion.countDocuments({}), 420);
+  assert.deepEqual(ok.body.exams.map((e) => e.standard).sort((a, b) => a - b), [1, 3, 4, 5, 6, 8, 10]);
+  assert.deepEqual(ok.body.skipped.sort(), ['Standard 2', 'Standard 7', 'Standard 9']);
+  assert.equal(await M.OlympiadQuestion.countDocuments({}), 540);
 });
