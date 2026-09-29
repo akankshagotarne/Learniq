@@ -88,23 +88,6 @@
   right: 8%;
   background: radial-gradient(circle, color-mix(in srgb, var(--oly-accent) 17%, transparent) 0%, transparent 66%);
 }
-.oly-watermark {
-  position: absolute;
-  right: 0;
-  top: 16%;
-  font-family: 'Poppins', system-ui, sans-serif;
-  font-weight: 900;
-  font-size: clamp(9rem, 24vw, 22rem);
-  line-height: 1;
-  letter-spacing: -0.05em;
-  color: transparent;
-  -webkit-text-stroke: 2px rgba(108, 99, 242, 0.075);
-  translate: 0 calc(var(--p) * -36px);
-  user-select: none;
-}
-.dark .oly-watermark {
-  -webkit-text-stroke-color: rgba(196, 173, 255, 0.08);
-}
 
 /* ---------- entrance ---------- */
 .oly-reveal {
@@ -241,50 +224,67 @@
   color: #c9cbe0;
 }
 
-/* ---------- poster deck ---------- */
-.oly-deck-wrap {
+/* ---------- single-poster stage ---------- */
+.oly-stage {
   position: relative;
-  translate: 0 calc(var(--p) * 14px);
+  padding: 0.5rem 0;
+  translate: 0 calc(var(--p) * 12px);
+}
+@media (min-width: 640px) {
+  .oly-stage {
+    padding: 1.25rem 0;
+  }
+}
+/* soft campaign-coloured light behind the one active poster */
+.oly-stage-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(170%, 780px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--oly-accent) 20%, transparent) 0%, color-mix(in srgb, var(--oly-accent) 6%, transparent) 38%, transparent 62%);
+  pointer-events: none;
+}
+.oly-stage-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(125%, 600px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--oly-accent) 16%, transparent);
+  box-shadow: 0 0 0 36px color-mix(in srgb, var(--oly-accent) 3%, transparent);
+  pointer-events: none;
 }
 .oly-deck {
-  --side-x: 34%;
-  --side-scale: 0.84;
-  --side-rot: 16deg;
   --radius: 16px;
   position: relative;
-  width: min(100%, 290px);
+  z-index: 2;
+  width: min(100%, 320px);
   aspect-ratio: 1080 / 1350;
   margin-inline: auto;
-  perspective: 1400px;
   touch-action: pan-y;
   -webkit-user-select: none;
   user-select: none;
   outline: none;
 }
-@media (min-width: 400px) {
-  .oly-deck {
-    width: 310px;
-  }
-}
 @media (min-width: 640px) {
   .oly-deck {
-    width: 350px;
-    --side-x: 46%;
-    --side-scale: 0.8;
-    --side-rot: 20deg;
+    width: 360px;
     --radius: 18px;
   }
 }
 @media (min-width: 1024px) {
   .oly-deck {
-    width: 380px;
-    --side-x: 47%;
+    width: 400px;
   }
 }
 @media (min-width: 1280px) {
   .oly-deck {
-    width: 420px;
-    --side-x: 50%;
+    width: 440px;
   }
 }
 .oly-deck:focus-visible::after {
@@ -297,51 +297,40 @@
   z-index: 5;
 }
 
+/*
+ * Exactly one poster is visible. Hidden posters wait in the "entering" pose
+ * (15px lower, 0.96 scale, tipped back in 3D). The outgoing poster fades out
+ * quickly first; the incoming one starts after a short delay, so two posters
+ * are never on screen together.
+ */
 .oly-slide {
   position: absolute;
   inset: 0;
-  transform-origin: 50% 60%;
-  will-change: transform, opacity;
-  transition:
-    transform 0.55s cubic-bezier(0.22, 1.06, 0.36, 1),
-    opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-    filter 0.4s ease;
-}
-.oly-slide[data-pos='0'] {
-  z-index: 3;
-  opacity: 1;
-  /* the incoming poster turns opaque quickly so it never double-exposes with the outgoing one */
-  transition:
-    transform 0.55s cubic-bezier(0.22, 1.06, 0.36, 1),
-    opacity 0.22s ease-out,
-    filter 0.22s ease-out;
-  transform: translate3d(calc(var(--drag, 0) * 1px), 0, 0) rotate(calc(var(--drag, 0) * 0.015deg));
-}
-.oly-slide[data-pos='1'],
-.oly-slide[data-pos='-1'] {
-  z-index: 2;
-  opacity: 0.5;
-  filter: blur(1.2px) saturate(0.85);
-  cursor: pointer;
-}
-.oly-slide[data-pos='1'] {
-  transform: translate3d(var(--side-x), 0, -150px) rotateY(calc(var(--side-rot) * -1)) rotate(3deg) scale(var(--side-scale));
-}
-.oly-slide[data-pos='-1'] {
-  transform: translate3d(calc(var(--side-x) * -1), 0, -150px) rotateY(var(--side-rot)) rotate(-3deg) scale(var(--side-scale));
-}
-.oly-slide[data-pos='2'] {
   z-index: 1;
   opacity: 0;
-  transform: translate3d(0, 5%, -320px) scale(0.68);
+  visibility: hidden;
   pointer-events: none;
+  transform-origin: 50% 70%;
+  transform: perspective(1200px) translate3d(0, 15px, 0) rotateX(7deg) rotateY(calc(var(--dir, 1) * 5deg)) scale(0.96);
+  transition:
+    opacity 0.16s ease-in,
+    transform 0.24s ease-in,
+    visibility 0s linear 0.24s;
 }
-@media (hover: hover) {
-  .oly-slide[data-pos='1']:hover,
-  .oly-slide[data-pos='-1']:hover {
-    opacity: 0.72;
-    filter: blur(0.4px) saturate(0.95);
-  }
+.oly-slide.is-leaving {
+  z-index: 2;
+  transform: perspective(1200px) translate3d(calc(var(--dir, 1) * -22px), -6px, 0) rotateX(-3deg) rotateY(calc(var(--dir, 1) * -7deg)) scale(0.97);
+}
+.oly-slide.is-active {
+  z-index: 3;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: perspective(1200px) translate3d(calc(var(--drag, 0) * 1px), 0, 0) rotateX(0deg) rotateY(calc(var(--drag, 0) * 0.02deg)) scale(1);
+  transition:
+    opacity 0.34s ease-out 0.14s,
+    transform 0.55s cubic-bezier(0.2, 1.05, 0.3, 1) 0.14s,
+    visibility 0s linear 0s;
 }
 .oly-deck.is-dragging .oly-slide {
   transition: none;
@@ -353,7 +342,7 @@
   transform-style: preserve-3d;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.oly-slide[data-pos='0'] .oly-tilt {
+.oly-slide.is-active .oly-tilt {
   transition: none;
   transform: perspective(1100px) rotateX(calc(var(--rx) * 1deg)) rotateY(calc(var(--ry) * 1deg))
     translate3d(0, calc(var(--h) * -8px), 0) scale(calc(1 + var(--h) * 0.02));
@@ -363,11 +352,11 @@
   inset: 10% 9% -1% 9%;
   border-radius: 40px;
   background: var(--slide-accent);
-  opacity: 0.22;
+  opacity: 0.3;
   filter: blur(34px);
-  transform: translate3d(0, 22px, -30px);
+  transform: translate3d(0, 24px, -30px);
 }
-.oly-slide[data-pos='0'] .oly-shadow {
+.oly-slide.is-active .oly-shadow {
   opacity: calc(0.3 + var(--h) * 0.16);
   transform: translate3d(calc(var(--ry) * -2.2px), calc(24px + var(--rx) * 2.2px + var(--h) * 12px), -30px);
 }
@@ -387,7 +376,7 @@
   filter: blur(16px);
   opacity: 0.65;
 }
-.oly-slide[data-pos='0'] .oly-ring {
+.oly-slide.is-active .oly-ring {
   opacity: var(--h);
 }
 .oly-card {
@@ -408,7 +397,7 @@
   object-fit: cover;
   -webkit-user-drag: none;
 }
-.oly-slide[data-pos='0'] .oly-img {
+.oly-slide.is-active .oly-img {
   transform: scale(calc(1 + var(--h) * 0.02)) translate3d(calc(var(--ry) * -0.5px), calc(var(--rx) * 0.5px), 0);
 }
 .oly-spot {
@@ -433,10 +422,10 @@
   transform: translate3d(calc(var(--ry) * 2.5%), calc(var(--rx) * -2.5%), 0);
   pointer-events: none;
 }
-.oly-slide[data-pos='0'] .oly-spot {
+.oly-slide.is-active .oly-spot {
   opacity: var(--h);
 }
-.oly-slide[data-pos='0'] .oly-glare {
+.oly-slide.is-active .oly-glare {
   opacity: calc(var(--h) * 0.85);
 }
 
@@ -562,23 +551,23 @@
   gap: 0.4rem;
   padding: 0.3rem 0.7rem;
   border-radius: 9999px;
-  background: var(--oly-accent);
+  background: var(--state-accent);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
 .dark .oly-test-chip {
-  background: color-mix(in srgb, var(--oly-accent) 60%, #8b82ff);
+  background: color-mix(in srgb, var(--state-accent) 60%, #8b82ff);
 }
 .oly-tagline {
   font-family: 'Poppins', system-ui, sans-serif;
   font-style: italic;
   font-weight: 600;
-  color: var(--oly-accent);
+  color: var(--state-accent);
 }
 .dark .oly-tagline {
-  color: color-mix(in srgb, var(--oly-accent) 45%, #ffffff);
+  color: color-mix(in srgb, var(--state-accent) 45%, #ffffff);
 }
 .oly-subject {
   display: inline-flex;
@@ -608,17 +597,86 @@
 }
 .oly-stat {
   border-radius: 14px;
-  padding: 0.6rem 0.4rem;
+  padding: 0.55rem 0.35rem 0.6rem;
   text-align: center;
-  background: color-mix(in srgb, var(--oly-accent) 6%, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--oly-accent) 14%, #eeedf7);
+  background: color-mix(in srgb, var(--state-accent) 6%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--state-accent) 14%, #eeedf7);
 }
 .dark .oly-stat {
   background: #242540;
   border-color: #2e2f4a;
 }
-.oly-swap {
-  animation: oly-swap-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+.oly-stat-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a8daa;
+}
+.oly-stat-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.1rem;
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 1.02rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: #22243a;
+}
+.dark .oly-stat-value {
+  color: #f4f4fa;
+}
+.oly-stat-sub {
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #6b6e8c;
+}
+.dark .oly-stat-sub,
+.dark .oly-stat-label {
+  color: #a6a8c4;
+}
+@media (max-width: 399px) {
+  .oly-stat-value {
+    font-size: 0.95rem;
+  }
+  .oly-stat-value svg {
+    display: none;
+  }
+  .oly-stat-sub {
+    font-size: 0.62rem;
+    line-height: 1.25;
+    white-space: normal;
+  }
+}
+
+/* the four test states share one grid cell: fixed card height, only the active one is visible */
+.oly-info-stack {
+  display: grid;
+}
+.oly-info-state {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(0, 10px, 0);
+  transition:
+    opacity 0.14s ease-in,
+    transform 0.2s ease-in,
+    visibility 0s linear 0.2s;
+}
+.oly-info-state.is-active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 0.3s ease-out 0.12s,
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.12s,
+    visibility 0s linear 0s;
 }
 
 /* ---------- CTA ---------- */
@@ -711,7 +769,7 @@
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.7rem 0.3rem;
+  padding: 0.7rem 0.2rem;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid #e7e7f2;
@@ -754,28 +812,16 @@
     0 0 0 2px color-mix(in srgb, var(--tab-accent) 55%, #8b82ff),
     0 16px 30px -16px rgba(0, 0, 0, 0.7);
 }
-.oly-tab-num {
-  /* display comes from Tailwind classes (hidden on phones and at lg) */
+.oly-tab-dot {
   flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  font-family: 'Poppins', system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 1rem;
-  color: var(--tab-accent);
-  background: color-mix(in srgb, var(--tab-accent) 10%, #ffffff);
-  transition: background-color 0.2s, color 0.2s;
-}
-.oly-tab[aria-selected='true'] .oly-tab-num {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
   background: var(--tab-accent);
-  color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab-accent) 16%, transparent);
 }
-.dark .oly-tab-num {
-  background: color-mix(in srgb, var(--tab-accent) 25%, #1b1c2e);
-  color: #f4f4fa;
+.dark .oly-tab-dot {
+  background: color-mix(in srgb, var(--tab-accent) 55%, #ffffff);
 }
 
 /* ---------- floating decorations ---------- */
@@ -834,16 +880,6 @@
     transform: scaleX(1);
   }
 }
-@keyframes oly-swap-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 10px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 
 /* ---------- reduced motion: simple fades only ---------- */
 @media (prefers-reduced-motion: reduce) {
@@ -854,32 +890,32 @@
     transition-delay: 0s;
   }
   .oly-slide,
-  .oly-slide[data-pos] {
+  .oly-slide.is-leaving,
+  .oly-slide.is-active,
+  .oly-info-state,
+  .oly-info-state.is-active {
     transform: none;
-    filter: none;
-    transition: opacity 0.22s ease;
+    transition: opacity 0.22s ease, visibility 0s linear 0.22s;
   }
-  .oly-slide:not([data-pos='0']) {
-    opacity: 0;
-    pointer-events: none;
+  .oly-slide.is-active,
+  .oly-info-state.is-active {
+    transition: opacity 0.22s ease, visibility 0s linear 0s;
   }
   .oly-tilt,
-  .oly-slide[data-pos='0'] .oly-tilt,
-  .oly-slide[data-pos='0'] .oly-img,
-  .oly-slide[data-pos='0'] .oly-shadow {
+  .oly-slide.is-active .oly-tilt,
+  .oly-slide.is-active .oly-img,
+  .oly-slide.is-active .oly-shadow {
     transform: none;
   }
-  .oly-deck-wrap,
+  .oly-stage,
   .oly-blob,
-  .oly-watermark,
   .oly-float,
   .oly-info-depth {
     translate: none;
   }
   .oly-float,
   .oly-twinkle,
-  .oly-date::after,
-  .oly-swap {
+  .oly-date::after {
     animation: none;
   }
   .oly-cta,

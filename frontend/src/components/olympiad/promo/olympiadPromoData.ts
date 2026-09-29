@@ -22,8 +22,10 @@ export interface OlympiadPromoTest {
   label: string;
   /** e.g. "Standard 9th – 10th" */
   standards: string;
-  /** compact label for the selector, e.g. "Std 9–10" */
-  shortStd: string;
+  /** e.g. "9th–10th" (selector shows "Std 9th–10th") */
+  range: string;
+  /** the standards this test is for — used to pick a logged-in student's own test */
+  standardList: number[];
   tagline: string;
   motto: [string, string, string];
   subjects: PromoSubject[];
@@ -51,7 +53,8 @@ export const OLYMPIAD_PROMO_TESTS: OlympiadPromoTest[] = [
     id: 1,
     label: 'Test 1',
     standards: 'Standard 1st – 3rd',
-    shortStd: 'Std 1–3',
+    range: '1st–3rd',
+    standardList: [1, 2, 3],
     tagline: 'Little Minds… Big Dreams!',
     motto: ['Think', 'Explore', 'Achieve'],
     subjects: [
@@ -74,7 +77,8 @@ export const OLYMPIAD_PROMO_TESTS: OlympiadPromoTest[] = [
     id: 2,
     label: 'Test 2',
     standards: 'Standard 4th – 6th',
-    shortStd: 'Std 4–6',
+    range: '4th–6th',
+    standardList: [4, 5, 6],
     tagline: 'Think Deeper… Reach Higher!',
     motto: ['Learn', 'Grow', 'Succeed'],
     subjects: [
@@ -97,7 +101,8 @@ export const OLYMPIAD_PROMO_TESTS: OlympiadPromoTest[] = [
     id: 3,
     label: 'Test 3',
     standards: 'Standard 7th – 8th',
-    shortStd: 'Std 7–8',
+    range: '7th–8th',
+    standardList: [7, 8],
     tagline: 'More Knowledge… More Possibilities!',
     motto: ['Study', 'Solve', 'Excel'],
     subjects: [
@@ -120,7 +125,8 @@ export const OLYMPIAD_PROMO_TESTS: OlympiadPromoTest[] = [
     id: 4,
     label: 'Test 4',
     standards: 'Standard 9th – 10th',
-    shortStd: 'Std 9–10',
+    range: '9th–10th',
+    standardList: [9, 10],
     tagline: 'Be Better… Be Stronger!',
     motto: ['Plan', 'Prepare', 'Perform'],
     subjects: [
