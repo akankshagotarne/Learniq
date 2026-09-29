@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ClipboardList, Clock, HelpCircle, CheckCircle2, AlertCircle,
   Calendar, Award, ChevronRight, Filter, Search, RotateCcw,
@@ -9,6 +9,10 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Exam } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { olympiadApi } from '../../services/olympiad';
+import { OlympiadExam } from '../../types/olympiad';
+import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
+import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -20,7 +24,9 @@ const getSubjectBadgeClass = (subject: string) => {
 
 const StudentExamsPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
+  const [olympiadExams, setOlympiadExams] = useState<OlympiadExam[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'available' | 'upcoming' | 'completed'>('available');
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
@@ -30,24 +36,53 @@ const StudentExamsPage: React.FC = () => {
     fetchExams();
   }, [user]);
 
+  const fetchOlympiad = async () => {
+    try {
+      const list = await olympiadApi.listExams();
+      setOlympiadExams(list);
+      // A payment that was taken but not yet confirmed (closed tab / network drop) is reconciled silently.
+      const pending = list.filter(o => o.paymentStatus === 'PENDING');
+      if (pending.length > 0) {
+        const results = await Promise.all(pending.map(o => olympiadApi.paymentStatus(o._id).catch(() => null)));
+        if (results.some(r => r?.unlocked)) setOlympiadExams(await olympiadApi.listExams());
+      }
+    } catch (err) {
+      console.error('Failed to fetch Olympiad exams', err);
+      setOlympiadExams([]);
+    }
+  };
+
   const fetchExams = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/exams', {
-        params: {
-          standard: user?.currentStandard,
-        },
-      });
+      const [res] = await Promise.all([
+        api.get('/exams', {
+          params: {
+            standard: user?.currentStandard,
+          },
+        }).catch(err => {
+          console.error('Failed to fetch exams', err);
+          return { data: { exams: [] } };
+        }),
+        fetchOlympiad(),
+      ]);
       setExams(res.data.exams || []);
-    } catch (err) {
-      console.error('Failed to fetch exams', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const { pay, payingId } = useOlympiadPayment((examId) => {
+    navigate(`/student/olympiad/${examId}`);
+  });
+
+  const hasOlympiad = olympiadExams.length > 0;
+  const olympiadAvailable = olympiadExams.filter(o => ['pay', 'ready', 'in_progress', 'closed'].includes(o.state));
+  const olympiadUpcoming = olympiadExams.filter(o => o.state === 'upcoming');
+  const olympiadCompleted = olympiadExams.filter(o => o.state === 'completed');
+
   // Unique subjects
-  const subjects = ['All', ...Array.from(new Set(exams.map(e => e.subject)))];
+  const subjects = ['All', ...(hasOlympiad ? ['Olympiad'] : []), ...Array.from(new Set(exams.map(e => e.subject)))];
 
   // Filtering
   const filteredExams = exams.filter(e => {
@@ -67,15 +102,24 @@ const StudentExamsPage: React.FC = () => {
     }
   });
 
-  // Overview stats
-  const completedCount = exams.filter(e => (e.myAttemptCount || 0) > 0).length;
-  const avgScore = completedCount > 0
-    ? Math.round(
-        exams
-          .filter(e => e.myBestAttempt)
-          .reduce((sum, e) => sum + (e.myBestAttempt?.percentage || 0), 0) / completedCount
-      )
-    : 0;
+  // Olympiad cards follow the same tab / subject / search controls
+  const tabOlympiad = activeTab === 'available' ? olympiadAvailable : activeTab === 'upcoming' ? olympiadUpcoming : olympiadCompleted;
+  const q = searchQuery.trim().toLowerCase();
+  const filteredOlympiad = tabOlympiad.filter(o =>
+    (selectedSubject === 'All' || selectedSubject === 'Olympiad') &&
+    (!q || o.title.toLowerCase().includes(q) || 'olympiad'.includes(q))
+  );
+  const visibleRegular = selectedSubject === 'Olympiad' ? [] : filteredExams;
+
+  // Overview stats (regular exams + Olympiad)
+  const regularCompleted = exams.filter(e => (e.myAttemptCount || 0) > 0).length;
+  const completedCount = regularCompleted + olympiadCompleted.length;
+  const percentageSum =
+    exams.filter(e => e.myBestAttempt).reduce((sum, e) => sum + (e.myBestAttempt?.percentage || 0), 0) +
+    olympiadCompleted.reduce((sum, o) => sum + (o.result?.percentage || 0), 0);
+  const avgScore = completedCount > 0 ? Math.round(percentageSum / completedCount) : 0;
+  const availableCount = exams.filter(e => e.availability === 'available').length + olympiadAvailable.length;
+  const upcomingCount = exams.filter(e => e.availability === 'upcoming').length + olympiadUpcoming.length;
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -118,7 +162,7 @@ const StudentExamsPage: React.FC = () => {
               <div>
                 <p className="text-xs text-text-muted">Available Exams</p>
                 <p className="text-xl font-heading font-bold text-text-primary">
-                  {exams.filter(e => e.availability === 'available').length}
+                  {availableCount}
                 </p>
               </div>
             </div>
@@ -150,7 +194,7 @@ const StudentExamsPage: React.FC = () => {
               <div>
                 <p className="text-xs text-text-muted">Upcoming</p>
                 <p className="text-xl font-heading font-bold text-text-primary">
-                  {exams.filter(e => e.availability === 'upcoming').length}
+                  {upcomingCount}
                 </p>
               </div>
             </div>
@@ -169,7 +213,7 @@ const StudentExamsPage: React.FC = () => {
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  Available ({exams.filter(e => e.availability === 'available').length})
+                  Available ({availableCount})
                 </button>
                 <button
                   onClick={() => setActiveTab('upcoming')}
@@ -179,7 +223,7 @@ const StudentExamsPage: React.FC = () => {
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  Upcoming ({exams.filter(e => e.availability === 'upcoming').length})
+                  Upcoming ({upcomingCount})
                 </button>
                 <button
                   onClick={() => setActiveTab('completed')}
@@ -234,7 +278,7 @@ const StudentExamsPage: React.FC = () => {
                 <div key={i} className="card-soft h-56 rounded-2xl animate-pulse bg-surface-alt" />
               ))}
             </div>
-          ) : filteredExams.length === 0 ? (
+          ) : visibleRegular.length === 0 && filteredOlympiad.length === 0 ? (
             <div className="card-soft p-12 text-center max-w-md mx-auto my-8">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-[#6C63F2]/10 text-[#6C63F2] flex items-center justify-center mb-4">
                 <ClipboardList className="w-7 h-7" />
@@ -260,7 +304,15 @@ const StudentExamsPage: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredExams.map(exam => {
+              {filteredOlympiad.map(o => (
+                <OlympiadExamCard
+                  key={o._id}
+                  exam={o}
+                  paying={payingId === o._id}
+                  onPay={pay}
+                />
+              ))}
+              {visibleRegular.map(exam => {
                 const isUpcoming = exam.availability === 'upcoming';
                 const isCompleted = (exam.myAttemptCount || 0) > 0;
                 const bestAttempt = exam.myBestAttempt;

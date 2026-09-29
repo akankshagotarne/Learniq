@@ -19,6 +19,8 @@ const teacherRoutes = require('./routes/teacher');
 const adminRoutes = require('./routes/admin');
 const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
+const olympiadRoutes = require('./routes/olympiad');
+const { startOlympiadSweeper } = require('./controllers/olympiadController');
 
 const app = express();
 const server = http.createServer(app);
@@ -74,11 +76,14 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   message: { success: false, message: 'Too many requests. Please try again later.' },
+  // Olympiad answer auto-save has its own per-student limiter (a whole class can share one school IP)
+  skip: (req) => req.method === 'PUT' && /^\/olympiad\/exams\/[^/]+\/attempt\/answers/.test(req.path),
 });
 app.use('/api', limiter);
 
 // Body parsing
-app.use(express.json({ limit: '50mb' }));
+// rawBody is kept so the Razorpay webhook signature can be verified against the exact bytes received
+app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Logging
@@ -103,6 +108,7 @@ app.use('/api', apiRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
+app.use('/api/olympiad', olympiadRoutes);
 app.use('/api', miscRoutes);
 
 // 404
@@ -147,6 +153,7 @@ server.on('error', (err) => {
 const startServer = async () => {
   try {
     await connectDB();
+    startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);

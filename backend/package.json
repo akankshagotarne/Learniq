@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed": "node src/seed/seedData.js"
+    "seed": "node src/seed/seedData.js",
+    "seed:olympiad": "node src/seed/seedOlympiad10.js",
+    "test:olympiad": "node --test src/tests/olympiad.test.js"
   },
   "keywords": [],
   "author": "Learniq",

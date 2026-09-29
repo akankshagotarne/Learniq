@@ -29,6 +29,9 @@ const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
 const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
 const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
+const OlympiadExamPage = lazy(() => import('./pages/student/OlympiadExamPage'));
+const OlympiadTakerPage = lazy(() => import('./pages/student/OlympiadTakerPage'));
+const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
@@ -48,6 +51,7 @@ const AdminCourses = lazy(() => import('./pages/admin/AdminCourses'));
 const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
+const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -161,6 +165,21 @@ const AppRoutes: React.FC = () => (
           <ExamTakerPage />
         </ProtectedRoute>
       } />
+      <Route path="/student/olympiad/:examId" element={
+        <ProtectedRoute roles={['student']}>
+          <OlympiadExamPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/olympiad/:examId/take" element={
+        <ProtectedRoute roles={['student']}>
+          <OlympiadTakerPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/olympiad/:examId/result" element={
+        <ProtectedRoute roles={['student']}>
+          <OlympiadResultPage />
+        </ProtectedRoute>
+      } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
 
       {/* Help & Support (student + teacher) */}
@@ -262,6 +281,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/payments" element={
         <ProtectedRoute roles={['admin']}>
           <AdminPayments />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/olympiad" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminOlympiad />
         </ProtectedRoute>
       } />
 
