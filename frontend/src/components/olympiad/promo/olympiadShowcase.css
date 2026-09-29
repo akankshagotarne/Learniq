@@ -449,12 +449,6 @@
   color: var(--oly-accent);
   box-shadow: 0 10px 22px -12px color-mix(in srgb, var(--oly-accent) 70%, transparent);
 }
-.oly-ctrl:focus-visible,
-.oly-tab:focus-visible,
-.oly-login:focus-visible {
-  outline: 3px solid rgba(108, 99, 242, 0.6);
-  outline-offset: 3px;
-}
 .dark .oly-ctrl {
   background: #1b1c2e;
   border-color: #2e2f4a;
@@ -463,27 +457,35 @@
 .dark .oly-ctrl:hover {
   color: #c4adff;
 }
-.oly-dot {
+.oly-meter {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 96px;
+  padding: 0 0.25rem;
+}
+.oly-meter-label {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #22243a;
+}
+.dark .oly-meter-label {
+  color: #f4f4fa;
+}
+.oly-meter-track {
   position: relative;
-  width: 8px;
-  height: 8px;
+  display: block;
+  width: 96px;
+  height: 5px;
   border-radius: 9999px;
   overflow: hidden;
-  background: #d8d6ec;
-  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s;
+  background: color-mix(in srgb, var(--oly-accent) 14%, #e9e7f7);
 }
-.oly-dot:hover {
-  background: #b9b5df;
-}
-.oly-dot.is-active {
-  width: 34px;
-  background: color-mix(in srgb, var(--oly-accent) 18%, #e9e7f7);
-}
-.dark .oly-dot {
-  background: #3b3d5e;
-}
-.dark .oly-dot.is-active {
-  background: color-mix(in srgb, var(--oly-accent) 30%, #2e2f4a);
+.dark .oly-meter-track {
+  background: #2e2f4a;
 }
 .oly-progress {
   position: absolute;
@@ -761,67 +763,72 @@
   outline-offset: 4px;
 }
 
-/* ---------- test selector ---------- */
-.oly-tab {
-  --tab-accent: #6c63f2;
+/* ---------- standard selector (10 individual standards) ---------- */
+.oly-std {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   width: 100%;
-  padding: 0.7rem 0.2rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  padding: 0.7rem 0.1rem;
+  border-radius: 14px;
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-align: center;
+  color: #3a3d5c;
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid #e7e7f2;
   transition:
     transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     background-color 0.2s,
-    border-color 0.2s;
+    border-color 0.2s,
+    color 0.2s;
 }
-@media (min-width: 640px) {
-  .oly-tab {
-    padding: 0.85rem 1rem;
+@media (min-width: 400px) {
+  .oly-std {
+    font-size: 0.86rem;
   }
 }
-.dark .oly-tab {
-  background: rgba(27, 28, 46, 0.7);
+@media (min-width: 640px) {
+  .oly-std {
+    padding: 0.8rem 0.25rem;
+    font-size: 0.95rem;
+  }
+}
+.dark .oly-std {
+  color: #d9dbee;
+  background: rgba(27, 28, 46, 0.78);
   border-color: #2e2f4a;
 }
 @media (hover: hover) {
-  .oly-tab:hover {
+  .oly-std:hover {
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--tab-accent) 35%, #e7e7f2);
+    border-color: rgba(108, 99, 242, 0.45);
+    color: #6c63f2;
     background: #fff;
   }
-  .dark .oly-tab:hover {
+  .dark .oly-std:hover {
     background: #1b1c2e;
+    color: #c4adff;
   }
 }
-.oly-tab[aria-selected='true'] {
-  background: #fff;
+/* LearnIQ-branded selected state */
+.oly-std[aria-selected='true'],
+.oly-std[aria-selected='true']:hover {
+  color: #fff;
   border-color: transparent;
-  transform: translateY(-3px);
+  background: linear-gradient(135deg, #6c63f2 0%, #7c3aed 100%);
+  transform: translateY(-2px);
   box-shadow:
-    0 0 0 2px var(--tab-accent),
-    0 16px 30px -16px color-mix(in srgb, var(--tab-accent) 70%, transparent);
+    0 10px 22px -10px rgba(108, 99, 242, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-.dark .oly-tab[aria-selected='true'] {
-  background: #1b1c2e;
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--tab-accent) 55%, #8b82ff),
-    0 16px 30px -16px rgba(0, 0, 0, 0.7);
-}
-.oly-tab-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: var(--tab-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab-accent) 16%, transparent);
-}
-.dark .oly-tab-dot {
-  background: color-mix(in srgb, var(--tab-accent) 55%, #ffffff);
+.oly-std:focus-visible,
+.oly-ctrl:focus-visible,
+.oly-login:focus-visible {
+  outline: 3px solid rgba(108, 99, 242, 0.6);
+  outline-offset: 3px;
 }
 
 /* ---------- floating decorations ---------- */
@@ -842,7 +849,35 @@
   box-shadow: 0 6px 14px -6px var(--bubble, #b69cf2);
 }
 
+/* same source poster, new standard: a gentle "refresh" of the one visible poster */
+.oly-deck.bump-a .oly-slide.is-active .oly-card {
+  animation: oly-bump-a 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.oly-deck.bump-b .oly-slide.is-active .oly-card {
+  animation: oly-bump-b 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* ---------- keyframes ---------- */
+@keyframes oly-bump-a {
+  0% {
+    transform: translate3d(0, 6px, 0) scale(0.985);
+    filter: brightness(1.06);
+  }
+  100% {
+    transform: translateZ(0);
+    filter: none;
+  }
+}
+@keyframes oly-bump-b {
+  0% {
+    transform: translate3d(0, 6px, 0) scale(0.985);
+    filter: brightness(1.06);
+  }
+  100% {
+    transform: translateZ(0);
+    filter: none;
+  }
+}
 @keyframes oly-float {
   0%,
   100% {
@@ -915,13 +950,15 @@
   }
   .oly-float,
   .oly-twinkle,
-  .oly-date::after {
+  .oly-date::after,
+  .oly-deck.bump-a .oly-slide.is-active .oly-card,
+  .oly-deck.bump-b .oly-slide.is-active .oly-card {
     animation: none;
   }
   .oly-cta,
   .oly-cta:hover,
-  .oly-tab,
-  .oly-tab[aria-selected='true'] {
+  .oly-std,
+  .oly-std[aria-selected='true'] {
     translate: none;
     scale: none;
     transform: none;
