@@ -71,22 +71,71 @@ const AboutPage: React.FC = () => {
       name: 'Shweta Kedari',
       role: 'Frontend Developer',
       photo: '/assets/team/shweta-kedari.jpg',
-      tag: 'Team Member #1 of 3',
+      tag: 'Team Member #1 of 10',
       description: 'Builds intuitive, accessible, and responsive user interfaces that deliver seamless client-side learning experiences across all devices.',
     },
     {
       name: 'Monu Rajbhar',
       role: 'Backend Developer',
       photo: '/assets/team/monu-rajbhar.jpg',
-      tag: 'Team Member #2 of 3',
+      tag: 'Team Member #2 of 10',
       description: 'Engineers high-performance RESTful APIs, robust authentication workflows, and resilient server-side microservices.',
     },
     {
       name: 'Pooja Dahiphale',
       role: 'Database Manager',
       photo: '/assets/team/pooja-dahiphale.jpg',
-      tag: 'Team Member #3 of 3',
+      tag: 'Team Member #3 of 10',
       description: 'Manages relational data schemas, query optimization, and persistent data indexing for student progress and assessment tracking.',
+    },
+    {
+      name: 'Sakshi Goswami',
+      role: 'Team Member',
+      photo: '/assets/team/sakshi-goswami.jpg',
+      tag: 'Team Member #4 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Vedant Patil',
+      role: 'Team Member',
+      photo: '/assets/team/vedant-patil.jpg',
+      tag: 'Team Member #5 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Shritej Konde',
+      role: 'Team Member',
+      photo: '/assets/team/shritej-konde.jpg',
+      tag: 'Team Member #6 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Piyush Pardhe',
+      role: 'Team Member',
+      photo: '/assets/team/piyush-pardhe.jpg',
+      tag: 'Team Member #7 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Shreya Dixit',
+      role: 'Team Member',
+      photo: '/assets/team/shreya-dixit.jpg',
+      tag: 'Team Member #8 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Shrawani Pawal',
+      role: 'Team Member',
+      photo: '/assets/team/shrawani-pawal.jpg',
+      tag: 'Team Member #9 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
+    },
+    {
+      name: 'Sneha Harne',
+      role: 'Team Member',
+      photo: '/assets/team/sneha-harne.jpg',
+      tag: 'Team Member #10 of 10',
+      description: 'Contributes to building and improving the Learniq learning platform for students across India.',
     },
   ];
 
@@ -297,10 +346,10 @@ const AboutPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
-              {teamMembers.map((member) => (
+              {teamMembers.map((member, idx) => (
                 <div
                   key={member.name}
-                  className="card-soft p-6 sm:p-7 text-center rounded-3xl border border-border-subtle hover:shadow-soft-hover transition-all flex flex-col justify-between"
+                  className={`card-soft p-6 sm:p-7 text-center rounded-3xl border border-border-subtle hover:shadow-soft-hover transition-all flex flex-col justify-between${idx === teamMembers.length - 1 && teamMembers.length % 3 === 1 ? ' md:col-start-2' : ''}`}
                 >
                   <div>
                     <div className="relative inline-block mb-4">
