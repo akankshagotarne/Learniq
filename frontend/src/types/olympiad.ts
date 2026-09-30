@@ -108,6 +108,17 @@ export interface OlympiadReviewItem {
   explanation: string | null;
 }
 
+/** Totals returned with the admin All Standards payments list (revenue = verified payments only). */
+export interface OlympiadPaymentSummary {
+  total: number;
+  successfulPayments: number;
+  pendingPayments: number;
+  failedPayments: number;
+  refundedPayments: number;
+  unconfirmedPayments?: number;
+  revenue: number;
+}
+
 export interface OlympiadAdminStats {
   totalRegistrations: number;
   successfulPayments: number;

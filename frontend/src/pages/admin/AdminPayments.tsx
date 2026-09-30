@@ -5,13 +5,17 @@ import api from '../../services/api';
 import { Payment, PaymentStats } from '../../types';
 import toast from 'react-hot-toast';
 
-type StatusFilter = 'all' | 'completed' | 'pending' | 'failed';
+type StatusFilter = 'all' | 'completed' | 'pending' | 'failed' | 'unconfirmed';
+
+/** Label shown for a status (unconfirmed = kept for audit, not matched to a captured LIVE payment) */
+const statusLabel = (status: string) => (status === 'unconfirmed' ? 'Not confirmed' : status);
 
 const statusStyle: Record<string, string> = {
   completed: 'bg-[#DCFCE7] text-[#16A34A]',
   pending: 'bg-[#FEF3C7] text-[#D97706]',
   failed: 'bg-[#FFE4EC] text-[#E1447A]',
   refunded: 'bg-surface-alt text-text-muted',
+  unconfirmed: 'bg-[#E0E7FF] text-[#4F46E5]',
 };
 
 const itemTitle = (p: Payment) =>
@@ -49,6 +53,7 @@ const AdminPayments: React.FC = () => {
   const completedCount = stats?.completedCount ?? 0;
   const pendingCount = stats?.pendingCount ?? 0;
   const failedCount = stats?.failedCount ?? 0;
+  const unconfirmedCount = stats?.unconfirmedCount ?? 0;
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -80,6 +85,11 @@ const AdminPayments: React.FC = () => {
               </div>
             ))}
           </div>
+          {!loading && unconfirmedCount > 0 && (
+            <p className="text-text-secondary text-xs -mt-3 mb-6">
+              {unconfirmedCount} record{unconfirmedCount !== 1 ? 's are' : ' is'} <b>Not confirmed</b> as a captured LIVE payment. They are kept for audit and are not counted in revenue.
+            </p>
+          )}
 
           {/* Filters */}
           <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -94,7 +104,7 @@ const AdminPayments: React.FC = () => {
               />
             </div>
             <div className="flex gap-2">
-              {(['all', 'completed', 'pending', 'failed'] as StatusFilter[]).map(m => (
+              {(['all', 'completed', 'pending', 'failed', ...(unconfirmedCount > 0 ? ['unconfirmed'] : [])] as StatusFilter[]).map(m => (
                 <button
                   key={m}
                   onClick={() => setStatusFilter(m)}
@@ -102,7 +112,7 @@ const AdminPayments: React.FC = () => {
                     statusFilter === m ? 'bg-brand-primary text-white border-brand-primary' : 'bg-surface text-text-secondary border-border-subtle hover:bg-surface-alt'
                   }`}
                 >
-                  {m}
+                  {statusLabel(m)}
                 </button>
               ))}
             </div>
@@ -130,8 +140,11 @@ const AdminPayments: React.FC = () => {
                       {itemTitle(payment)} • {payment.type}
                     </p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${statusStyle[payment.status] || 'bg-surface-alt text-text-muted'}`}>
-                    {payment.status}
+                  <span
+                    title={payment.status === 'unconfirmed' ? (payment.reviewNote || 'Not matched to a captured LIVE Razorpay payment — excluded from revenue.') : undefined}
+                    className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${statusStyle[payment.status] || 'bg-surface-alt text-text-muted'}`}
+                  >
+                    {statusLabel(payment.status)}
                   </span>
                   <p className="text-text-primary text-sm font-bold w-24 text-right">₹{payment.amount?.toLocaleString('en-IN')}</p>
                   <p className="text-text-muted text-xs w-28 text-right">{new Date(payment.createdAt).toLocaleDateString('en-IN')}</p>

@@ -66,6 +66,15 @@ const loadExam = async (id) => {
   return exam;
 };
 
+// Admin views must be able to open EVERY exam (published or not) — only the student-facing loadExam hides unpublished ones.
+// (Otherwise an unpublished exam is listed in the admin dropdown but its payments/results 404.)
+const loadExamAdmin = async (id) => {
+  if (!mongoose.isValidObjectId(id)) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
+  const exam = await OlympiadExam.findById(id);
+  if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
+  return exam;
+};
+
 const assertEligibleStudent = (user, exam) => {
   if (user.role !== 'student') {
     throw new ApiError(403, 'Only students can register for this examination.', 'NOT_STUDENT');
@@ -812,6 +821,7 @@ const examStats = async (exam) => {
     failedPayments: pay.FAILED ? pay.FAILED.count : 0,
     pendingPayments: pay.PENDING ? pay.PENDING.count : 0,
     refundedPayments: pay.REFUNDED ? pay.REFUNDED.count : 0,
+    unconfirmedPayments: pay.UNCONFIRMED ? pay.UNCONFIRMED.count : 0,
     revenue: pay.SUCCESS ? pay.SUCCESS.amount : 0,
     totalAttempts: (att.COMPLETED ? att.COMPLETED.count : 0) + (att.IN_PROGRESS ? att.IN_PROGRESS.count : 0),
     completedAttempts: completed ? completed.count : 0,
@@ -827,7 +837,7 @@ const adminListExams = handler(async (req, res) => {
   const exams = await OlympiadExam.find().sort({ standard: 1 });
   const out = [];
   for (const exam of exams) {
-    out.push({ ...examPublic(exam), window: windowState(exam), stats: await examStats(exam) });
+    out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, window: windowState(exam), stats: await examStats(exam) });
   }
   res.json({ success: true, exams: out });
 });
@@ -852,7 +862,7 @@ const adminSeedExam = handler(async (req, res) => {
 
 // GET /api/olympiad/admin/exams/:id/attempts
 const adminAttempts = handler(async (req, res) => {
-  const exam = await loadExam(req.params.id);
+  const exam = await loadExamAdmin(req.params.id);
   const attempts = await OlympiadAttempt.find({ exam: exam._id })
     .sort({ score: -1, timeTakenSeconds: 1 })
     .limit(1000)
@@ -877,29 +887,78 @@ const adminAttempts = handler(async (req, res) => {
   });
 });
 
+// One admin-facing shape for an OlympiadPayment (never includes the Razorpay signature).
+const toAdminPayment = (p, exam) => {
+  const ex = exam || p.exam;
+  return {
+    _id: p._id,
+    student: p.student ? { name: p.student.name, email: maskEmail(p.student.email) } : null,
+    exam: ex && ex.title ? { _id: ex._id, title: ex.title, standard: ex.standard } : null,
+    amount: p.amount,
+    currency: p.currency,
+    status: p.status,
+    razorpayOrderId: p.razorpayOrderId,
+    razorpayPaymentId: p.razorpayPaymentId,
+    verifiedAt: p.verifiedAt,
+    verifiedVia: p.verifiedVia,
+    failureReason: p.failureReason,
+    statusBeforeReview: p.statusBeforeReview,
+    reviewNote: p.reviewNote,
+    createdAt: p.createdAt,
+  };
+};
+
+// Same status buckets the per-exam stats use; revenue is ONLY verified (SUCCESS) payments.
+const summarisePayments = (rows) => {
+  const by = Object.fromEntries(rows.map((r) => [r._id, r]));
+  const count = (k) => (by[k] ? by[k].count : 0);
+  return {
+    total: rows.reduce((n, r) => n + r.count, 0),
+    successfulPayments: count('SUCCESS'),
+    pendingPayments: count('PENDING'),
+    failedPayments: count('FAILED'),
+    refundedPayments: count('REFUNDED'),
+    unconfirmedPayments: count('UNCONFIRMED'),
+    revenue: by.SUCCESS ? by.SUCCESS.amount : 0,
+  };
+};
+
 // GET /api/olympiad/admin/exams/:id/payments
 const adminPayments = handler(async (req, res) => {
-  const exam = await loadExam(req.params.id);
+  const exam = await loadExamAdmin(req.params.id);
   const payments = await OlympiadPayment.find({ exam: exam._id })
     .sort({ createdAt: -1 })
     .limit(1000)
     .populate('student', 'name email');
-  res.json({
-    success: true,
-    payments: payments.map((p) => ({
-      _id: p._id,
-      student: p.student ? { name: p.student.name, email: maskEmail(p.student.email) } : null,
-      amount: p.amount,
-      currency: p.currency,
-      status: p.status,
-      razorpayOrderId: p.razorpayOrderId,
-      razorpayPaymentId: p.razorpayPaymentId,
-      verifiedAt: p.verifiedAt,
-      verifiedVia: p.verifiedVia,
-      failureReason: p.failureReason,
-      createdAt: p.createdAt,
-    })),
-  });
+  res.json({ success: true, payments: payments.map((p) => toAdminPayment(p, exam)) });
+});
+
+// GET /api/olympiad/admin/payments?standard=all|1..10
+// Every OlympiadPayment across all exams (published or not), optionally narrowed to one standard.
+const adminAllPayments = handler(async (req, res) => {
+  const raw = req.query.standard;
+  let filter = {};
+  let standard = 'all';
+  if (raw !== undefined && raw !== '' && raw !== 'all') {
+    const n = typeof raw === 'string' && /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isInteger(n) || n < 1 || n > 10) throw new ApiError(400, 'Standard must be "all" or a number from 1 to 10.', 'INVALID_STANDARD');
+    standard = n;
+    const ids = (await OlympiadExam.find({ standard: n }).select('_id')).map((e) => e._id);
+    filter = { exam: { $in: ids } };
+  }
+  const [payments, grouped] = await Promise.all([
+    OlympiadPayment.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(5000)
+      .populate('student', 'name email')
+      .populate('exam', 'title standard'),
+    OlympiadPayment.aggregate([
+      { $match: filter },
+      { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+    ]),
+  ]);
+  res.set('Cache-Control', 'no-store'); // live financial figures
+  res.json({ success: true, standard, payments: payments.map((p) => toAdminPayment(p)), summary: summarisePayments(grouped) });
 });
 
 // ──────────────────────────────────────────────
@@ -932,7 +991,7 @@ module.exports = {
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
   startExam, getAttempt, saveAnswers, submitExam,
   getResult, getReview,
-  adminListExams, adminAttempts, adminPayments, adminSeedExam,
+  adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // exported for tests
   _internals: { evaluate, windowState, finalizeAttempt },

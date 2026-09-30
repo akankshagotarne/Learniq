@@ -20,7 +20,10 @@ const paymentSchema = new mongoose.Schema({
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   razorpaySignature: { type: String, select: false }, // kept for reconciliation, never returned by queries/API responses
-  status: { type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'pending' },
+  // 'unconfirmed' = kept for audit, but NOT matched to a captured LIVE Razorpay payment: never revenue.
+  status: { type: String, enum: ['pending', 'completed', 'failed', 'refunded', 'unconfirmed'], default: 'pending' },
+  statusBeforeReview: { type: String, trim: true }, // the status before it was marked unconfirmed (reversible)
+  reviewNote: { type: String, trim: true },         // why it was marked unconfirmed
   type: { type: String, enum: ['course', 'lecture', 'note'], required: true },
 }, { timestamps: true });
 

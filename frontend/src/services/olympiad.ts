@@ -1,6 +1,6 @@
 import api from './api';
 import {
-  OlympiadAttemptPayload, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem, OlympiadAdminStats,
+  OlympiadAttemptPayload, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem, OlympiadAdminStats, OlympiadPaymentSummary,
 } from '../types/olympiad';
 
 /** Friendly message for any failed Olympiad API call (never shows raw stack traces). */
@@ -59,4 +59,9 @@ export const olympiadApi = {
   adminSeed: async () => (await api.post('/olympiad/admin/seed')).data,
   adminAttempts: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/attempts`)).data.attempts || [],
   adminPayments: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/payments`)).data.payments || [],
+  /** Every Olympiad payment across all exams; pass a standard (1–10) to narrow, omit / 'all' for everything. */
+  adminAllPayments: async (standard: number | 'all' = 'all'): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
+    const { data } = await api.get('/olympiad/admin/payments', { params: { standard } });
+    return { payments: data.payments || [], summary: data.summary };
+  },
 };

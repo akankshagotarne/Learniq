@@ -13,6 +13,7 @@
     "test:olympiad": "node --test src/tests/olympiad.test.js",
     "test:payments": "node --test src/tests/paymentStats.test.js",
     "test:razorpay": "node --test src/tests/razorpayConfig.test.js",
+    "test:adminpayments": "node --test src/tests/adminOlympiadPayments.test.js src/tests/unconfirmedPayments.test.js src/tests/unconfirmedSchema.test.js",
     "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js"
   },
   "keywords": [],

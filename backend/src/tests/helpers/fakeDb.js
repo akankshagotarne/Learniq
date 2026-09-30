@@ -319,7 +319,7 @@ const createFakeDb = () => {
   // course / lecture / note payments (models/index.js → Payment)
   const Course = new FakeModel('Course', { registry });
   const Payment = new FakeModel('Payment', {
-    registry, refs: { student: 'User', course: 'Course' },
+    registry, hidden: ['razorpaySignature'], refs: { student: 'User', course: 'Course' }, // schema: select:false
     defaults: () => ({ currency: 'INR', status: 'pending' }),
   });
 
