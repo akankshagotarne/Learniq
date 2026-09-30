@@ -53,3 +53,17 @@ test('audit lookup: an unknown order is "not found" even if listing its payments
   const broken = { orders: { fetch: async () => { throw { statusCode: 401, error: { description: 'Authentication failed' } }; }, fetchPayments: async () => ({ items: [] }) } };
   assert.equal((await lookupOrder(broken, 'o')).result, 'error');
 });
+
+test('reconciliation / archive fields exist on BOTH real schemas, validate, and stay absent on normal records', () => {
+  for (const make of [olympiad, course]) {
+    const pending = make({});
+    for (const f of ['archivedAt', 'reconcileAttempts', 'reconcileNextAt', 'reconcileLockUntil', 'failedBy', 'reconcileState']) assert.ok(!(f in pending.toObject()), `${f} is absent on a normal record`);
+    const doc = make({ failedBy: 'reconciler', reconcileState: 'needs_review', archivedAt: new Date(), archiveReason: 'x', reconcileAttempts: 2, lateChecks: 1, reconcileNextAt: new Date(), reconcileLockUntil: new Date(), reconciledAt: new Date() });
+    assert.equal(doc.validateSync(), undefined);
+    assert.ok(make({ failedBy: 'someone' }).validateSync().errors.failedBy, 'only the known closers are allowed');
+    assert.ok(make({ reconcileState: 'weird' }).validateSync().errors.reconcileState);
+  }
+  assert.equal(course({ verifiedVia: 'reconcile' }).validateSync(), undefined); assert.ok(course({ verifiedVia: 'magic' }).validateSync().errors.verifiedVia);
+  // stale-pending scan is indexed on both collections
+  for (const M of [OlympiadPayment, Payment]) assert.ok(M.schema.indexes().some(([k]) => k.status === 1 && k.createdAt === 1));
+});

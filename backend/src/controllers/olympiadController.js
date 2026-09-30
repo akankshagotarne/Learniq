@@ -534,7 +534,12 @@ const razorpayWebhook = handler(async (req, res) => {
   if (!entity || !entity.order_id) return res.json({ success: true, ignored: true });
 
   const payment = await OlympiadPayment.findOne({ razorpayOrderId: entity.order_id });
-  if (!payment) return res.json({ success: true, ignored: true }); // not an Olympiad order
+  if (!payment) {
+    // not an Olympiad order → it may be a course / lecture order (same Razorpay account, same webhook URL)
+    const { applyCourseWebhook } = require('../services/paymentReconciler');
+    const { handled } = await applyCourseWebhook(event, entity);
+    return res.json({ success: true, ...(handled ? {} : { ignored: true }) });
+  }
 
   if (event === 'payment.captured' || event === 'order.paid') {
     if (entity.amount === Math.round(payment.amount * 100) && entity.currency === payment.currency) {
@@ -904,6 +909,9 @@ const toAdminPayment = (p, exam) => {
     failureReason: p.failureReason,
     statusBeforeReview: p.statusBeforeReview,
     reviewNote: p.reviewNote,
+    archivedAt: p.archivedAt,
+    archiveReason: p.archiveReason,
+    reconcileState: p.reconcileState,
     createdAt: p.createdAt,
   };
 };
@@ -923,30 +931,44 @@ const summarisePayments = (rows) => {
   };
 };
 
-// GET /api/olympiad/admin/exams/:id/payments
+// ACTIVE view (default) = what the admin normally sees: everything except UNCONFIRMED and archived records.
+// A SUCCESS payment is never hidden. `?view=history` returns every record (audit history) — nothing is ever deleted.
+const paymentView = (req) => (req.query.view === 'history' ? 'history' : 'active');
+const ACTIVE_PAYMENTS = { status: { $ne: 'UNCONFIRMED' }, $or: [{ archivedAt: null }, { status: 'SUCCESS' }] };
+const HIDDEN_PAYMENTS = { $or: [{ status: 'UNCONFIRMED' }, { archivedAt: { $ne: null }, status: { $ne: 'SUCCESS' } }] };
+const paymentScope = (view) => (view === 'history' ? {} : ACTIVE_PAYMENTS);
+
+// GET /api/olympiad/admin/exams/:id/payments[?view=history]
 const adminPayments = handler(async (req, res) => {
   const exam = await loadExamAdmin(req.params.id);
-  const payments = await OlympiadPayment.find({ exam: exam._id })
-    .sort({ createdAt: -1 })
-    .limit(1000)
-    .populate('student', 'name email');
-  res.json({ success: true, payments: payments.map((p) => toAdminPayment(p, exam)) });
+  const view = paymentView(req);
+  const [payments, historyCount] = await Promise.all([
+    OlympiadPayment.find({ exam: exam._id, ...paymentScope(view) })
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .populate('student', 'name email'),
+    OlympiadPayment.countDocuments({ exam: exam._id, ...HIDDEN_PAYMENTS }),
+  ]);
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, view, historyCount, payments: payments.map((p) => toAdminPayment(p, exam)) });
 });
 
-// GET /api/olympiad/admin/payments?standard=all|1..10
+// GET /api/olympiad/admin/payments?standard=all|1..10[&view=history]
 // Every OlympiadPayment across all exams (published or not), optionally narrowed to one standard.
 const adminAllPayments = handler(async (req, res) => {
   const raw = req.query.standard;
-  let filter = {};
+  let examFilter = {};
   let standard = 'all';
   if (raw !== undefined && raw !== '' && raw !== 'all') {
     const n = typeof raw === 'string' && /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
     if (!Number.isInteger(n) || n < 1 || n > 10) throw new ApiError(400, 'Standard must be "all" or a number from 1 to 10.', 'INVALID_STANDARD');
     standard = n;
     const ids = (await OlympiadExam.find({ standard: n }).select('_id')).map((e) => e._id);
-    filter = { exam: { $in: ids } };
+    examFilter = { exam: { $in: ids } };
   }
-  const [payments, grouped] = await Promise.all([
+  const view = paymentView(req);
+  const filter = { ...examFilter, ...paymentScope(view) };
+  const [payments, grouped, historyCount] = await Promise.all([
     OlympiadPayment.find(filter)
       .sort({ createdAt: -1 })
       .limit(5000)
@@ -956,9 +978,10 @@ const adminAllPayments = handler(async (req, res) => {
       { $match: filter },
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
     ]),
+    OlympiadPayment.countDocuments({ ...examFilter, ...HIDDEN_PAYMENTS }),
   ]);
   res.set('Cache-Control', 'no-store'); // live financial figures
-  res.json({ success: true, standard, payments: payments.map((p) => toAdminPayment(p)), summary: summarisePayments(grouped) });
+  res.json({ success: true, standard, view, payments: payments.map((p) => toAdminPayment(p)), summary: { ...summarisePayments(grouped), historyCount } });
 });
 
 // ──────────────────────────────────────────────
@@ -994,5 +1017,5 @@ module.exports = {
   adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // exported for tests
-  _internals: { evaluate, windowState, finalizeAttempt },
+  _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess },
 };

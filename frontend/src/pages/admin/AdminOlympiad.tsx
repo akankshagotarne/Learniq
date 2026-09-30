@@ -33,6 +33,9 @@ const AdminOlympiad: React.FC = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const [summary, setSummary] = useState<OlympiadPaymentSummary | null>(null);
   const [detailError, setDetailError] = useState(false);
+  // 'active' = normal list; 'history' = every record incl. Not confirmed / archived (kept for audit, never revenue)
+  const [view, setView] = useState<'active' | 'history'>('active');
+  const [historyCount, setHistoryCount] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState<'results' | 'payments'>('results');
   const [loading, setLoading] = useState(true);
@@ -75,12 +78,13 @@ const AdminOlympiad: React.FC = () => {
     setAttempts([]);
     setPayments([]);
     setSummary(null);
+    setHistoryCount(0);
     setDetailError(false);
     setDetailLoading(true);
     const request = selectedId === ALL
-      ? olympiadApi.adminAllPayments().then(({ payments: p, summary: sum }) => { if (!cancelled) { setPayments(p); setSummary(sum); } })
-      : Promise.all([olympiadApi.adminAttempts(selectedId), olympiadApi.adminPayments(selectedId)])
-        .then(([a, p]) => { if (!cancelled) { setAttempts(a); setPayments(p); } });
+      ? olympiadApi.adminAllPayments('all', view).then(({ payments: p, summary: sum }) => { if (!cancelled) { setPayments(p); setSummary(sum); setHistoryCount(sum?.historyCount || 0); } })
+      : Promise.all([olympiadApi.adminAttempts(selectedId), olympiadApi.adminPayments(selectedId, view)])
+        .then(([a, p]) => { if (!cancelled) { setAttempts(a); setPayments(p.payments); setHistoryCount(p.historyCount); } });
     request
       .catch(err => {
         if (cancelled) return;
@@ -89,7 +93,7 @@ const AdminOlympiad: React.FC = () => {
       })
       .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedId, reloadKey]);
+  }, [selectedId, reloadKey, view]);
 
   const isAll = selectedId === ALL;
   const exam = isAll ? undefined : exams.find(e => e._id === selectedId);
@@ -191,11 +195,18 @@ const AdminOlympiad: React.FC = () => {
                 ))}
               </div>
 
-              {isAll && summary && (summary.unconfirmedPayments || 0) > 0 && (
+              {/* Active list vs Payment History (audit) */}
+              {activeTab === 'payments' && (view === 'history' ? (
                 <p className="text-text-secondary text-xs -mt-2 mb-4">
-                  {summary.unconfirmedPayments} record{summary.unconfirmedPayments === 1 ? ' is' : 's are'} <b>Not confirmed</b> as a captured LIVE payment. They are kept for audit and are not counted in revenue.
+                  <b>Payment History</b> — every record, including <b>Not confirmed</b> and archived ones. They are kept for audit and are never counted in revenue.{' '}
+                  <button onClick={() => setView('active')} className="underline font-semibold text-brand-primary">Back to active payments</button>
                 </p>
-              )}
+              ) : historyCount > 0 && (
+                <p className="text-text-secondary text-xs -mt-2 mb-4">
+                  {historyCount} older record{historyCount === 1 ? ' is' : 's are'} hidden from this list (<b>Not confirmed</b> / archived). They are kept for audit and are not counted in revenue.{' '}
+                  <button onClick={() => setView('history')} className="underline font-semibold text-brand-primary">View Payment History</button>
+                </p>
+              ))}
 
               {/* Tabs */}
               <div className="flex bg-surface-alt p-1 rounded-xl border border-border-subtle self-start mb-4 w-fit">
@@ -293,6 +304,7 @@ const AdminOlympiad: React.FC = () => {
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${payStyle[p.status] || ''}`}
                               >{payLabel(p.status)}</span>
                               {p.failureReason && <p className="text-[10px] text-text-muted mt-0.5 max-w-[180px] truncate" title={p.failureReason}>{p.failureReason}</p>}
+                              {p.archivedAt && <p className="text-[10px] text-text-muted mt-0.5" title={p.archiveReason || 'Archived — kept for audit'}>Archived</p>}
                             </td>
                             <td className="p-3 text-text-secondary font-mono">{p.razorpayOrderId || '—'}</td>
                             <td className="p-3 text-text-secondary font-mono">{p.razorpayPaymentId || '—'}</td>

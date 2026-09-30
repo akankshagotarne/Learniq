@@ -58,10 +58,14 @@ export const olympiadApi = {
   adminExams: async (): Promise<(OlympiadExam & { stats: OlympiadAdminStats })[]> => (await api.get('/olympiad/admin/exams')).data.exams || [],
   adminSeed: async () => (await api.post('/olympiad/admin/seed')).data,
   adminAttempts: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/attempts`)).data.attempts || [],
-  adminPayments: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/payments`)).data.payments || [],
+  /** One exam's payments. view 'active' (default) hides Not confirmed / archived records; 'history' returns every record. */
+  adminPayments: async (id: string, view: 'active' | 'history' = 'active'): Promise<{ payments: any[]; historyCount: number }> => {
+    const { data } = await api.get(`/olympiad/admin/exams/${id}/payments`, { params: { view } });
+    return { payments: data.payments || [], historyCount: data.historyCount || 0 };
+  },
   /** Every Olympiad payment across all exams; pass a standard (1–10) to narrow, omit / 'all' for everything. */
-  adminAllPayments: async (standard: number | 'all' = 'all'): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
-    const { data } = await api.get('/olympiad/admin/payments', { params: { standard } });
+  adminAllPayments: async (standard: number | 'all' = 'all', view: 'active' | 'history' = 'active'): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
+    const { data } = await api.get('/olympiad/admin/payments', { params: { standard, view } });
     return { payments: data.payments || [], summary: data.summary };
   },
 };

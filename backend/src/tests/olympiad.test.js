@@ -54,7 +54,7 @@ if (!USE_REAL) {
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,
   };
   overrides[path.join(SRC, 'models', 'User.js')] = fake.User;
-  overrides[path.join(SRC, 'models', 'index.js')] = { Notification: fake.Notification };
+  overrides[path.join(SRC, 'models', 'index.js')] = { Notification: fake.Notification, Payment: fake.Payment, Enrollment: fake.Enrollment }; // Payment / Enrollment: the webhook also recognises course orders
 }
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {

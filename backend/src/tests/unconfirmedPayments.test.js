@@ -266,20 +266,29 @@ test('re-running is a no-op (idempotent) and never touches the genuine payment',
 });
 
 // ── admin screens after the migration ─────────────────────────────────────────────────
-test('Admin All Standards + Standard 5 both show the single genuine Std 5 ₹20 payment; not-confirmed rows are clearly marked', async () => {
+test('Admin All Standards + Standard 5 both show the single genuine Std 5 ₹20 payment; UNCONFIRMED rows moved to Payment History', async () => {
   const all = await api('/olympiad/admin/payments', S.admin.token);
   assert.equal(all.status, 200);
-  assert.equal(all.body.payments.length, fake.OlympiadPayment.docs.length);
+  // ACTIVE view: 1 SUCCESS + 1 PENDING — the 4 UNCONFIRMED records are not in the normal list
+  assert.equal(all.body.payments.length, 2);
+  assert.ok(all.body.payments.every((p) => p.status !== 'UNCONFIRMED'));
   const g = all.body.payments.filter((p) => String(p._id) === String(S.genuine._id));
   assert.equal(g.length, 1, 'shown once');
   assert.equal(g[0].status, 'SUCCESS'); assert.equal(g[0].amount, 20); assert.equal(g[0].exam.standard, 5); assert.equal(g[0].student.name, 'Nikhil Reddy');
-  assert.equal(all.body.summary.revenue, 20); assert.equal(all.body.summary.successfulPayments, 1); assert.equal(all.body.summary.unconfirmedPayments, 4); assert.equal(all.body.summary.pendingPayments, 1);
+  assert.equal(all.body.summary.revenue, 20); assert.equal(all.body.summary.successfulPayments, 1); assert.equal(all.body.summary.pendingPayments, 1);
+  assert.equal(all.body.summary.historyCount, 4, 'the 4 hidden records are counted so the admin can open Payment History');
   const s5 = await api('/olympiad/admin/payments?standard=5', S.admin.token);
   assert.deepEqual(s5.body.payments.map((p) => String(p._id)), [String(S.genuine._id)]);
-  const s3 = await api('/olympiad/admin/payments?standard=3', S.admin.token);
-  const unconfirmed = s3.body.payments.find((p) => p.status === 'UNCONFIRMED');
+  const s1 = await api('/olympiad/admin/payments?standard=1', S.admin.token);
+  assert.ok(!s1.body.payments.some((p) => String(p._id) === String(S.genuine._id)), 'Standard 1 never shows the Std 5 payment');
+  // PAYMENT HISTORY: everything, with the audit note
+  const hist = await api('/olympiad/admin/payments?view=history', S.admin.token);
+  assert.equal(hist.body.payments.length, fake.OlympiadPayment.docs.length);
+  assert.equal(hist.body.summary.revenue, 20); assert.equal(hist.body.summary.unconfirmedPayments, 4);
+  const h3 = await api('/olympiad/admin/payments?standard=3&view=history', S.admin.token);
+  const unconfirmed = h3.body.payments.find((p) => p.status === 'UNCONFIRMED');
   assert.ok(unconfirmed && unconfirmed.statusBeforeReview === 'SUCCESS' && /^Not matched to a captured LIVE/.test(unconfirmed.reviewNote));
-  assert.ok(!/SIG-SECRET|razorpaySignature/.test(all.text));
+  assert.ok(!/SIG-SECRET|razorpaySignature/.test(all.text) && !/SIG-SECRET|razorpaySignature/.test(hist.text));
   // no duplicate record was created anywhere
   assert.equal(fake.OlympiadPayment.docs.filter((p) => p.razorpayPaymentId === 'pay_LIVEstd5BBBB').length, 1);
   assert.equal(fake.Payment.docs.filter((p) => p.razorpayPaymentId === 'pay_LIVEstd5BBBB').length, 0);
@@ -292,18 +301,24 @@ test('Admin All Standards + Standard 5 both show the single genuine Std 5 ₹20 
   assert.equal((await api(`/olympiad/admin/exams/${S.e[3]._id}/attempts`, S.admin.token)).body.attempts.length, 1);
 });
 
-test('Admin → Payments merged view: revenue ₹20, not-confirmed rows marked, dashboard agrees', async () => {
+test('Admin → Payments: active list has no UNCONFIRMED rows; Payment History keeps all 13; revenue ₹20; dashboard agrees', async () => {
   const pays = (await api('/admin/payments', S.admin.token)).body;
   const dash = (await api('/admin/stats', S.admin.token)).body;
   assert.equal(pays.stats.totalRevenue, 20); assert.equal(dash.stats.totalRevenue, 20);
-  assert.equal(pays.stats.unconfirmedCount, 13); assert.equal(pays.stats.completedCount, 1);
-  const unc = pays.payments.filter((p) => p.status === 'unconfirmed');
+  assert.equal(pays.stats.completedCount, 1);
+  assert.equal(pays.payments.filter((p) => p.status === 'unconfirmed').length, 0, 'UNCONFIRMED is not in the normal list');
+  assert.equal(pays.stats.unconfirmedCount, 13); assert.equal(pays.stats.historyCount, 13);
+  assert.equal(pays.payments.length, fake.Payment.docs.length + fake.OlympiadPayment.docs.length - 13, 'active = everything except the 13 hidden');
+  assert.equal(pays.payments.filter((p) => p.status === 'completed').length, 1);
+
+  const hist = (await api('/admin/payments?view=history', S.admin.token)).body;
+  const unc = hist.payments.filter((p) => p.status === 'unconfirmed');
   assert.equal(unc.length, 13);
   assert.equal(unc.filter((p) => p.source === 'course').length, 9); assert.equal(unc.filter((p) => p.source === 'olympiad').length, 4);
   assert.ok(unc.every((p) => /^Not matched to a captured LIVE/.test(p.reviewNote)));
-  assert.equal(pays.payments.filter((p) => p.status === 'completed').length, 1);
-  assert.equal(pays.payments.length, fake.Payment.docs.length + fake.OlympiadPayment.docs.length, 'nothing hidden, nothing duplicated');
-  assert.ok(!/SIG-SECRET|razorpaySignature/.test(JSON.stringify(pays)));
+  assert.equal(hist.stats.totalRevenue, 20, 'revenue is identical in both views');
+  assert.equal(hist.payments.length, fake.Payment.docs.length + fake.OlympiadPayment.docs.length, 'history: nothing hidden, nothing duplicated');
+  assert.ok(!/SIG-SECRET|razorpaySignature/.test(JSON.stringify(pays)) && !/SIG-SECRET|razorpaySignature/.test(JSON.stringify(hist)));
 });
 
 // ── access ────────────────────────────────────────────────────────────────────────────

@@ -34,9 +34,11 @@ router.get('/courses', ...adminAuth, async (req, res) => {
 // Payments — every transaction (courses + Olympiad) and the SAME totals the dashboard shows
 router.get('/payments', ...adminAuth, async (req, res) => {
   try {
-    const [payments, stats] = await Promise.all([listPayments(), getPaymentStats()]);
+    // ACTIVE view by default (no UNCONFIRMED / archived records); ?view=history shows the full audit history
+    const view = req.query.view === 'history' ? 'history' : 'active';
+    const [payments, stats] = await Promise.all([listPayments({ view }), getPaymentStats({ view })]);
     res.set('Cache-Control', 'no-store'); // live financial figures — never serve a stale copy
-    res.json({ success: true, payments, stats });
+    res.json({ success: true, view, payments, stats });
   } catch (e) {
     console.error('GET /admin/payments failed:', e);
     res.status(500).json({ success: false, message: 'Server error.' });

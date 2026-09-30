@@ -25,7 +25,26 @@ const paymentSchema = new mongoose.Schema({
   statusBeforeReview: { type: String, trim: true }, // the status before it was marked unconfirmed (reversible)
   reviewNote: { type: String, trim: true },         // why it was marked unconfirmed
   type: { type: String, enum: ['course', 'lecture', 'note'], required: true },
+  failureReason: { type: String },
+  verifiedAt: { type: Date },                                   // set when the reconciler / webhook confirms a capture
+  verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },
+
+  // ── Archive (audit history): hidden from the ACTIVE admin list, never deleted. A completed payment is never hidden. ──
+  archivedAt: { type: Date },
+  archiveReason: { type: String, trim: true },
+
+  // ── Automatic reconciliation (services/paymentReconciler.js) ──
+  failedBy: { type: String, enum: ['reconciler', 'cleanup'] },
+  reconciledAt: { type: Date },
+  reconcileAttempts: { type: Number },
+  lateChecks: { type: Number },
+  reconcileLastAt: { type: Date },
+  reconcileNextAt: { type: Date },
+  reconcileLockUntil: { type: Date },
+  reconcileState: { type: String, enum: ['needs_review', 'closed'] },
+  reconcileNote: { type: String, trim: true },
 }, { timestamps: true });
+paymentSchema.index({ status: 1, createdAt: 1 }); // stale-pending scan
 
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

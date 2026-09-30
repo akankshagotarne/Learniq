@@ -116,6 +116,8 @@ export interface OlympiadPaymentSummary {
   failedPayments: number;
   refundedPayments: number;
   unconfirmedPayments?: number;
+  /** records hidden from the active list (not confirmed / archived) — available in Payment History */
+  historyCount?: number;
   revenue: number;
 }
 

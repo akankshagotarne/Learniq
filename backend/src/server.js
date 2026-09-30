@@ -31,6 +31,7 @@ const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
 const { startOlympiadSweeper } = require('./controllers/olympiadController');
+const { startPaymentReconciler } = require('./services/paymentReconciler');
 
 const app = express();
 const server = http.createServer(app);
@@ -137,6 +138,9 @@ const startServer = async () => {
   try {
     await connectDB();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
+    // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
+    const reconciler = startPaymentReconciler();
+    console.log(reconciler.started ? '🔁 Payment reconciler: running (every 60 s, first check ~5 min after checkout)' : `⚠️  Payment reconciler NOT running: ${reconciler.reason}`);
     // Make sure the Standard 9 and Standard 10 Olympiad exams exist (no-op when they are already there)
     require('./seed/seedOlympiadAll')({ ifMissing: true })
       .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
