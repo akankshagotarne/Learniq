@@ -13,7 +13,7 @@
     "test:olympiad": "node --test src/tests/olympiad.test.js",
     "test:payments": "node --test src/tests/paymentStats.test.js",
     "test:razorpay": "node --test src/tests/razorpayConfig.test.js",
-    "test:security": "node --test src/tests/securityFixes.test.js"
+    "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js"
   },
   "keywords": [],
   "author": "Learniq",
@@ -37,7 +37,7 @@
     "razorpay": "^2.9.4",
     "resend": "^4.4.1",
     "socket.io": "^4.7.5",
-    "uuid": "^10.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

@@ -12,7 +12,9 @@ const setupSocket = (io) => {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        socket.user = await User.findById(decoded.id).select('-password');
+        const user = await User.findById(decoded.id).select('-password');
+        // Teachers awaiting admin approval are not allowed to act as teachers over sockets either
+        socket.user = user && user.role === 'teacher' && user.isApproved !== true ? undefined : user;
       }
       next();
     } catch (e) {

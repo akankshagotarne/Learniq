@@ -34,10 +34,20 @@ const protect = async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: `Role '${req.user.role}' is not authorized to access this resource.`,
+        message: `Role '${req.user && req.user.role}' is not authorized to access this resource.`,
+      });
+    }
+    // A teacher may only use teacher-protected APIs once an admin has approved the account.
+    // role/isApproved come from the user protect() loaded from the database on THIS request (never from the
+    // request body/query/headers), so an existing token starts working the moment an admin approves the teacher.
+    if (req.user.role === 'teacher' && req.user.isApproved !== true) {
+      return res.status(403).json({
+        success: false,
+        code: 'TEACHER_NOT_APPROVED',
+        message: 'Teacher account is awaiting admin approval.',
       });
     }
     next();
