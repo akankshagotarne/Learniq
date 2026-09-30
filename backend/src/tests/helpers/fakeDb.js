@@ -360,7 +360,15 @@ const createFakeDb = () => {
   });
   const Counter = new FakeModel('Counter', { registry, defaults: () => ({ seq: 0 }) });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter };
+  // teaching content (used by the admin teacher profile counts)
+  const Lecture = new FakeModel('Lecture', { registry });
+  const Note = new FakeModel('Note', { registry });
+  const LiveSession = new FakeModel('LiveSession', { registry });
+  const Exam = new FakeModel('Exam', { registry });
+  const Quiz = new FakeModel('Quiz', { registry });
+  const Assignment = new FakeModel('Assignment', { registry });
+
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, Lecture, Note, LiveSession, Exam, Quiz, Assignment };
 };
 
 module.exports = { createFakeDb };

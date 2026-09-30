@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Award, UserCheck, UserX, Clock, BookOpen } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { User } from '../../types';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from '../../components/admin/ProfileParts';
 
 type FilterMode = 'all' | 'pending' | 'approved';
 
 const AdminTeachers: React.FC = () => {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState<User | null>(null);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -125,7 +129,13 @@ const AdminTeachers: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {filtered.map(teacher => (
-                <div key={teacher._id} className="card-soft p-4">
+                <div
+                  key={teacher._id}
+                  className="card-soft p-4 cursor-pointer transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                  role="link" tabIndex={0} aria-label={`Open ${teacher.name}'s profile`}
+                  onClick={() => navigate(`/admin/teachers/${teacher._id}`)}
+                  onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/admin/teachers/${teacher._id}`); } }}
+                >
                   <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
                     <img
                       src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'T')}&background=6C63F2&color=fff&size=48`}
@@ -156,7 +166,7 @@ const AdminTeachers: React.FC = () => {
                         <p className="text-text-muted text-xs mt-0.5">{teacher.qualification}{teacher.experience ? ` • ${teacher.experience}` : ''}</p>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
+                    <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0" onClick={e => e.stopPropagation()}>
                       {!teacher.isApproved ? (
                         <div className="flex gap-2">
                           <button onClick={() => setApproval(teacher, true)}
@@ -170,7 +180,7 @@ const AdminTeachers: React.FC = () => {
                         </div>
                       ) : (
                         <button
-                          onClick={() => toggleActive(teacher)}
+                          onClick={() => { if (teacher.isActive) setConfirming(teacher); else void toggleActive(teacher); }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                             teacher.isActive
                               ? 'bg-[#FFE4EC] text-[#E1447A] border-[#FFE4EC] hover:bg-[#FFE4EC]/80'
@@ -188,6 +198,13 @@ const AdminTeachers: React.FC = () => {
           )}
         </div>
       </main>
+
+      <ConfirmDialog
+        open={confirming !== null} tone="danger" title="Deactivate this teacher?" confirmLabel="Deactivate"
+        message={<>{confirming?.name} will not be able to log in until you activate the account again. Their courses and lectures are kept.</>}
+        onConfirm={() => { const t = confirming; setConfirming(null); if (t) void toggleActive(t); }}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 };
