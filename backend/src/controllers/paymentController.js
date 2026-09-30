@@ -1,18 +1,11 @@
-const Razorpay = require('razorpay');
-const crypto = require('crypto');
+const mongoose = require('mongoose');
 const { Payment, Enrollment, Notification } = require('../models/index');
 const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
-
-const getRazorpayInstance = () => {
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_ID.startsWith('rzp_test_YOUR')) {
-    return null; // Not configured
-  }
-  return new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-  });
-};
+// Shared Razorpay client (same one the Olympiad payments use) — keys come from the server environment only
+const {
+  getRazorpayInstance, getRazorpayKeyId, isRazorpayConfigured, isValidPaymentSignature,
+} = require('../services/razorpayClient');
 
 // POST /api/payments/create-order
 const createOrder = async (req, res) => {
@@ -66,7 +59,7 @@ const createOrder = async (req, res) => {
       success: true,
       order,
       paymentId: payment._id,
-      keyId: process.env.RAZORPAY_KEY_ID,
+      keyId: getRazorpayKeyId(), // public key id only — the secret never leaves the server
     });
   } catch (error) {
     console.error('Error creating payment order:', error);
@@ -83,25 +76,30 @@ const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required payment verification details.' });
     }
 
-    const payment = await Payment.findById(paymentId);
+    if (!mongoose.isValidObjectId(paymentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid payment reference.' });
+    }
+
+    // Only the student who created the order can verify it
+    const payment = await Payment.findOne({ _id: paymentId, student: req.user._id });
     if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' });
+
+    // The signed Razorpay order must be THIS payment's order (a valid signature from another,
+    // cheaper order must not unlock this item)
+    if (payment.razorpayOrderId !== razorpayOrderId) {
+      return res.status(400).json({ success: false, message: 'Payment verification failed: order mismatch.' });
+    }
 
     if (payment.status === 'completed') {
       return res.json({ success: true, message: 'Payment already verified.', payment });
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!secret) {
-      return res.status(500).json({ success: false, message: 'Razorpay secret key not configured on server.' });
+    if (!isRazorpayConfigured()) {
+      return res.status(503).json({ success: false, message: 'Razorpay is not configured on the server.' });
     }
 
-    // Cryptographic HMAC-SHA256 signature verification
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-      .digest('hex');
-
-    if (expectedSignature !== razorpaySignature) {
+    // Cryptographic HMAC-SHA256 signature verification with RAZORPAY_KEY_SECRET (server-side only)
+    if (!isValidPaymentSignature({ orderId: razorpayOrderId, paymentId: razorpayPaymentId, signature: razorpaySignature })) {
       payment.status = 'failed';
       await payment.save();
       return res.status(400).json({ success: false, message: 'Payment verification failed: Invalid signature.' });

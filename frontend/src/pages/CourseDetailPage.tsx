@@ -11,7 +11,7 @@ import api from '../services/api';
 import { Course, Lecture, Note, CourseDoubtThread } from '../types';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { loadRazorpayScript } from '../utils/razorpay';
+import { loadRazorpayScript, resolveCheckoutKey, PAYMENTS_NOT_CONFIGURED_MESSAGE } from '../utils/razorpay';
 import { generateCourseNotes } from '../utils/generateCourseNotes';
 import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
 import { resolveFileUrl } from '../utils/fileUrl';
@@ -244,9 +244,15 @@ const CourseDetailPage: React.FC = () => {
       }
 
       const { order, paymentId, keyId } = orderRes.data;
+      const checkoutKey = resolveCheckoutKey(keyId); // VITE_RAZORPAY_KEY_ID (public key only)
+      if (!checkoutKey) {
+        toast.error(PAYMENTS_NOT_CONFIGURED_MESSAGE);
+        setEnrolling(false);
+        return;
+      }
 
       const options = {
-        key: keyId,
+        key: checkoutKey,
         amount: order.amount,
         currency: order.currency || 'INR',
         name: 'Learniq',

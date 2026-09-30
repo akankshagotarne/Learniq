@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
-import { loadRazorpayScript } from '../../utils/razorpay';
+import { loadRazorpayScript, resolveCheckoutKey, PAYMENTS_NOT_CONFIGURED_MESSAGE } from '../../utils/razorpay';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 
 interface PayableExam {
@@ -69,8 +69,14 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
       }
 
       const { order, keyId } = orderRes;
+      const checkoutKey = resolveCheckoutKey(keyId); // VITE_RAZORPAY_KEY_ID (public key only)
+      if (!checkoutKey) {
+        toast.error(PAYMENTS_NOT_CONFIGURED_MESSAGE);
+        finish();
+        return;
+      }
       const options = {
-        key: keyId,
+        key: checkoutKey,
         amount: order.amount,
         currency: order.currency || 'INR',
         name: 'LearnIQ',

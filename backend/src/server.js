@@ -11,6 +11,7 @@ const path = require('path');
 
 const connectDB = require('./config/db');
 const setupSocket = require('./services/socketService');
+const { getRazorpayStatus } = require('./services/razorpayClient');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -99,6 +100,8 @@ app.get('/api/health', (req, res) => {
     success: true,
     server: 'running',
     database: isConnected ? 'connected' : 'disconnected',
+    // non-secret: only whether RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET are set, and test/live mode
+    payments: getRazorpayStatus(),
   });
 });
 
@@ -162,6 +165,10 @@ const startServer = async () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+      const rzp = getRazorpayStatus();
+      console.log(rzp.configured
+        ? `💳 Razorpay: configured (${rzp.mode} mode)`
+        : '⚠️  Razorpay: NOT configured — set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in the backend environment');
     });
   } catch (error) {
     console.error('Startup error:', error.message);

@@ -11,7 +11,8 @@
     "seed:olympiad9": "node src/seed/seedOlympiad9.js",
     "seed:olympiad10": "node src/seed/seedOlympiad10.js",
     "test:olympiad": "node --test src/tests/olympiad.test.js",
-    "test:payments": "node --test src/tests/paymentStats.test.js"
+    "test:payments": "node --test src/tests/paymentStats.test.js",
+    "test:razorpay": "node --test src/tests/razorpayConfig.test.js"
   },
   "keywords": [],
   "author": "Learniq",
