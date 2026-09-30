@@ -199,11 +199,33 @@ export interface Payment {
   student: User | string;
   course?: Course;
   lecture?: Lecture;
+  /** Olympiad exam fee payments (source === 'olympiad') */
+  exam?: { _id: string; title: string; standard: number } | null;
+  source?: 'course' | 'olympiad';
+  /** rupees */
   amount: number;
   currency: string;
   status: string;
   type: string;
   createdAt: string;
+}
+
+/** Totals computed server-side by services/paymentStats.js (rupees; verified payments only count as revenue). */
+export interface PaymentStats {
+  totalRevenue: number;
+  completedCount: number;
+  pendingCount: number;
+  failedCount: number;
+  refundedCount: number;
+  totalCount: number;
+  currency: string;
+}
+
+export interface RevenueTrendPoint {
+  key: string;
+  month: string;
+  year: number;
+  revenue: number;
 }
 
 export interface Badge {

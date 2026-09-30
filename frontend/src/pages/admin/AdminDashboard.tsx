@@ -35,7 +35,8 @@ const AdminDashboard: React.FC = () => {
     { label: 'Total Courses', value: stats?.courses || 0, icon: BookOpen, iconBg: 'bg-[#FEF3C7] text-[#D97706]' },
     { label: 'Live Sessions', value: stats?.sessions || 0, icon: Radio, iconBg: 'bg-[#FFE4EC] text-[#E1447A]' },
     { label: 'Total Lectures', value: stats?.lectures || 0, icon: BarChart2, iconBg: 'bg-[#E0F2FE] text-[#0284C7]' },
-    { label: 'Revenue', value: `₹${((stats?.totalRevenue || 0) / 100).toFixed(0)}`, icon: CreditCard, iconBg: 'bg-[#F3E8FF] text-[#9333EA]' },
+    // totalRevenue is already in rupees (server: services/paymentStats.js) — do not divide by 100
+    { label: 'Revenue', value: `₹${Number(stats?.totalRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, icon: CreditCard, iconBg: 'bg-[#F3E8FF] text-[#9333EA]' },
   ];
 
   const chartData = [
@@ -54,14 +55,9 @@ const AdminDashboard: React.FC = () => {
     { name: 'Computer', value: 10, color: '#B69CF2' },
   ];
 
-  const revenueData = [
-    { month: 'Apr', revenue: 4200 },
-    { month: 'May', revenue: 6800 },
-    { month: 'Jun', revenue: 8100 },
-    { month: 'Jul', revenue: 9500 },
-    { month: 'Aug', revenue: 11200 },
-    { month: 'Sep', revenue: 13400 },
-  ];
+  // verified revenue per month (rupees), from the same server-side calculation as the Revenue card
+  const revenueData: { month: string; revenue: number }[] =
+    (stats?.revenueTrend || []).map((p: { month: string; revenue: number }) => ({ month: p.month, revenue: p.revenue }));
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -143,7 +139,7 @@ const AdminDashboard: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="#E7E7F2" />
                   <XAxis dataKey="month" tick={{ fill: '#6B6E8C', fontSize: 11 }} axisLine={false} />
                   <YAxis tick={{ fill: '#6B6E8C', fontSize: 11 }} axisLine={false} />
-                  <Tooltip contentStyle={{ background: '#FFFFFF', border: '1px solid #E7E7F2', borderRadius: 12, color: '#22243A', fontSize: 12, boxShadow: '0 4px 20px rgba(34,36,58,0.06)' }} formatter={(v) => `₹${v}`} />
+                  <Tooltip contentStyle={{ background: '#FFFFFF', border: '1px solid #E7E7F2', borderRadius: 12, color: '#22243A', fontSize: 12, boxShadow: '0 4px 20px rgba(34,36,58,0.06)' }} formatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} />
                   <Line type="monotone" dataKey="revenue" stroke="#FF8FA3" strokeWidth={3} dot={{ fill: '#FF8FA3', r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>

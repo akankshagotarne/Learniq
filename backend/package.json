@@ -10,7 +10,8 @@
     "seed:olympiad": "node src/seed/seedOlympiadAll.js",
     "seed:olympiad9": "node src/seed/seedOlympiad9.js",
     "seed:olympiad10": "node src/seed/seedOlympiad10.js",
-    "test:olympiad": "node --test src/tests/olympiad.test.js"
+    "test:olympiad": "node --test src/tests/olympiad.test.js",
+    "test:payments": "node --test src/tests/paymentStats.test.js"
   },
   "keywords": [],
   "author": "Learniq",

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Search, CreditCard, IndianRupee, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
-import { Payment } from '../../types';
+import { Payment, PaymentStats } from '../../types';
 import toast from 'react-hot-toast';
 
 type StatusFilter = 'all' | 'completed' | 'pending' | 'failed';
@@ -11,17 +11,25 @@ const statusStyle: Record<string, string> = {
   completed: 'bg-[#DCFCE7] text-[#16A34A]',
   pending: 'bg-[#FEF3C7] text-[#D97706]',
   failed: 'bg-[#FFE4EC] text-[#E1447A]',
+  refunded: 'bg-surface-alt text-text-muted',
 };
+
+const itemTitle = (p: Payment) =>
+  p.course?.title || p.lecture?.title || (p.exam ? `${p.exam.title} — Std ${p.exam.standard}` : 'Untitled item');
 
 const AdminPayments: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [stats, setStats] = useState<PaymentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   useEffect(() => {
     api.get('/admin/payments')
-      .then(r => setPayments(r.data.payments || []))
+      .then(r => {
+        setPayments(r.data.payments || []);
+        setStats(r.data.stats || null); // totals come from the server (same calculation as the dashboard)
+      })
       .catch(() => toast.error('Failed to load payments.'))
       .finally(() => setLoading(false));
   }, []);
@@ -31,16 +39,16 @@ const AdminPayments: React.FC = () => {
     if (search) {
       const q = search.toLowerCase();
       const studentName = (p.student as any)?.name || '';
-      const courseTitle = p.course?.title || p.lecture?.title || '';
+      const courseTitle = itemTitle(p);
       if (!studentName.toLowerCase().includes(q) && !courseTitle.toLowerCase().includes(q)) return false;
     }
     return true;
   }), [payments, search, statusFilter]);
 
-  const totalRevenue = payments.filter(p => p.status === 'completed').reduce((s, p) => s + (p.amount || 0), 0);
-  const completedCount = payments.filter(p => p.status === 'completed').length;
-  const pendingCount = payments.filter(p => p.status === 'pending').length;
-  const failedCount = payments.filter(p => p.status === 'failed').length;
+  const totalRevenue = stats?.totalRevenue ?? 0;
+  const completedCount = stats?.completedCount ?? 0;
+  const pendingCount = stats?.pendingCount ?? 0;
+  const failedCount = stats?.failedCount ?? 0;
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -56,7 +64,7 @@ const AdminPayments: React.FC = () => {
           {/* Stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             {[
-              { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, icon: IndianRupee, iconBg: 'bg-[#F3E8FF] text-[#9333EA]' },
+              { label: 'Total Revenue', value: `₹${totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, icon: IndianRupee, iconBg: 'bg-[#F3E8FF] text-[#9333EA]' },
               { label: 'Completed', value: completedCount, icon: CheckCircle2, iconBg: 'bg-[#DCFCE7] text-[#16A34A]' },
               { label: 'Pending', value: pendingCount, icon: Clock, iconBg: 'bg-[#FEF3C7] text-[#D97706]' },
               { label: 'Failed', value: failedCount, icon: XCircle, iconBg: 'bg-[#FFE4EC] text-[#E1447A]' },
@@ -119,7 +127,7 @@ const AdminPayments: React.FC = () => {
                       {(payment.student as any)?.name || 'Unknown student'}
                     </p>
                     <p className="text-text-secondary text-xs truncate">
-                      {payment.course?.title || payment.lecture?.title || 'Untitled item'} • {payment.type}
+                      {itemTitle(payment)} • {payment.type}
                     </p>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${statusStyle[payment.status] || 'bg-surface-alt text-text-muted'}`}>

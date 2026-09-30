@@ -3,7 +3,8 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const userCtrl = require('../controllers/userController');
 const courseCtrl = require('../controllers/courseController');
-const { Company, Notification, Payment } = require('../models/index');
+const { Company, Notification } = require('../models/index');
+const { getPaymentStats, listPayments } = require('../services/paymentStats');
 const supportCtrl = require('../controllers/supportController');
 
 const adminAuth = [protect, authorize('admin')];
@@ -30,15 +31,14 @@ router.get('/courses', ...adminAuth, async (req, res) => {
   }
 });
 
-// Payments
+// Payments — every transaction (courses + Olympiad) and the SAME totals the dashboard shows
 router.get('/payments', ...adminAuth, async (req, res) => {
   try {
-    const payments = await Payment.find()
-      .populate('student', 'name email')
-      .populate('course', 'title')
-      .sort({ createdAt: -1 });
-    res.json({ success: true, payments });
+    const [payments, stats] = await Promise.all([listPayments(), getPaymentStats()]);
+    res.set('Cache-Control', 'no-store'); // live financial figures — never serve a stale copy
+    res.json({ success: true, payments, stats });
   } catch (e) {
+    console.error('GET /admin/payments failed:', e);
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 });

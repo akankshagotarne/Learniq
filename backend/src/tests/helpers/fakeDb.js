@@ -5,7 +5,7 @@
  *   - $set (incl. dotted paths) / $unset updates
  *   - `select: false` hidden fields (answer key!) and '+field' opt-in
  *   - the unique / partial-unique indexes declared in models/Olympiad.js (throws code 11000)
- *   - a tiny $match / $group aggregation
+ *   - a tiny $match / $group aggregation (group _id may be '$field', $ifNull or $dateToString)
  * For full-fidelity runs set OLYMPIAD_TEST_MONGO_URI to use a real MongoDB instead.
  */
 const mongoose = require('mongoose');
@@ -61,7 +61,29 @@ const matchCond = (v, cond) => {
   }
   return eq(v, cond);
 };
-const matches = (doc, filter = {}) => Object.entries(filter).every(([k, c]) => matchCond(getPath(doc, k), c));
+const matches = (doc, filter = {}) => Object.entries(filter).every(([k, c]) => {
+  if (k === '$or') return c.some((sub) => matches(doc, sub));
+  if (k === '$and') return c.every((sub) => matches(doc, sub));
+  return matchCond(getPath(doc, k), c);
+});
+
+/** the few aggregation expressions the services use: '$field', $ifNull, $dateToString('%Y-%m' | '%Y-%m-%d', timezone) */
+const evalExpr = (doc, expr) => {
+  if (typeof expr === 'string') return expr.startsWith('$') ? getPath(doc, expr.slice(1)) : expr;
+  if (expr && expr.$ifNull) {
+    for (const e of expr.$ifNull) { const v = evalExpr(doc, e); if (v != null) return v; }
+    return null;
+  }
+  if (expr && expr.$dateToString) {
+    const { format, date, timezone = 'UTC' } = expr.$dateToString;
+    const d = evalExpr(doc, date);
+    if (!(d instanceof Date)) return null;
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(d).map((p) => [p.type, p.value]));
+    return format.replace('%Y', parts.year).replace('%m', parts.month).replace('%d', parts.day);
+  }
+  throw new Error(`fakeDb: unsupported expression ${JSON.stringify(expr)}`);
+};
 
 const applyUpdate = (doc, update) => {
   for (const [op, spec] of Object.entries(update)) {
@@ -77,11 +99,12 @@ const dupError = (msg) => Object.assign(new Error(`E11000 duplicate key error: $
 class Query {
   constructor(model, filter, single) {
     this.model = model; this.filter = filter; this.single = single;
-    this._sort = null; this._select = null; this._limit = null; this._populate = [];
+    this._sort = null; this._select = null; this._limit = null; this._skip = 0; this._populate = [];
   }
   sort(s) { this._sort = s; return this; }
   select(s) { this._select = s; return this; }
   limit(n) { this._limit = n; return this; }
+  skip(n) { this._skip = n; return this; }
   lean() { return this; }
   populate(path, fields) { this._populate.push({ path, fields }); return this; }
   then(res, rej) { return this.exec().then(res, rej); }
@@ -102,6 +125,7 @@ class Query {
       });
     }
     if (this.single) rows = rows.slice(0, 1);
+    if (this._skip) rows = rows.slice(this._skip);
     if (this._limit) rows = rows.slice(0, this._limit);
     const out = rows.map((d) => {
       let doc = this.model.project(d, this._select);
@@ -236,8 +260,9 @@ class FakeModel {
         const { _id: idSpec, ...accs } = stage.$group;
         const groups = new Map();
         for (const d of rows) {
-          const key = String(getPath(d, idSpec.slice(1)));
-          if (!groups.has(key)) groups.set(key, { _id: getPath(d, idSpec.slice(1)), rows: [] });
+          const id = evalExpr(d, idSpec);
+          const key = String(id);
+          if (!groups.has(key)) groups.set(key, { _id: id, rows: [] });
           groups.get(key).rows.push(d);
         }
         rows = [...groups.values()].map(({ _id, rows: rs }) => {
@@ -291,8 +316,14 @@ const createFakeDb = () => {
     defaults: () => ({ role: 'student', isActive: true }),
   });
   const Notification = new FakeModel('Notification', { registry });
+  // course / lecture / note payments (models/index.js → Payment)
+  const Course = new FakeModel('Course', { registry });
+  const Payment = new FakeModel('Payment', {
+    registry, refs: { student: 'User', course: 'Course' },
+    defaults: () => ({ currency: 'INR', status: 'pending' }),
+  });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification };
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course };
 };
 
 module.exports = { createFakeDb };

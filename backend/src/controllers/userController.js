@@ -1,10 +1,11 @@
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
-const { Enrollment, Payment, Notification, Progress } = require('../models/index');
+const { Enrollment, Notification, Progress } = require('../models/index');
 const { Quiz, QuizAttempt } = require('../models/Quiz');
 const { Assignment, AssignmentSubmission } = require('../models/Assignment');
 const { LiveSession, LiveParticipant } = require('../models/LiveSession');
+const { getPaymentStats, getRevenueTrend } = require('../services/paymentStats');
 
 // GET /api/teacher/students
 const getStudents = async (req, res) => {
@@ -142,7 +143,7 @@ const getStudentProgress = async (req, res) => {
 // GET /api/admin/stats
 const getAdminStats = async (req, res) => {
   try {
-    const [students, teachers, courses, lectures, quizzes, assignments, sessions, payments] = await Promise.all([
+    const [students, teachers, courses, lectures, quizzes, assignments, sessions, paymentStats, revenueTrend] = await Promise.all([
       User.countDocuments({ role: 'student' }),
       User.countDocuments({ role: 'teacher' }),
       Course.countDocuments(),
@@ -150,23 +151,28 @@ const getAdminStats = async (req, res) => {
       Quiz.countDocuments(),
       Assignment.countDocuments(),
       LiveSession.countDocuments(),
-      Payment.find({ status: 'completed' }).select('amount'),
+      // same calculation as the admin Payments page (services/paymentStats.js) — amounts are in rupees
+      getPaymentStats(),
+      getRevenueTrend({ months: 6 }),
     ]);
-
-    const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
 
     const recentStudents = await User.find({ role: 'student' }).sort({ createdAt: -1 }).limit(5).select('name email createdAt currentStandard');
     const recentTeachers = await User.find({ role: 'teacher' }).sort({ createdAt: -1 }).limit(5).select('name email createdAt isApproved');
 
+    res.set('Cache-Control', 'no-store'); // live financial figures — never serve a stale copy
     res.json({
       success: true,
       stats: {
         students, teachers, courses, lectures, quizzes, assignments, sessions,
-        totalRevenue, payments: payments.length,
+        totalRevenue: paymentStats.totalRevenue, // rupees (verified payments only)
+        payments: paymentStats.completedCount,
+        paymentStats,
+        revenueTrend,
         recentStudents, recentTeachers,
       },
     });
   } catch (error) {
+    console.error('getAdminStats failed:', error);
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
