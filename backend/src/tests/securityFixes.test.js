@@ -169,6 +169,42 @@ test('forgot password: a mail-provider failure is still a generic 200 (no enumer
   assert.equal(u.resetPasswordToken, undefined);
 });
 
+test('forgot password: the reset link/token is NEVER printed to the console, in any mode', async () => {
+  for (const nodeEnv of ['development', 'production', undefined]) {
+    for (const provider of [false, true]) {
+      setMailEnv(provider);
+      if (nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = nodeEnv;
+      mail.sent.length = 0;
+      const { forgotPassword } = fresh('controllers/authController.js');
+      const u = makeUser(`quiet-${nodeEnv}-${provider}@example.com`);
+      const lines = [];
+      const saved = {};
+      for (const k of ['log', 'info', 'warn', 'error', 'debug']) { saved[k] = console[k]; console[k] = (...a) => lines.push(a.map(String).join(' ')); }
+      const realWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (chunk, ...rest) => { lines.push(String(chunk)); return true; };
+      let r; let mailed = null;
+      try {
+        r = await call(forgotPassword, { body: { email: u.email } });
+        await wait();
+        mailed = mail.sent[0];
+      } finally { process.stdout.write = realWrite; Object.assign(console, saved); }
+      const label = `NODE_ENV=${nodeEnv} provider=${provider}`;
+      assert.equal(r.status, 200, label);
+      assert.ok(!/reset-password|[a-f0-9]{64}/i.test(lines.join('\n')), `${label}: nothing token-like on the console`);
+      assert.ok(!/reset-password|[a-f0-9]{64}/i.test(JSON.stringify(r.body)), `${label}: nothing in the response`);
+      if (provider) assert.ok(mailed && /reset-password\/[a-f0-9]{64}/.test(mailed.html), `${label}: the email still carries the link`);
+      else assert.equal(u.resetPasswordToken, undefined, `${label}: unusable token is discarded`);
+    }
+  }
+  process.env.NODE_ENV = 'production';
+});
+
+test('source guard: authController never logs the reset URL/token', () => {
+  const src = fs.readFileSync(path.join(SRC, 'controllers', 'authController.js'), 'utf8');
+  assert.ok(!/console\.\w+\([^;]*(resetUrl|resetToken|resetPasswordToken)/s.test(src));
+  assert.ok(!/\[dev only\]/.test(src));
+});
+
 // ---------------------------------------------------------------------------------- 2. paid content
 const teacherA = { _id: oid(), role: 'teacher', isActive: true };
 const teacherB = { _id: oid(), role: 'teacher', isActive: true };

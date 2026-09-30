@@ -248,15 +248,11 @@ const forgotPassword = async (req, res) => {
       try {
         const emailSent = await sendResetEmail(user, resetUrl);
         if (!emailSent) {
+          // The reset link/token is never printed or returned - configure an email provider to receive it.
           console.warn('Password reset requested but no email provider is configured (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) - no email was sent.');
-          if (process.env.NODE_ENV === 'development') {
-            // Local development convenience ONLY: the link goes to this server's console, never into the API response.
-            console.log(`[dev only] Password reset link for ${user.email}: ${resetUrl}`);
-          } else {
-            user.resetPasswordToken = undefined;
-            user.resetPasswordExpire = undefined;
-            await user.save({ validateBeforeSave: false });
-          }
+          user.resetPasswordToken = undefined;
+          user.resetPasswordExpire = undefined;
+          await user.save({ validateBeforeSave: false });
         }
       } catch (emailError) {
         console.error('Reset email send failed:', emailError.message);
