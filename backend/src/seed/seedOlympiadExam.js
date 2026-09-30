@@ -69,7 +69,7 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
         totalMarks,
         negativeMarking: false,
         negativeMarkValue: 0,
-        fee: config.fee || 20,
+        fee: config.fee,
         currency: 'INR',
         isPublished: true,
       },

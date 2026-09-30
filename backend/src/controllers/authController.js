@@ -225,6 +225,50 @@ const GENERIC_RESET_RESPONSE = {
   message: 'If an account exists for that email, a password reset link has been sent. Please check your inbox (and spam folder).',
 };
 
+// Reset-token helpers, shared by "Forgot password" and the admin "Send password reset" action so there is ONE
+// implementation of the secure flow. Only the SHA-256 hash of the token is stored; the raw token exists only inside the
+// emailed link. Nothing here ever returns, logs or prints the token or the link.
+const RESET_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Stores a fresh hashed token on the user and returns `{ deliver }`. The emailed link lives only inside that closure —
+ * it is not a property of the user document, the return value or any log line.
+ */
+const issueResetToken = async (user) => {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+  user.resetPasswordExpire = Date.now() + RESET_TTL_MS;
+  await user.save({ validateBeforeSave: false });
+  const resetUrl = `${getPrimaryClientUrl()}/reset-password/${resetToken}`;
+  return { deliver: () => deliverResetEmail(user, resetUrl) };
+};
+
+const discardResetToken = async (user) => {
+  try {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+  } catch (cleanupError) { /* nothing more to do */ }
+};
+
+/** @returns {Promise<'sent'|'not_configured'|'failed'>} — the link is only ever delivered by email */
+const deliverResetEmail = async (user, resetUrl) => {
+  try {
+    const emailSent = await sendResetEmail(user, resetUrl);
+    if (!emailSent) {
+      // The reset link/token is never printed or returned - configure an email provider to receive it.
+      console.warn('Password reset requested but no email provider is configured (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) - no email was sent.');
+      await discardResetToken(user);
+      return 'not_configured';
+    }
+    return 'sent';
+  } catch (emailError) {
+    console.error('Reset email send failed:', emailError.message);
+    await discardResetToken(user);
+    return 'failed';
+  }
+};
+
 const forgotPassword = async (req, res) => {
   try {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -235,34 +279,11 @@ const forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.json(GENERIC_RESET_RESPONSE);
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 min
-    await user.save({ validateBeforeSave: false });
-
-    const resetUrl = `${getPrimaryClientUrl()}/reset-password/${resetToken}`;
+    const reset = await issueResetToken(user);
 
     // Sent in the background so the response time does not reveal whether the account exists.
     // Failures are logged (without the token/link) and the unusable token is discarded.
-    (async () => {
-      try {
-        const emailSent = await sendResetEmail(user, resetUrl);
-        if (!emailSent) {
-          // The reset link/token is never printed or returned - configure an email provider to receive it.
-          console.warn('Password reset requested but no email provider is configured (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) - no email was sent.');
-          user.resetPasswordToken = undefined;
-          user.resetPasswordExpire = undefined;
-          await user.save({ validateBeforeSave: false });
-        }
-      } catch (emailError) {
-        console.error('Reset email send failed:', emailError.message);
-        try {
-          user.resetPasswordToken = undefined;
-          user.resetPasswordExpire = undefined;
-          await user.save({ validateBeforeSave: false });
-        } catch (cleanupError) { /* nothing more to do */ }
-      }
-    })();
+    reset.deliver().catch(() => { /* already handled inside */ });
 
     return res.json(GENERIC_RESET_RESPONSE);
   } catch (error) {
@@ -306,4 +327,4 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe, updateStandard, updateProfile, forgotPassword, resetPassword };
+module.exports = { register, login, getMe, updateStandard, updateProfile, forgotPassword, resetPassword, issueResetToken, RESET_TTL_MS };

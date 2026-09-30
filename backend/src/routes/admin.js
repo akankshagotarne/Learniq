@@ -6,6 +6,7 @@ const courseCtrl = require('../controllers/courseController');
 const { Company, Notification } = require('../models/index');
 const { getPaymentStats, listPayments } = require('../services/paymentStats');
 const supportCtrl = require('../controllers/supportController');
+const profileCtrl = require('../controllers/adminProfileController');
 
 const adminAuth = [protect, authorize('admin')];
 
@@ -18,7 +19,12 @@ router.patch('/support/tickets/:id/status', ...adminAuth, supportCtrl.updateTick
 
 // Users
 router.get('/users', ...adminAuth, userCtrl.getAllUsers);
-router.put('/users/:id', ...adminAuth, userCtrl.updateUserAdmin);
+router.put('/users/:id', ...adminAuth, profileCtrl.requireObjectId, userCtrl.updateUserAdmin);
+
+// Profile pages (read-only, allow-listed fields) and the "send password reset" action — never a password
+router.get('/students/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getStudentProfile);
+router.get('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getTeacherProfile);
+router.post('/users/:id/send-password-reset', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.sendPasswordReset);
 
 // Courses
 router.get('/courses', ...adminAuth, async (req, res) => {

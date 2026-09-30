@@ -794,7 +794,7 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
   const b = await seed();
   assert.equal(String(a._id), String(b._id));
   assert.equal(await M.OlympiadQuestion.countDocuments({ exam: a._id }), 60);
-  assert.equal(a.fee, 20);
+  assert.equal(a.fee, 1);
   assert.equal(a.startDate.toISOString(), '2026-09-28T18:30:00.000Z');
   assert.equal(a.endDate.toISOString(), '2026-10-05T18:29:59.999Z');
 });
@@ -826,7 +826,7 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     const e = r.body.exams[0];
     assert.equal(e.standard, std);
     assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026');
-    assert.equal(e.fee, 20);
+    assert.equal(e.fee, 1);
     assert.equal(e.totalQuestions, QUESTIONS_IN(std));
     assert.equal(e.totalMarks, QUESTIONS_IN(std));
     assert.equal(e.durationMinutes, 60);

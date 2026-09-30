@@ -57,7 +57,7 @@ const useMediaQuery = (query: string) => {
 
 const posterAlt = (std: number, art: number) =>
   `LearnIQ All India Olympiad Test 2026 poster for Standard ${std}. Subjects: ${ARTWORKS[art].subjects.map(s => s.name).join(', ')}. ` +
-  'Test link open 1 to 5 October 2026. Mode: online. Fees: ₹20 only. Scan the QR code to register at learniq-livid.vercel.app.';
+  `Test link open 1 to 5 October 2026. Mode: online. Fees: ₹${OLYMPIAD_PROMO.fee} only. Scan the QR code to register at learniq-livid.vercel.app.`;
 
 const DECOR: { node: React.ReactNode; className: string; dur: number; delay: number; rot?: number }[] = [
   { node: <Star className="w-4 h-4 fill-current" />, className: 'top-[3%] left-[8%] text-[#FFC24B]', dur: 4.2, delay: 0, rot: 14 },

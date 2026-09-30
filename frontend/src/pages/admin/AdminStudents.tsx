@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Users, GraduationCap, Award, Flame } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { User } from '../../types';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from '../../components/admin/ProfileParts';
 
 const AdminStudents: React.FC = () => {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState<User | null>(null);
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -105,7 +109,13 @@ const AdminStudents: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {students.map(student => (
-                <div key={student._id} className="card-soft p-4">
+                <div
+                  key={student._id}
+                  className="card-soft p-4 cursor-pointer transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                  role="link" tabIndex={0} aria-label={`Open ${student.name}'s profile`}
+                  onClick={() => navigate(`/admin/students/${student._id}`)}
+                  onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/admin/students/${student._id}`); } }}
+                >
                   <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
                     <img
                       src={student.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'S')}&background=6C63F2&color=fff&size=48`}
@@ -128,7 +138,7 @@ const AdminStudents: React.FC = () => {
                       </p>
                     </div>
                     <button
-                      onClick={() => toggleActive(student)}
+                      onClick={e => { e.stopPropagation(); if (student.isActive) setConfirming(student); else void toggleActive(student); }}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                         student.isActive
                           ? 'bg-[#FFE4EC] text-[#E1447A] border-[#FFE4EC] hover:bg-[#FFE4EC]/80'
@@ -165,6 +175,13 @@ const AdminStudents: React.FC = () => {
           )}
         </div>
       </main>
+
+      <ConfirmDialog
+        open={confirming !== null} tone="danger" title="Deactivate this student?" confirmLabel="Deactivate"
+        message={<>{confirming?.name} will not be able to use LearnIQ until you activate the account again. Their data and payments are kept.</>}
+        onConfirm={() => { const s = confirming; setConfirming(null); if (s) void toggleActive(s); }}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 };
