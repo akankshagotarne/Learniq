@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import {
-  Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor,
+  Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor, maskEmail,
 } from '../../components/admin/ProfileParts';
 import { adminProfilesApi } from '../../services/adminProfiles';
 import { olympiadErrorMessage } from '../../services/olympiad';
@@ -245,7 +245,8 @@ const AdminTeacherProfilePage: React.FC = () => {
       />
       <ConfirmDialog
         open={pending === 'reset'} busy={busy} title="Send password reset email?" confirmLabel="Send email"
-        message={<>A link to choose a new password will be emailed to <b>{u?.email}</b>. It expires in 15 minutes. Their current password is not changed and is never shown.</>}
+        message={<>A link to choose a new password will be emailed to <b className="text-text-primary">{maskEmail(u?.email)}</b>. The link expires in 15 minutes. The current password is never shown.</>}
+        note="Passwords are stored securely and cannot be viewed."
         onConfirm={() => void sendReset()} onCancel={() => setPending(null)}
       />
     </div>
