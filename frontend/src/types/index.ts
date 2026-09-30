@@ -208,6 +208,9 @@ export interface Payment {
   currency: string;
   status: string;
   type: string;
+  /** set when a record was marked unconfirmed (kept for audit, never revenue) */
+  reviewNote?: string;
+  statusBeforeReview?: string;
   createdAt: string;
 }
 
@@ -218,6 +221,8 @@ export interface PaymentStats {
   pendingCount: number;
   failedCount: number;
   refundedCount: number;
+  /** kept for audit, not matched to a captured LIVE payment — never counted as revenue */
+  unconfirmedCount?: number;
   totalCount: number;
   currency: string;
 }

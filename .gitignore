@@ -50,3 +50,8 @@ backend/backups/
 # Assistant / AI tool outputs
 Claude outputs/
 
+
+# Payment audit / migration backups (contain raw payment ids — never commit)
+backend/payment-backup-*.json
+backend/payments-backup*.json
+backend/report.json

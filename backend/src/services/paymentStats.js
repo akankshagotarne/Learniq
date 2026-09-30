@@ -10,7 +10,8 @@
  * every figure returned by this module is in rupees.
  *
  * Revenue = sum of the amounts of VERIFIED payments only (completed / SUCCESS).
- * Pending, failed and refunded records are counted separately and never add to revenue.
+ * Pending, failed, refunded and unconfirmed records are counted separately and never add to revenue.
+ * (unconfirmed = kept for audit but not matched to a captured LIVE Razorpay payment.)
  */
 const { Payment } = require('../models/index');
 const { OlympiadPayment } = require('../models/Olympiad');
@@ -23,7 +24,7 @@ const SOURCES = [
   {
     key: 'course',
     model: () => Payment,
-    status: { completed: 'completed', pending: 'pending', failed: 'failed', refunded: 'refunded' },
+    status: { completed: 'completed', pending: 'pending', failed: 'failed', refunded: 'refunded', unconfirmed: 'unconfirmed' },
     // a course payment is marked completed in place (no separate paid-at field) → use the order date,
     // which is also the date the Payments page shows for it
     dateExpr: '$createdAt',
@@ -32,7 +33,7 @@ const SOURCES = [
   {
     key: 'olympiad',
     model: () => OlympiadPayment,
-    status: { completed: 'SUCCESS', pending: 'PENDING', failed: 'FAILED', refunded: 'REFUNDED' },
+    status: { completed: 'SUCCESS', pending: 'PENDING', failed: 'FAILED', refunded: 'REFUNDED', unconfirmed: 'UNCONFIRMED' },
     // Olympiad payments record the moment the payment was verified
     dateExpr: { $ifNull: ['$verifiedAt', '$createdAt'] },
     dateFields: ['verifiedAt', 'createdAt'],
@@ -54,7 +55,7 @@ async function getPaymentStats() {
     const rows = await source.model().aggregate([
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
     ]);
-    const out = { revenue: 0, completedCount: 0, pendingCount: 0, failedCount: 0, refundedCount: 0, totalCount: 0 };
+    const out = { revenue: 0, completedCount: 0, pendingCount: 0, failedCount: 0, refundedCount: 0, unconfirmedCount: 0, totalCount: 0 };
     for (const row of rows) {
       const status = normaliseStatus(source, row._id);
       out.totalCount += row.count;
@@ -62,6 +63,7 @@ async function getPaymentStats() {
       else if (status === 'pending') out.pendingCount += row.count;
       else if (status === 'failed') out.failedCount += row.count;
       else if (status === 'refunded') out.refundedCount += row.count;
+      else if (status === 'unconfirmed') out.unconfirmedCount += row.count; // counted, but never revenue
     }
     out.revenue = roundRupees(out.revenue);
     return [source.key, out];
@@ -75,6 +77,7 @@ async function getPaymentStats() {
     pendingCount: sum('pendingCount'),
     failedCount: sum('failedCount'),
     refundedCount: sum('refundedCount'),
+    unconfirmedCount: sum('unconfirmedCount'),
     totalCount: sum('totalCount'),
     currency: 'INR',
     bySource,
@@ -153,6 +156,7 @@ async function listPayments() {
     status: normaliseStatus(olySource, p.status),
     createdAt: p.createdAt,
     paidAt: p.verifiedAt || null,
+    ...(p.reviewNote ? { statusBeforeReview: p.statusBeforeReview, reviewNote: p.reviewNote } : {}),
   }));
   const courseRows = coursePayments.map((p) => ({ ...p, _id: String(p._id), source: 'course' }));
   return [...courseRows, ...olympiadRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

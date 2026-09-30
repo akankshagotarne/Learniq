@@ -74,7 +74,10 @@ const olympiadPaymentSchema = new mongoose.Schema({
   razorpaySignature: { type: String, select: false },
   amount: { type: Number, required: true }, // rupees
   currency: { type: String, default: 'INR' },
-  status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED'], default: 'PENDING' },
+  // UNCONFIRMED = kept for audit, but NOT matched to a captured LIVE Razorpay payment: never revenue, never grants access.
+  status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'UNCONFIRMED'], default: 'PENDING' },
+  statusBeforeReview: { type: String, trim: true }, // the status the record had before it was marked UNCONFIRMED (lets the change be reversed exactly)
+  reviewNote: { type: String, trim: true },         // why it was marked UNCONFIRMED
   verifiedAt: { type: Date },
   verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },
   failureReason: { type: String },
