@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
-import { OlympiadExam, OlympiadResultSummary, OlympiadReviewItem } from '../../types/olympiad';
+import { OlympiadCertificate, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem } from '../../types/olympiad';
+import CertificateBanner from '../../components/olympiad/CertificateBanner';
 import { formatDuration, formatISTDateTime } from '../../utils/olympiadFormat';
 
 type Filter = 'ALL' | 'CORRECT' | 'INCORRECT' | 'NOT_ATTEMPTED';
@@ -37,6 +38,7 @@ const OlympiadResultPage: React.FC = () => {
   const navigate = useNavigate();
   const [exam, setExam] = useState<OlympiadExam | null>(null);
   const [result, setResult] = useState<OlympiadResultSummary | null>(null);
+  const [certificate, setCertificate] = useState<OlympiadCertificate | null>(null);
   const [review, setReview] = useState<OlympiadReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,7 @@ const OlympiadResultPage: React.FC = () => {
         if (cancelled) return;
         setExam(res.exam);
         setResult(res.result);
+        setCertificate(res.certificate ?? null);
         setReview([...rev].sort((a, b) => a.questionNumber - b.questionNumber));
       } catch (err: any) {
         if (cancelled) return;
@@ -153,6 +156,9 @@ const OlympiadResultPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Pass / fail — a PASS (60%+) shows the certificate; a FAIL never does */}
+      <CertificateBanner examId={examId} result={result} certificate={certificate} onCertificate={setCertificate} />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">

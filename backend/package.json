@@ -14,7 +14,8 @@
     "test:payments": "node --test src/tests/paymentStats.test.js",
     "test:razorpay": "node --test src/tests/razorpayConfig.test.js",
     "test:adminpayments": "node --test src/tests/adminOlympiadPayments.test.js src/tests/unconfirmedPayments.test.js src/tests/unconfirmedSchema.test.js src/tests/paymentReconciler.test.js src/tests/paymentCleanup.test.js",
-    "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js"
+    "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js",
+    "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateUi.test.js"
   },
   "keywords": [],
   "author": "Learniq",
@@ -35,6 +36,8 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^10.0.13",
+    "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.4",
     "resend": "^4.4.1",
     "socket.io": "^4.7.5",

@@ -5,6 +5,7 @@ const {
 } = require('../models/Olympiad');
 const { Notification } = require('../models/index');
 const { getRazorpayInstance } = require('../services/razorpayClient');
+const certificates = require('../services/certificateService');
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -173,7 +174,17 @@ const ensureEvaluated = async (attempt) => {
     { $set: result },
     { new: true }
   );
+  // The official result is now stored. A PASS (>= 60%) gets its certificate right here — idempotent, and a certificate
+  // problem can never break submitting an exam (it is retried the next time the result is opened).
+  if (updated) await certificates.safeIssueForAttempt(updated);
   return updated || OlympiadAttempt.findById(attempt._id);
+};
+
+/** The student's certificate for an evaluated attempt: null when they did not pass (no record exists for a FAIL). */
+const certificatePayload = async (attempt) => {
+  if (!certificates.isPass(attempt.percentage)) return null;
+  const { certificate } = await certificates.safeIssueForAttempt(attempt);
+  return certificate ? certificates.toOwnerView(certificate) : null;
 };
 
 /** Atomically lock the attempt as COMPLETED, then evaluate. Safe to call concurrently / repeatedly. */
@@ -205,6 +216,7 @@ const resultSummary = (a) => ({
   score: a.score,
   totalMarks: a.totalMarks,
   percentage: a.percentage,
+  ...certificates.outcomeFor(a.percentage), // passed / result (PASS | FAIL) / grade / passPercentage — from the official stored percentage
   correctCount: a.correctCount,
   wrongCount: a.wrongCount,
   unansweredCount: a.unansweredCount,
@@ -317,7 +329,7 @@ const getCompleted = handler(async (req, res) => {
   for (const a of attempts) {
     if (!a.exam) continue;
     const done = await ensureEvaluated(a);
-    exams.push({ ...examPublic(a.exam), state: 'completed', result: resultSummary(done) });
+    exams.push({ ...examPublic(a.exam), state: 'completed', result: resultSummary(done), certificate: await certificatePayload(done) });
   }
   res.json({ success: true, exams });
 });
@@ -720,12 +732,12 @@ const submitExam = handler(async (req, res) => {
   // Idempotent: double-click / retry after a network failure just returns the stored result.
   if (attempt.status === 'COMPLETED') {
     attempt = await ensureEvaluated(attempt);
-    return res.json({ success: true, alreadySubmitted: true, result: resultSummary(attempt) });
+    return res.json({ success: true, alreadySubmitted: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
   }
 
   if (isExpired(attempt, now)) {
     attempt = await finalizeAttempt(attempt._id, 'TIMER', now);
-    return res.json({ success: true, autoSubmitted: true, result: resultSummary(attempt) });
+    return res.json({ success: true, autoSubmitted: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
   }
 
   // Optional last-second sync of the answers the browser still holds.
@@ -735,7 +747,7 @@ const submitExam = handler(async (req, res) => {
 
   const type = now.getTime() > attempt.deadline.getTime() ? 'TIMER' : 'MANUAL';
   attempt = await finalizeAttempt(attempt._id, type, now);
-  res.json({ success: true, result: resultSummary(attempt) });
+  res.json({ success: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
 });
 
 // ──────────────────────────────────────────────
@@ -761,6 +773,7 @@ const getResult = handler(async (req, res) => {
     success: true,
     exam: examPublic(exam),
     result: { ...resultSummary(attempt), totalQuestions: exam.totalQuestions, status: 'COMPLETED' },
+    certificate: await certificatePayload(attempt),
   });
 });
 
@@ -1017,5 +1030,5 @@ module.exports = {
   adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // exported for tests
-  _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess },
+  _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated },
 };

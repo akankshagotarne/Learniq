@@ -20,6 +20,7 @@ const ContactPage = lazy(() => import('./pages/ContactPage'));
 const PaymentPage = lazy(() => import('./pages/PaymentPage'));
 const LecturePlayerPage = lazy(() => import('./pages/LecturePlayerPage'));
 const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
+const PublicVerifyCertificatePage = lazy(() => import('./pages/PublicVerifyCertificatePage'));
 
 // Student pages
 const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelectionPage'));
@@ -32,6 +33,7 @@ const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 const OlympiadExamPage = lazy(() => import('./pages/student/OlympiadExamPage'));
 const OlympiadTakerPage = lazy(() => import('./pages/student/OlympiadTakerPage'));
 const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage'));
+const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
@@ -113,6 +115,9 @@ const AppRoutes: React.FC = () => (
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
 
+      {/* Public certificate verification — opened by the QR code on a certificate; no login */}
+      <Route path="/verify-certificate/:certificateNumber" element={<PublicVerifyCertificatePage />} />
+
       {/* Payment & Checkout route */}
       <Route path="/payment" element={
         <ProtectedRoute>
@@ -178,6 +183,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/olympiad/:examId/result" element={
         <ProtectedRoute roles={['student']}>
           <OlympiadResultPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/certificates" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentCertificatesPage />
         </ProtectedRoute>
       } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
