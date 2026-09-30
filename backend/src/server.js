@@ -30,6 +30,7 @@ const adminRoutes = require('./routes/admin');
 const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
+const certificateRoutes = require('./routes/certificates');
 const { startOlympiadSweeper } = require('./controllers/olympiadController');
 const { startPaymentReconciler } = require('./services/paymentReconciler');
 
@@ -93,6 +94,7 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
+app.use('/api/certificates', certificateRoutes);
 app.use('/api', miscRoutes);
 
 // 404

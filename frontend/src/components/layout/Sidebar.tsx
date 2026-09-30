@@ -4,7 +4,7 @@ import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
-  Menu, X, Trophy
+  Menu, X, Trophy, Award
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -24,6 +24,7 @@ const studentNav: NavItem[] = [
   { label: 'Courses', href: '/courses', icon: BookOpen },
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
+  { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];

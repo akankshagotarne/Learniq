@@ -37,6 +37,70 @@ export interface OlympiadResultSummary {
   sectionResults: OlympiadSectionResult[];
   totalQuestions?: number;
   status?: 'COMPLETED';
+  // Official outcome, decided by the server from the stored percentage (pass mark 60%)
+  passed?: boolean;
+  result?: 'PASS' | 'FAIL';
+  grade?: CertificateGrade | null;
+  passPercentage?: number;
+}
+
+// ── Certificates (mirror the backend serialisers; the server decides everything, the browser only displays it) ──
+export type CertificateGrade = 'A+' | 'A' | 'B+' | 'B';
+export type CertificateStatus = 'VALID' | 'REVOKED';
+
+export interface OlympiadCertificate {
+  certificateNumber: string;
+  studentName: string;
+  standard: string;
+  standardLabel: string;   // "10th"
+  examName: string;
+  percentage: number;
+  grade: CertificateGrade;
+  result: 'PASS';
+  issueDate: string;
+  issueDateLabel: string;  // "30 September 2026"
+  status: CertificateStatus;
+  revokedAt: string | null;
+  downloadPath: string;
+  verifyUrl: string;
+  // admin list only
+  examId?: string;
+  revokeReason?: string | null;
+}
+
+/** What the public verification page receives (a revoked certificate carries only its number and status). */
+export interface CertificateVerification {
+  valid: boolean;
+  status: CertificateStatus;
+  certificateNumber: string;
+  revokedAt?: string | null;
+  studentName?: string;
+  standardLabel?: string;
+  examName?: string;
+  percentage?: number;
+  grade?: CertificateGrade;
+  result?: 'PASS';
+  issueDateLabel?: string;
+}
+
+export interface AdminCertificateQuery {
+  search?: string;
+  standard?: string;
+  exam?: string;
+  grade?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminCertificateList {
+  certificates: OlympiadCertificate[];
+  page: number;
+  pages: number;
+  total: number;
+  summary: { total: number; valid: number; revoked: number };
 }
 
 export interface OlympiadExam {
@@ -66,6 +130,8 @@ export interface OlympiadExam {
   attemptStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
   result: OlympiadResultSummary | null;
   remainingSeconds: number | null;
+  /** completed exams only: the certificate issued for a PASS (null for a FAIL) */
+  certificate?: OlympiadCertificate | null;
 }
 
 export interface OlympiadQuestion {

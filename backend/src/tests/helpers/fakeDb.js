@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory stand-in for the Mongoose models used by the Olympiad controller.
  * Lets the test-suite run without a MongoDB server. It emulates:
- *   - equality / $in / $nin / $gt / $gte / $lt / $lte / $exists / $ne / $not filters (and `field: null` = missing-or-null, like MongoDB)
+ *   - equality / $in / $nin / $gt / $gte / $lt / $lte / $exists / $ne / $not / $regex filters (and `field: null` = missing-or-null, like MongoDB)
  *   - $set (incl. dotted paths) / $unset / $inc / $setOnInsert updates, upserts, updateOne / updateMany
  *   - `select: false` hidden fields (answer key!) and '+field' opt-in
  *   - the unique / partial-unique indexes declared in models/Olympiad.js (throws code 11000)
@@ -56,6 +56,8 @@ const matchCond = (v, cond) => {
         case '$exists': return (v !== undefined) === arg;
         case '$ne': return arg === null ? v != null : !eq(v, arg);
         case '$not': return !matchCond(v, arg);
+        case '$regex': return typeof v === 'string' && new RegExp(arg instanceof RegExp ? arg.source : arg, cond.$options || '').test(v);
+        case '$options': return true; // consumed by $regex
         default: throw new Error(`fakeDb: unsupported operator ${op}`);
       }
     });
@@ -350,7 +352,15 @@ const createFakeDb = () => {
     defaults: () => ({ currency: 'INR', status: 'pending' }),
   });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment };
+  // certificates (models/Certificate.js) — same unique indexes as the real schema
+  const Certificate = new FakeModel('Certificate', {
+    registry, refs: { student: 'User', exam: 'OlympiadExam' },
+    unique: [{ fields: ['certificateNumber'] }, { fields: ['student', 'exam'] }, { fields: ['attempt'] }, { fields: ['verificationToken'] }],
+    defaults: () => ({ status: 'VALID', result: 'PASS' }),
+  });
+  const Counter = new FakeModel('Counter', { registry, defaults: () => ({ seq: 0 }) });
+
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter };
 };
 
 module.exports = { createFakeDb };

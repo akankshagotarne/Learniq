@@ -4,6 +4,7 @@ import {
   Trophy, Users, IndianRupee, CheckCircle2, XCircle, Clock, BarChart2, TrendingUp, TrendingDown, Target, RefreshCw,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import AdminCertificatesPanel from '../../components/olympiad/AdminCertificatesPanel';
 import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadAdminStats, OlympiadExam, OlympiadPaymentSummary } from '../../types/olympiad';
 import { formatDuration, formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
@@ -37,7 +38,7 @@ const AdminOlympiad: React.FC = () => {
   const [view, setView] = useState<'active' | 'history'>('active');
   const [historyCount, setHistoryCount] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
-  const [tab, setTab] = useState<'results' | 'payments'>('results');
+  const [tab, setTab] = useState<'results' | 'payments' | 'certificates'>('results');
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -98,7 +99,7 @@ const AdminOlympiad: React.FC = () => {
   const isAll = selectedId === ALL;
   const exam = isAll ? undefined : exams.find(e => e._id === selectedId);
   const s = exam?.stats;
-  const activeTab = isAll ? 'payments' : tab; // results are per exam; All Standards only combines payments
+  const activeTab = isAll && tab !== 'certificates' ? 'payments' : tab; // results are per exam; All Standards combines payments (and certificates)
 
   const cards = s ? [
     { label: 'Registrations', value: s.totalRegistrations, icon: Users, iconBg: 'bg-[#EDE9FE] text-[#6C63F2]' },
@@ -210,17 +211,20 @@ const AdminOlympiad: React.FC = () => {
 
               {/* Tabs */}
               <div className="flex bg-surface-alt p-1 rounded-xl border border-border-subtle self-start mb-4 w-fit">
-                {(isAll ? (['payments'] as const) : (['results', 'payments'] as const)).map(t => (
+                {(isAll ? (['payments', 'certificates'] as const) : (['results', 'payments', 'certificates'] as const)).map(t => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
                     className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${activeTab === t ? 'bg-brand-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
                   >
-                    {t === 'results' ? `Results (${attempts.length})` : `Payments (${payments.length})`}
+                    {t === 'results' ? `Results (${attempts.length})` : t === 'payments' ? `Payments (${payments.length})` : 'Certificates'}
                   </button>
                 ))}
               </div>
 
+              {activeTab === 'certificates' ? (
+                <AdminCertificatesPanel examId={isAll ? undefined : selectedId} exams={exams} />
+              ) : (
               <div className="card-soft rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                   {activeTab === 'results' ? (
@@ -317,6 +321,7 @@ const AdminOlympiad: React.FC = () => {
                   )}
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
