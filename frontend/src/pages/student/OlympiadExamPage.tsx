@@ -144,7 +144,7 @@ const OlympiadExamPage: React.FC = () => {
           <p className="text-sm text-text-primary">
             {exam.paymentStatus === 'PENDING'
               ? 'Your previous payment is still being confirmed. If you were charged, access unlocks automatically; otherwise you can pay again below.'
-              : 'Please complete the ₹20 payment before starting the examination.'}
+              : `Please complete the ${formatRupees(exam.fee)} payment before starting the examination.`}
           </p>
         </div>
       )}

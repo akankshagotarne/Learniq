@@ -15,6 +15,7 @@
     "test:razorpay": "node --test src/tests/razorpayConfig.test.js",
     "test:adminpayments": "node --test src/tests/adminOlympiadPayments.test.js src/tests/unconfirmedPayments.test.js src/tests/unconfirmedSchema.test.js src/tests/paymentReconciler.test.js src/tests/paymentCleanup.test.js",
     "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js",
+    "test:fee": "node --test src/tests/olympiadFee.test.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateUi.test.js"
   },
   "keywords": [],
