@@ -123,13 +123,20 @@ test.before(async () => {
 test.after(() => { server.close(); Module._load = originalLoad; });
 
 const ALL_OLY = () => fake.OlympiadPayment.docs.length;
+// ACTIVE view = everything except UNCONFIRMED and archived records (a SUCCESS payment is never hidden)
+const isActive = (p) => p.status !== 'UNCONFIRMED' && (!p.archivedAt || p.status === 'SUCCESS');
+const ACTIVE_OLY = () => fake.OlympiadPayment.docs.filter(isActive).length;
 
 // ── 1 + 2 ─────────────────────────────────────────────────────────────
 test('1. All Standards returns every Olympiad payment, including the confirmed LIVE Std 5 payment (and unpublished exams)', async () => {
   const r = await api('/olympiad/admin/payments', S.admin.token);
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.standard, 'all');
-  assert.equal(r.body.payments.length, ALL_OLY(), 'nothing may be hidden');
+  assert.equal(r.body.payments.length, ACTIVE_OLY(), 'active view: only UNCONFIRMED / archived records are hidden');
+  assert.ok(r.body.payments.every((p) => p.status !== 'UNCONFIRMED'), 'UNCONFIRMED is not in the normal list');
+  assert.equal(r.body.summary.historyCount, ALL_OLY() - ACTIVE_OLY(), 'the hidden records are counted, so the admin can open Payment History');
+  const hist = await api('/olympiad/admin/payments?view=history', S.admin.token);
+  assert.equal(hist.body.payments.length, ALL_OLY(), 'Payment History shows EVERY record — nothing is deleted');
   const g = r.body.payments.find((p) => String(p._id) === String(S.genuine._id));
   assert.ok(g, 'genuine Std 5 payment is present');
   assert.equal(g.student.name, 'Nikhil Reddy');
@@ -143,8 +150,8 @@ test('1. All Standards returns every Olympiad payment, including the confirmed L
   assert.ok(r.body.payments.every((p) => !p.student || /\*\*\*@/.test(p.student.email)), 'e-mails masked');
   assert.equal(r.headers.get('cache-control'), 'no-store');
   // an omitted / empty standard means all as well
-  assert.equal((await api('/olympiad/admin/payments?standard=', S.admin.token)).body.payments.length, ALL_OLY());
-  assert.equal((await api('/olympiad/admin/payments?standard=all', S.admin.token)).body.payments.length, ALL_OLY());
+  assert.equal((await api('/olympiad/admin/payments?standard=', S.admin.token)).body.payments.length, ACTIVE_OLY());
+  assert.equal((await api('/olympiad/admin/payments?standard=all', S.admin.token)).body.payments.length, ACTIVE_OLY());
 });
 
 test('2. Standard 1–10 filters keep working; Standard 5 shows the confirmed Nikhil Reddy ₹20 payment', async () => {
@@ -155,7 +162,7 @@ test('2. Standard 1–10 filters keep working; Standard 5 shows the confirmed Ni
   assert.equal(s5.body.summary.revenue, 20);
   assert.equal(s5.body.standard, 5);
 
-  const expectedStd = (n) => fake.OlympiadPayment.docs.filter((p) => fake.OlympiadExam.docs.find((e) => String(e._id) === String(p.exam)).standard === n).length;
+  const expectedStd = (n) => fake.OlympiadPayment.docs.filter(isActive).filter((p) => fake.OlympiadExam.docs.find((e) => String(e._id) === String(p.exam)).standard === n).length;
   for (const n of [1, 3, 5, 7]) {
     const r = await api(`/olympiad/admin/payments?standard=${n}`, S.admin.token);
     assert.equal(r.body.payments.length, expectedStd(n), `standard ${n}`);
@@ -183,7 +190,9 @@ test('3. The genuine payment is a single record — never duplicated across sect
   const rows = merged.filter((p) => String(p._id) === String(S.genuine._id));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].source, 'olympiad');
-  assert.equal(merged.length, fake.Payment.docs.length + fake.OlympiadPayment.docs.length, 'merged view = both collections, no more no less');
+  const history = (await api('/admin/payments?view=history', S.admin.token)).body.payments;
+  assert.equal(history.length, fake.Payment.docs.length + fake.OlympiadPayment.docs.length, 'Payment History = both collections, no more no less');
+  assert.equal(history.filter((p) => String(p._id) === String(S.genuine._id)).length, 1, 'still exactly one genuine record in the history view');
 });
 
 // ── 4 + 5 ─────────────────────────────────────────────────────────────
@@ -194,7 +203,7 @@ test('4/5. Only verified payments count as revenue: pending, failed, refunded an
   assert.equal(r.body.summary.pendingPayments, 2);
   assert.equal(r.body.summary.failedPayments, 1);
   assert.equal(r.body.summary.refundedPayments, 1);
-  assert.equal(r.body.summary.total, ALL_OLY());
+  assert.equal(r.body.summary.total, ACTIVE_OLY());
   const stats = (await api('/admin/payments', S.admin.token)).body.stats;
   assert.equal(stats.bySource.olympiad.revenue, 40, 'admin Payments page agrees with the Olympiad page');
   assert.equal(stats.bySource.course.revenue, 79);
@@ -295,7 +304,9 @@ test('10. Frontend: field names match the API, All Standards is offered, and fai
   assert.match(page, /<option value=\{ALL\}>All Standards<\/option>/);
   assert.match(page, /adminAllPayments/);
   // stale-data guard: everything is cleared BEFORE a request, failures set an error state, late responses are ignored
-  const effect = page.slice(page.indexOf('let cancelled = false'), page.indexOf('[selectedId, reloadKey]'));
+  const effect = page.slice(page.indexOf('let cancelled = false'), page.indexOf('[selectedId, reloadKey, view]'));
+  assert.ok(page.includes('[selectedId, reloadKey, view]'), 'switching between active / history reloads the list');
+  assert.match(page, /View Payment History/); assert.match(page, /Back to active payments/);
   assert.ok(effect.indexOf('setPayments([])') !== -1 && effect.indexOf('setPayments([])') < effect.indexOf('adminAllPayments'));
   assert.match(effect, /setAttempts\(\[\]\)/);
   assert.match(effect, /setDetailError\(true\)/);
@@ -307,7 +318,7 @@ test('10. Frontend: field names match the API, All Standards is offered, and fai
   const rows = (await api('/olympiad/admin/payments', S.admin.token)).body.payments;
   const keys = new Set(); const nested = {};
   for (const row of rows) for (const [k, v] of Object.entries(row)) { keys.add(k); if (v && typeof v === 'object') nested[k] = new Set([...(nested[k] || []), ...Object.keys(v)]); }
-  const OPTIONAL = new Set(['reviewNote', 'statusBeforeReview']); // only present on records marked UNCONFIRMED (covered in unconfirmedPayments.test.js)
+  const OPTIONAL = new Set(['reviewNote', 'statusBeforeReview', 'archivedAt', 'archiveReason']); // only present on records marked UNCONFIRMED (covered in unconfirmedPayments.test.js)
   for (const f of used) {
     const [a, b] = f.split('.');
     assert.ok(keys.has(a) || OPTIONAL.has(a), `page reads p.${f} but the API does not return "${a}"`);

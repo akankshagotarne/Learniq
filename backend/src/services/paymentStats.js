@@ -40,6 +40,18 @@ const SOURCES = [
   },
 ];
 
+/**
+ * The ACTIVE payment list = everything except UNCONFIRMED and archived records (those live in "Payment History").
+ * A completed/SUCCESS payment is never hidden, so revenue is identical in both views.
+ */
+const activeFilter = (source) => ({
+  status: { $ne: source.status.unconfirmed },
+  $or: [{ archivedAt: null }, { status: source.status.completed }],
+});
+const hiddenFilter = (source) => ({
+  $or: [{ status: source.status.unconfirmed }, { archivedAt: { $ne: null }, status: { $ne: source.status.completed } }],
+});
+
 const normaliseStatus = (source, raw) =>
   Object.keys(source.status).find((k) => source.status[k] === raw) || String(raw || '').toLowerCase();
 
@@ -47,12 +59,17 @@ const roundRupees = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /**
  * Totals across all payment sources, computed in MongoDB with one $group per collection.
+ * `view: 'active'` (admin Payments page) counts pending / failed / total over the ACTIVE records only; the default
+ * ('all', used by the dashboard) is unchanged. Revenue is the same in both because completed payments are never hidden.
+ * `unconfirmedCount` and `historyCount` (records hidden from the active list) are always over everything.
  * @returns {Promise<{ totalRevenue:number, completedCount:number, pendingCount:number, failedCount:number,
  *   refundedCount:number, totalCount:number, currency:'INR', bySource: Record<string, object> }>}
  */
-async function getPaymentStats() {
+async function getPaymentStats({ view = 'all' } = {}) {
   const perSource = await Promise.all(SOURCES.map(async (source) => {
+    const pipeline = view === 'active' ? [{ $match: activeFilter(source) }] : [];
     const rows = await source.model().aggregate([
+      ...pipeline,
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
     ]);
     const out = { revenue: 0, completedCount: 0, pendingCount: 0, failedCount: 0, refundedCount: 0, unconfirmedCount: 0, totalCount: 0 };
@@ -66,6 +83,9 @@ async function getPaymentStats() {
       else if (status === 'unconfirmed') out.unconfirmedCount += row.count; // counted, but never revenue
     }
     out.revenue = roundRupees(out.revenue);
+    // records that are not in the active list (never revenue) — counted separately so the admin can find them in Payment History
+    out.unconfirmedCount = await source.model().countDocuments({ status: source.status.unconfirmed });
+    out.historyCount = await source.model().countDocuments(hiddenFilter(source));
     return [source.key, out];
   }));
 
@@ -78,6 +98,8 @@ async function getPaymentStats() {
     failedCount: sum('failedCount'),
     refundedCount: sum('refundedCount'),
     unconfirmedCount: sum('unconfirmedCount'),
+    historyCount: sum('historyCount'),
+    view,
     totalCount: sum('totalCount'),
     currency: 'INR',
     bySource,
@@ -129,16 +151,18 @@ async function getRevenueTrend({ months = 6, now = new Date() } = {}) {
 /**
  * Every transaction from every source, normalised to one shape for the admin Payments page.
  * (Read-only; amounts in rupees; newest first.)
+ * `view: 'active'` (default) hides UNCONFIRMED and archived records; `view: 'history'` returns everything (audit history).
  */
-async function listPayments() {
+async function listPayments({ view = 'active' } = {}) {
+  const scope = (key) => (view === 'history' ? {} : activeFilter(SOURCES.find((s) => s.key === key)));
   const [coursePayments, olympiadPayments] = await Promise.all([
-    Payment.find()
+    Payment.find(scope('course'))
       .populate('student', 'name email')
       .populate('course', 'title')
       .populate('lecture', 'title')
       .sort({ createdAt: -1 })
       .lean(),
-    OlympiadPayment.find()
+    OlympiadPayment.find(scope('olympiad'))
       .populate('student', 'name email')
       .populate('exam', 'title standard')
       .sort({ createdAt: -1 })
@@ -157,9 +181,11 @@ async function listPayments() {
     createdAt: p.createdAt,
     paidAt: p.verifiedAt || null,
     ...(p.reviewNote ? { statusBeforeReview: p.statusBeforeReview, reviewNote: p.reviewNote } : {}),
+    ...(p.archivedAt ? { archivedAt: p.archivedAt, archiveReason: p.archiveReason } : {}),
+    ...(p.failureReason ? { failureReason: p.failureReason } : {}),
   }));
   const courseRows = coursePayments.map((p) => ({ ...p, _id: String(p._id), source: 'course' }));
   return [...courseRows, ...olympiadRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-module.exports = { getPaymentStats, getRevenueTrend, listPayments, REPORT_TIMEZONE };
+module.exports = { getPaymentStats, getRevenueTrend, listPayments, REPORT_TIMEZONE, activeFilter, hiddenFilter };

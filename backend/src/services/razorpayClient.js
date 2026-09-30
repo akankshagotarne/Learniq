@@ -10,9 +10,24 @@ const Razorpay = require('razorpay');
  */
 const PLACEHOLDER_PREFIX = 'rzp_test_YOUR'; // old .env.example placeholder value
 
+/**
+ * Test/live separation. Production must never run on TEST keys: a "payment" made with rzp_test_* moves no real money,
+ * yet would unlock paid content. Outside production (local development) TEST keys are expected and always allowed.
+ * ALLOW_TEST_PAYMENTS_IN_PRODUCTION=true is an explicit, deliberate escape hatch for a staging deployment.
+ * Returns a human-readable problem (never a key value) or null.
+ */
+const keyModeProblem = (env = process.env) => {
+  if (env.NODE_ENV !== 'production') return null;
+  const id = env.RAZORPAY_KEY_ID || '';
+  if (id.startsWith('rzp_test_') && !id.startsWith(PLACEHOLDER_PREFIX) && env.ALLOW_TEST_PAYMENTS_IN_PRODUCTION !== 'true') {
+    return 'RAZORPAY_KEY_ID is a TEST key (rzp_test_…) but this is a production deployment, which requires LIVE keys (rzp_live_…)';
+  }
+  return null;
+};
+
 const isRazorpayConfigured = () => {
   const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = process.env;
-  return Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET && !RAZORPAY_KEY_ID.startsWith(PLACEHOLDER_PREFIX));
+  return Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET && !RAZORPAY_KEY_ID.startsWith(PLACEHOLDER_PREFIX)) && !keyModeProblem();
 };
 
 /** Razorpay API client, or null when the keys are not configured. */
@@ -40,9 +55,10 @@ const isValidPaymentSignature = ({ orderId, paymentId, signature }) => {
 const getRazorpayStatus = () => {
   const keyId = process.env.RAZORPAY_KEY_ID || '';
   const mode = keyId.startsWith('rzp_live_') ? 'live' : keyId.startsWith('rzp_test_') ? 'test' : 'unknown';
-  return { configured: isRazorpayConfigured(), mode: isRazorpayConfigured() ? mode : null };
+  const problem = keyModeProblem();
+  return { configured: isRazorpayConfigured(), mode: isRazorpayConfigured() ? mode : null, ...(problem ? { blocked: true } : {}) };
 };
 
 module.exports = {
-  getRazorpayInstance, getRazorpayKeyId, isRazorpayConfigured, isValidPaymentSignature, getRazorpayStatus,
+  getRazorpayInstance, getRazorpayKeyId, isRazorpayConfigured, isValidPaymentSignature, getRazorpayStatus, keyModeProblem,
 };

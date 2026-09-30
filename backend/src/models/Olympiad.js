@@ -81,7 +81,25 @@ const olympiadPaymentSchema = new mongoose.Schema({
   verifiedAt: { type: Date },
   verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },
   failureReason: { type: String },
+
+  // ── Archive (audit history): hidden from the ACTIVE admin list, never deleted. A SUCCESS payment is never hidden. ──
+  archivedAt: { type: Date },
+  archiveReason: { type: String, trim: true },
+
+  // ── Automatic reconciliation (services/paymentReconciler.js) ──
+  failedBy: { type: String, enum: ['reconciler', 'cleanup'] }, // set when the SYSTEM (not Razorpay) closed a payment as FAILED → eligible for late-capture re-checks
+  reconciledAt: { type: Date },        // when the system last closed this record
+  reconcileAttempts: { type: Number }, // how many times a worker claimed this record
+  lateChecks: { type: Number },        // conclusive re-checks after it was closed as FAILED
+  reconcileLastAt: { type: Date },
+  reconcileNextAt: { type: Date },     // do not look at this record again before this time (retry back-off)
+  reconcileLockUntil: { type: Date },  // short lease so two workers never process the same payment at once
+  reconcileState: { type: String, enum: ['needs_review', 'closed'] }, // needs_review: money moved but does not match; closed: late re-checks finished
+  reconcileNote: { type: String, trim: true },
 }, { timestamps: true });
+
+// The reconciler scans "stale PENDING" / "recently system-FAILED" records
+olympiadPaymentSchema.index({ status: 1, createdAt: 1 });
 
 // One order id → one payment record
 olympiadPaymentSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });

@@ -211,6 +211,11 @@ export interface Payment {
   /** set when a record was marked unconfirmed (kept for audit, never revenue) */
   reviewNote?: string;
   statusBeforeReview?: string;
+  /** set when the record was moved out of the active list into "Payment History" (kept for audit, never deleted) */
+  archivedAt?: string;
+  archiveReason?: string;
+  /** why the system closed a pending payment as failed (e.g. NOT_PAID) */
+  failureReason?: string;
   createdAt: string;
 }
 
@@ -223,6 +228,8 @@ export interface PaymentStats {
   refundedCount: number;
   /** kept for audit, not matched to a captured LIVE payment — never counted as revenue */
   unconfirmedCount?: number;
+  /** records hidden from the ACTIVE list (not confirmed / archived) — shown in "Payment History" */
+  historyCount?: number;
   totalCount: number;
   currency: string;
 }

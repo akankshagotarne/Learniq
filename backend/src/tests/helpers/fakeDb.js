@@ -1,8 +1,8 @@
 /**
  * Minimal in-memory stand-in for the Mongoose models used by the Olympiad controller.
  * Lets the test-suite run without a MongoDB server. It emulates:
- *   - equality / $in / $nin / $gt / $gte / $lt / $lte / $exists / $ne filters
- *   - $set (incl. dotted paths) / $unset updates
+ *   - equality / $in / $nin / $gt / $gte / $lt / $lte / $exists / $ne / $not filters (and `field: null` = missing-or-null, like MongoDB)
+ *   - $set (incl. dotted paths) / $unset / $inc / $setOnInsert updates, upserts, updateOne / updateMany
  *   - `select: false` hidden fields (answer key!) and '+field' opt-in
  *   - the unique / partial-unique indexes declared in models/Olympiad.js (throws code 11000)
  *   - a tiny $match / $group aggregation (group _id may be '$field', $ifNull or $dateToString)
@@ -54,11 +54,13 @@ const matchCond = (v, cond) => {
         case '$lt': return v != null && val(v) < val(arg);
         case '$lte': return v != null && val(v) <= val(arg);
         case '$exists': return (v !== undefined) === arg;
-        case '$ne': return !eq(v, arg);
+        case '$ne': return arg === null ? v != null : !eq(v, arg);
+        case '$not': return !matchCond(v, arg);
         default: throw new Error(`fakeDb: unsupported operator ${op}`);
       }
     });
   }
+  if (cond === null) return v == null; // MongoDB: { field: null } matches a missing field too
   return eq(v, cond);
 };
 const matches = (doc, filter = {}) => Object.entries(filter).every(([k, c]) => {
@@ -85,10 +87,12 @@ const evalExpr = (doc, expr) => {
   throw new Error(`fakeDb: unsupported expression ${JSON.stringify(expr)}`);
 };
 
-const applyUpdate = (doc, update) => {
+const applyUpdate = (doc, update, { inserting = false } = {}) => {
   for (const [op, spec] of Object.entries(update)) {
     if (op === '$set') Object.entries(spec).forEach(([k, v]) => setPath(doc, k, clone(v)));
     else if (op === '$unset') Object.keys(spec).forEach((k) => unsetPath(doc, k));
+    else if (op === '$inc') Object.entries(spec).forEach(([k, n]) => setPath(doc, k, (Number(getPath(doc, k)) || 0) + n));
+    else if (op === '$setOnInsert') { if (inserting) Object.entries(spec).forEach(([k, v]) => setPath(doc, k, clone(v))); }
     else throw new Error(`fakeDb: unsupported update operator ${op}`);
   }
   doc.updatedAt = new Date();
@@ -194,7 +198,7 @@ class FakeModel {
         const base = {};
         Object.entries(filter).forEach(([k, v]) => { if (!k.startsWith('$') && (v === null || typeof v !== 'object' || v instanceof ObjectId)) base[k] = v; });
         const fresh = { ...this.defaults(), ...base };
-        applyUpdate(fresh, update);
+        applyUpdate(fresh, update, { inserting: true });
         return opts.new ? this.create(fresh) : (await this.create(fresh), null);
       }
       return null;
@@ -208,16 +212,37 @@ class FakeModel {
     return opts.new ? this.project(doc, null) : before;
   }
 
-  async updateOne(filter, update) {
+  async updateOne(filter, update, opts = {}) {
     const doc = this.docs.find((d) => matches(d, filter));
-    if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+    if (!doc) {
+      if (opts.upsert) {
+        const created = await this.findOneAndUpdate(filter, update, { upsert: true, new: true });
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: created._id };
+      }
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+    }
     const next = clone(doc);
     applyUpdate(next, update);
     this.checkUnique(next);
     Object.keys(doc).forEach((k) => delete doc[k]);
     Object.assign(doc, next);
-    return { matchedCount: 1, modifiedCount: 1 };
+    return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
   }
+
+  async updateMany(filter, update) {
+    let n = 0;
+    for (const doc of this.docs.filter((d) => matches(d, filter))) {
+      const next = clone(doc);
+      applyUpdate(next, update);
+      this.checkUnique(next);
+      Object.keys(doc).forEach((k) => delete doc[k]);
+      Object.assign(doc, next);
+      n += 1;
+    }
+    return { matchedCount: n, modifiedCount: n };
+  }
+
+  async findByIdAndUpdate(id, update, opts = {}) { return this.findOneAndUpdate({ _id: id }, update, opts); }
 
   async bulkWrite(ops) {
     for (const op of ops) {
@@ -317,13 +342,15 @@ const createFakeDb = () => {
   });
   const Notification = new FakeModel('Notification', { registry });
   // course / lecture / note payments (models/index.js → Payment)
-  const Course = new FakeModel('Course', { registry });
+  const Course = new FakeModel('Course', { registry, defaults: () => ({ enrolledCount: 0 }) });
+  // NB: like the real schema there is NO unique index on (student, course) — a duplicate enrollment would be visible to tests
+  const Enrollment = new FakeModel('Enrollment', { registry, refs: { student: 'User', course: 'Course' } });
   const Payment = new FakeModel('Payment', {
     registry, hidden: ['razorpaySignature'], refs: { student: 'User', course: 'Course' }, // schema: select:false
     defaults: () => ({ currency: 'INR', status: 'pending' }),
   });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course };
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment };
 };
 
 module.exports = { createFakeDb };

@@ -27,16 +27,25 @@ const AdminPayments: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // 'active' = normal list; 'history' = every record incl. Not confirmed / archived (kept for audit, never revenue)
+  const [view, setView] = useState<'active' | 'history'>('active');
 
   useEffect(() => {
-    api.get('/admin/payments')
+    let cancelled = false;
+    setLoading(true);
+    api.get('/admin/payments', { params: { view } })
       .then(r => {
+        if (cancelled) return;
         setPayments(r.data.payments || []);
         setStats(r.data.stats || null); // totals come from the server (same calculation as the dashboard)
       })
-      .catch(() => toast.error('Failed to load payments.'))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch(() => { if (!cancelled) { setPayments([]); setStats(null); toast.error('Failed to load payments.'); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [view]);
+
+  // a filter chip that does not exist in the other view must not stay selected
+  useEffect(() => { if (view === 'active' && statusFilter === 'unconfirmed') setStatusFilter('all'); }, [view, statusFilter]);
 
   const filtered = useMemo(() => payments.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -53,7 +62,7 @@ const AdminPayments: React.FC = () => {
   const completedCount = stats?.completedCount ?? 0;
   const pendingCount = stats?.pendingCount ?? 0;
   const failedCount = stats?.failedCount ?? 0;
-  const unconfirmedCount = stats?.unconfirmedCount ?? 0;
+  const historyCount = stats?.historyCount ?? 0;
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -85,11 +94,17 @@ const AdminPayments: React.FC = () => {
               </div>
             ))}
           </div>
-          {!loading && unconfirmedCount > 0 && (
+          {!loading && (view === 'history' ? (
             <p className="text-text-secondary text-xs -mt-3 mb-6">
-              {unconfirmedCount} record{unconfirmedCount !== 1 ? 's are' : ' is'} <b>Not confirmed</b> as a captured LIVE payment. They are kept for audit and are not counted in revenue.
+              <b>Payment History</b> — every record, including <b>Not confirmed</b> and archived ones. They are kept for audit and are never counted in revenue.{' '}
+              <button onClick={() => setView('active')} className="underline font-semibold text-brand-primary">Back to active payments</button>
             </p>
-          )}
+          ) : historyCount > 0 && (
+            <p className="text-text-secondary text-xs -mt-3 mb-6">
+              {historyCount} older record{historyCount !== 1 ? 's are' : ' is'} hidden from this list (<b>Not confirmed</b> / archived). They are kept for audit and are not counted in revenue.{' '}
+              <button onClick={() => setView('history')} className="underline font-semibold text-brand-primary">View Payment History</button>
+            </p>
+          ))}
 
           {/* Filters */}
           <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -104,7 +119,7 @@ const AdminPayments: React.FC = () => {
               />
             </div>
             <div className="flex gap-2">
-              {(['all', 'completed', 'pending', 'failed', ...(unconfirmedCount > 0 ? ['unconfirmed'] : [])] as StatusFilter[]).map(m => (
+              {(['all', 'completed', 'pending', 'failed', ...(view === 'history' ? ['unconfirmed'] : [])] as StatusFilter[]).map(m => (
                 <button
                   key={m}
                   onClick={() => setStatusFilter(m)}
@@ -141,11 +156,12 @@ const AdminPayments: React.FC = () => {
                     </p>
                   </div>
                   <span
-                    title={payment.status === 'unconfirmed' ? (payment.reviewNote || 'Not matched to a captured LIVE Razorpay payment — excluded from revenue.') : undefined}
+                    title={payment.status === 'unconfirmed' ? (payment.reviewNote || 'Not matched to a captured LIVE Razorpay payment — excluded from revenue.') : (payment.failureReason || undefined)}
                     className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${statusStyle[payment.status] || 'bg-surface-alt text-text-muted'}`}
                   >
                     {statusLabel(payment.status)}
                   </span>
+                  {payment.archivedAt && <span className="text-[10px] text-text-muted" title={payment.archiveReason || 'Archived — kept for audit'}>Archived</span>}
                   <p className="text-text-primary text-sm font-bold w-24 text-right">₹{payment.amount?.toLocaleString('en-IN')}</p>
                   <p className="text-text-muted text-xs w-28 text-right">{new Date(payment.createdAt).toLocaleDateString('en-IN')}</p>
                 </div>

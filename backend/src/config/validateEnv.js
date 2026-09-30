@@ -19,6 +19,14 @@ const validateEnv = (env = process.env, log = console) => {
   if (jwtProblem) (isProd ? fatal : warn).push(jwtProblem);
   else if (String(env.JWT_SECRET).length < 32) warn.push('JWT_SECRET is shorter than 32 characters — use a longer random value');
 
+  // Test/live separation: production must not boot on rzp_test_* keys; local development should not use rzp_live_* keys.
+  const { keyModeProblem } = require('../services/razorpayClient');
+  const keyProblem = keyModeProblem(env);
+  if (keyProblem) fatal.push(keyProblem);
+  else if (!isProd && String(env.RAZORPAY_KEY_ID || '').startsWith('rzp_live_')) {
+    warn.push('RAZORPAY_KEY_ID is a LIVE key (rzp_live_…) outside production — use TEST keys (rzp_test_…) for local development so no real money is charged');
+  }
+
   if (isProd) {
     if (!env.CLIENT_URL) warn.push('CLIENT_URL is not set — browser requests from your frontend will be blocked by CORS and reset links will point to localhost');
     if (!env.EMAIL_USER && !env.RESEND_API_KEY) warn.push('No email provider (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) — password reset emails cannot be sent');
