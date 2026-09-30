@@ -2,13 +2,14 @@ const { v4: uuidv4 } = require('uuid');
 const { LiveSession, LiveParticipant, LiveChatMessage } = require('../models/LiveSession');
 const { Notification } = require('../models/index');
 const User = require('../models/User');
+const { getPrimaryClientUrl } = require('../config/clientUrls');
 
 // POST /api/live-sessions
 const createSession = async (req, res) => {
   try {
     const { title, description, course, standard, subject, scheduledAt } = req.body;
     const sessionCode = uuidv4().substring(0, 8).toUpperCase();
-    const joinUrl = `${process.env.CLIENT_URL}/live/${sessionCode}`;
+    const joinUrl = `${getPrimaryClientUrl()}/live/${sessionCode}`;
 
     const session = await LiveSession.create({
       title, description,

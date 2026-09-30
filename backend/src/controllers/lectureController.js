@@ -2,6 +2,7 @@ const Lecture = require('../models/Lecture');
 const Note = require('../models/Note');
 const Course = require('../models/Course');
 const { Enrollment, Progress } = require('../models/index');
+const { createAccessChecker, toClientLecture, toClientNote } = require('../services/contentAccess');
 
 // GET /api/lectures?course=&standard=&subject=
 const getLectures = async (req, res) => {
@@ -17,7 +18,9 @@ const getLectures = async (req, res) => {
       .populate('course', 'title')
       .sort({ order: 1 });
 
-    res.json({ success: true, lectures });
+    // Only lectures the caller may watch keep their video URL
+    const canView = await createAccessChecker(req.user);
+    res.json({ success: true, lectures: lectures.map((l) => toClientLecture(l, canView(l))) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
@@ -32,16 +35,9 @@ const getLecture = async (req, res) => {
 
     if (!lecture) return res.status(404).json({ success: false, message: 'Lecture not found.' });
 
-    // Check access
-    let hasAccess = lecture.isFree;
-    if (req.user) {
-      if (req.user.role === 'teacher' || req.user.role === 'admin') {
-        hasAccess = true;
-      } else {
-        const enrollment = await Enrollment.findOne({ student: req.user._id, course: lecture.course });
-        hasAccess = hasAccess || !!enrollment;
-      }
-    }
+    // Check access on the server: free lecture, enrolled student, the lecture's own teacher, or an admin
+    const canView = await createAccessChecker(req.user);
+    const hasAccess = canView(lecture);
 
     // Increment views if accessible
     if (hasAccess) {
@@ -57,7 +53,13 @@ const getLecture = async (req, res) => {
       isActive: true,
     }).limit(5).sort({ order: 1 });
 
-    res.json({ success: true, lecture, notes, hasAccess, related });
+    res.json({
+      success: true,
+      lecture: toClientLecture(lecture, hasAccess),
+      notes: notes.map((n) => toClientNote(n, hasAccess)),
+      hasAccess,
+      related: related.map((r) => toClientLecture(r, canView(r))),
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }

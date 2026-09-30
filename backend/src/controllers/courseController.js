@@ -1,6 +1,7 @@
 const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
 const { Enrollment, Payment } = require('../models/index');
+const { createAccessChecker, toClientLecture } = require('../services/contentAccess');
 
 // GET /api/courses - list courses with filters
 const getCourses = async (req, res) => {
@@ -35,7 +36,7 @@ const getCourse = async (req, res) => {
 
     if (!course) return res.status(404).json({ success: false, message: 'Course not found.' });
 
-    const lectures = await Lecture.find({ course: course._id, isActive: true }).sort({ order: 1 });
+    const rawLectures = await Lecture.find({ course: course._id, isActive: true }).sort({ order: 1 });
 
     // Check enrollment
     let isEnrolled = false;
@@ -43,6 +44,10 @@ const getCourse = async (req, res) => {
       const enrollment = await Enrollment.findOne({ student: req.user._id, course: course._id });
       isEnrolled = !!enrollment;
     }
+
+    // Paid lecture video URLs are only sent to users who may watch them (free lecture / enrolled / owner teacher / admin)
+    const canView = await createAccessChecker(req.user);
+    const lectures = rawLectures.map((l) => toClientLecture(l, canView(l, course.teacher)));
 
     res.json({ success: true, course, lectures, isEnrolled });
   } catch (error) {

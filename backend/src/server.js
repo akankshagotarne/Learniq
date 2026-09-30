@@ -1,4 +1,8 @@
 require('dotenv').config();
+const { validateEnv } = require('./config/validateEnv');
+// Production must not boot with a missing/placeholder JWT secret (values are never printed)
+if (!validateEnv().ok) process.exit(1);
+
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -10,6 +14,11 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 const connectDB = require('./config/db');
+const { corsOptions, socketCorsOptions, socketAllowRequest, rejectDisallowedOrigins } = require('./config/cors');
+const { getPrimaryClientUrl } = require('./config/clientUrls');
+const { guardPrivateUploads } = require('./services/mediaAccess');
+const Lecture = require('./models/Lecture');
+const Note = require('./models/Note');
 const setupSocket = require('./services/socketService');
 const { getRazorpayStatus } = require('./services/razorpayClient');
 
@@ -26,51 +35,20 @@ const { startOlympiadSweeper } = require('./controllers/olympiadController');
 const app = express();
 const server = http.createServer(app);
 
-// Dynamic origin verification supporting Vercel and Render deployments
-const isOriginAllowed = (origin) => {
-  if (!origin) return true;
-  const cleanOrigin = origin.replace(/\/$/, '');
-  const configuredClient = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : null;
-  
-  if (configuredClient && cleanOrigin.toLowerCase() === configuredClient.toLowerCase()) {
-    return true;
-  }
-  if (['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://127.0.0.1:5173'].includes(cleanOrigin)) {
-    return true;
-  }
-  try {
-    const url = new URL(origin);
-    if (url.hostname.endsWith('.vercel.app')) {
-      return true;
-    }
-  } catch {}
-  return false;
-};
-
+// Allowed browser origins: CLIENT_URL (+ CORS_EXTRA_ORIGINS, + localhost when not in production) — see config/cors.js
 // Socket.IO
 const io = new Server(server, {
-  cors: {
-    origin: (origin, callback) => {
-      callback(null, isOriginAllowed(origin) ? true : origin);
-    },
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
+  cors: socketCorsOptions,
+  allowRequest: socketAllowRequest,
   transports: ['websocket', 'polling'],
 });
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// CORS
-app.use(cors({
-  origin: (origin, callback) => {
-    callback(null, isOriginAllowed(origin) ? true : origin);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+// CORS — only the configured frontend origin(s); other browser origins get no CORS headers and a 403 on /api
+app.use('/api', rejectDisallowedOrigins);
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -91,7 +69,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
 // Static files (uploads)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Paid lecture videos / PDFs (/uploads/videos, /uploads/pdfs) need a signed link issued by the API to enrolled users;
+// avatars, thumbnails, free lecture files and all other uploads are served exactly as before.
+app.use('/uploads', guardPrivateUploads({ Lecture, Note }), express.static(path.join(__dirname, '../uploads')));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -164,7 +144,7 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+      console.log(`🌐 Client URL: ${getPrimaryClientUrl()}`);
       const rzp = getRazorpayStatus();
       console.log(rzp.configured
         ? `💳 Razorpay: configured (${rzp.mode} mode)`

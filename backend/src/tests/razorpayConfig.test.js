@@ -161,6 +161,7 @@ test('signature verification happens on the backend, for the right order and the
   assert.equal(await status(a1.paymentId), 'completed');
   assert.equal(enrollments.length, 1);
   assert.ok(!r.text.includes(KEY_SECRET));
+  assert.ok(!r.text.includes(sign(a1.order.id, 'pay_1')) && !('razorpaySignature' in r.body.payment), 'the Razorpay signature is not echoed back to the browser');
   r = await post('/verify', { paymentId: a1.paymentId, razorpayOrderId: a1.order.id, razorpayPaymentId: 'pay_1', razorpaySignature: sign(a1.order.id, 'pay_1') });
   assert.equal(r.status, 200);
   assert.equal(enrollments.length, 1);

@@ -19,7 +19,7 @@ const paymentSchema = new mongoose.Schema({
   currency: { type: String, default: 'INR' },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
-  razorpaySignature: { type: String },
+  razorpaySignature: { type: String, select: false }, // kept for reconciliation, never returned by queries/API responses
   status: { type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'pending' },
   type: { type: String, enum: ['course', 'lecture', 'note'], required: true },
 }, { timestamps: true });

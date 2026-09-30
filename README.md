@@ -97,6 +97,8 @@ VITE_API_URL=http://localhost:5000/api
 
 ### 4. Seed Database with Realistic Demo Data
 
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `backend/.env` first (see `backend/.env.example`), then:
+
 ```bash
 cd backend
 node src/seed/seedData.js
@@ -126,15 +128,14 @@ npm run dev
 
 ---
 
-## 🔑 Demo Credentials (1-Click Login)
+## 🔑 Accounts & Credentials
 
-The login screen (`/login`) includes **1-click quick login buttons**:
+No passwords are published in this repository.
 
-| Role | Email | Password |
-|---|---|---|
-| **Student** | `student1@learniq.in` | `Student@123456` |
-| **Teacher** | `teacher1@learniq.in` | `Teacher@123456` |
-| **Admin** | `admin@learniq.in` | `Admin@123456` |
+- **Admin**: the seed script creates the admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `backend/.env` (password of at least 12 characters). Choose your own; never commit it.
+- **Demo teachers/students** (`teacher1@learniq.in`, `student1@learniq.in`, ...): their password is `SEED_DEMO_PASSWORD` from `backend/.env`. If it is not set, random passwords are generated and the demo accounts cannot be logged into.
+- The seed script wipes users, courses and payments, so it refuses to run when `NODE_ENV=production`. Use it only on a local/dev database.
+
 
 ---
 

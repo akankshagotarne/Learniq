@@ -7,6 +7,13 @@ const {
   getRazorpayInstance, getRazorpayKeyId, isRazorpayConfigured, isValidPaymentSignature,
 } = require('../services/razorpayClient');
 
+// Payment as sent to the browser: the Razorpay signature is only needed server-side, so it is never returned.
+const toPublicPayment = (payment) => {
+  const obj = typeof payment.toJSON === 'function' ? payment.toJSON() : { ...payment };
+  delete obj.razorpaySignature;
+  return obj;
+};
+
 // POST /api/payments/create-order
 const createOrder = async (req, res) => {
   try {
@@ -91,7 +98,7 @@ const verifyPayment = async (req, res) => {
     }
 
     if (payment.status === 'completed') {
-      return res.json({ success: true, message: 'Payment already verified.', payment });
+      return res.json({ success: true, message: 'Payment already verified.', payment: toPublicPayment(payment) });
     }
 
     if (!isRazorpayConfigured()) {
@@ -126,7 +133,7 @@ const verifyPayment = async (req, res) => {
       type: 'payment',
     });
 
-    res.json({ success: true, message: 'Payment verified and access granted!', payment });
+    res.json({ success: true, message: 'Payment verified and access granted!', payment: toPublicPayment(payment) });
   } catch (error) {
     console.error('Payment verification error:', error);
     res.status(500).json({ success: false, message: 'Server error verifying payment.' });

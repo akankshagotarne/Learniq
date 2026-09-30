@@ -4,10 +4,11 @@ const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
+const { getPrimaryClientUrl } = require('../config/clientUrls');
 
 // Two ways to actually send the reset email, both optional so the server
-// still boots (and forgotPassword still falls back to returning the link)
-// before either is configured:
+// still boots before either is configured (forgotPassword then sends nothing
+// and never returns the reset link - see forgotPassword below):
 //
 // 1) Gmail/SMTP via nodemailer - works out of the box for ANY recipient
 //    using a Google "App Password", no domain needed. Preferred when set.
@@ -217,47 +218,59 @@ const updateProfile = async (req, res) => {
 
 // @desc   Forgot password
 // @route  POST /api/auth/forgot-password
+// SECURITY: the response is ALWAYS the same generic message — it never reveals whether the email is registered,
+// whether an email provider is configured, or the reset token/URL (that is only ever delivered by email).
+const GENERIC_RESET_RESPONSE = {
+  success: true,
+  message: 'If an account exists for that email, a password reset link has been sent. Please check your inbox (and spam folder).',
+};
+
 const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'No account found with this email.' });
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please enter your email address.' });
     }
+
+    const user = await User.findOne({ email });
+    if (!user) return res.json(GENERIC_RESET_RESPONSE);
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     user.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 min
     await user.save({ validateBeforeSave: false });
 
-    const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+    const resetUrl = `${getPrimaryClientUrl()}/reset-password/${resetToken}`;
 
-    let emailSent = false;
-    try {
-      emailSent = await sendResetEmail(user, resetUrl);
-    } catch (emailError) {
-      console.error('Reset email send failed:', emailError);
-      return res.status(500).json({ success: false, message: 'Could not send the reset email. Please try again later.' });
-    }
+    // Sent in the background so the response time does not reveal whether the account exists.
+    // Failures are logged (without the token/link) and the unusable token is discarded.
+    (async () => {
+      try {
+        const emailSent = await sendResetEmail(user, resetUrl);
+        if (!emailSent) {
+          console.warn('Password reset requested but no email provider is configured (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) - no email was sent.');
+          if (process.env.NODE_ENV === 'development') {
+            // Local development convenience ONLY: the link goes to this server's console, never into the API response.
+            console.log(`[dev only] Password reset link for ${user.email}: ${resetUrl}`);
+          } else {
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpire = undefined;
+            await user.save({ validateBeforeSave: false });
+          }
+        }
+      } catch (emailError) {
+        console.error('Reset email send failed:', emailError.message);
+        try {
+          user.resetPasswordToken = undefined;
+          user.resetPasswordExpire = undefined;
+          await user.save({ validateBeforeSave: false });
+        } catch (cleanupError) { /* nothing more to do */ }
+      }
+    })();
 
-    if (!emailSent) {
-      // Neither EMAIL_USER/EMAIL_PASS nor RESEND_API_KEY is configured yet -
-      // fall back to returning the link directly so the flow still works
-      // during local setup.
-      console.warn('No email provider configured - returning reset link in the API response instead of emailing it.');
-      return res.json({
-        success: true,
-        message: 'Password reset link generated. (Configure an email provider to send emails instead.)',
-        resetUrl, // Dev fallback only
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Password reset link sent to your email.',
-    });
+    return res.json(GENERIC_RESET_RESPONSE);
   } catch (error) {
+    console.error('Forgot password error:', error.message);
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };

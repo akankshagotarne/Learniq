@@ -262,7 +262,11 @@ const LecturePlayerPage: React.FC = () => {
                       <Play className="w-6 h-6 text-white/50 ml-0.5" />
                     </div>
                     <h3 className="text-lg font-heading font-bold text-white mb-1">{currentLecture.title}</h3>
-                    <p className="text-xs text-white/60 font-medium">Video not uploaded for this lecture yet.</p>
+                    <p className="text-xs text-white/60 font-medium">
+                      {currentLecture.hasAccess === false
+                        ? 'This lecture is for enrolled students. Enroll in the course to watch it.'
+                        : 'Video not uploaded for this lecture yet.'}
+                    </p>
                   </div>
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-primary/15 rounded-full blur-3xl pointer-events-none" />
                 </div>

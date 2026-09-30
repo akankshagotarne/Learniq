@@ -55,7 +55,8 @@ export interface Lecture {
   standard: number;
   subject: string;
   order: number;
-  videoUrl?: string;
+  videoUrl?: string; // only present when the server allows this user to watch (free / enrolled / owner / admin)
+  hasAccess?: boolean;
   videoDuration: string;
   thumbnail?: string;
   isFree: boolean;

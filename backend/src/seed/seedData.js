@@ -1,6 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 const User = require('../models/User');
@@ -78,6 +79,25 @@ const TEACHERS = [
 
 async function seedDatabase() {
   try {
+    // SAFETY: this script DELETES every user, course, enrollment and payment before re-creating demo data.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('❌ Refusing to seed: NODE_ENV=production. This script wipes users and payments — run it only against a local/dev database.');
+      process.exit(1);
+    }
+
+    // Admin credentials come ONLY from the environment (backend/.env) — nothing is hard-coded in this file.
+    // They are validated BEFORE any data is cleared so a missing value can never leave you with a wiped, admin-less database.
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD || '';
+    if (!adminEmail || adminPassword.length < 12) {
+      console.error('❌ Set ADMIN_EMAIL and ADMIN_PASSWORD (at least 12 characters) in backend/.env before seeding. Nothing was changed.');
+      process.exit(1);
+    }
+    // Demo teacher/student accounts: use SEED_DEMO_PASSWORD from backend/.env, otherwise a random password
+    // (so demo accounts can never be logged into with a password that is public).
+    const demoPasswordFromEnv = !!process.env.SEED_DEMO_PASSWORD;
+    const demoPassword = process.env.SEED_DEMO_PASSWORD || crypto.randomBytes(18).toString('base64url');
+
     await connectDB();
 
     // Clear existing data
@@ -155,8 +175,6 @@ async function seedDatabase() {
 
     // ==================== ADMIN ====================
     console.log('👤 Creating admin...');
-    const adminEmail = process.env.ADMIN_EMAIL || 'learniq.admin@gmail.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Nikhil@1710';
     const admin = await User.create({
       name: 'Admin Learniq',
       email: adminEmail,
@@ -174,7 +192,7 @@ async function seedDatabase() {
       const teacher = await User.create({
         name: t.name,
         email: t.email,
-        password: 'Teacher@123456',
+        password: demoPassword,
         role: 'teacher',
         isApproved: true,
         bio: t.bio,
@@ -203,7 +221,7 @@ async function seedDatabase() {
       const student = await User.create({
         name: studentNames[i],
         email: `student${i + 1}@learniq.in`,
-        password: 'Student@123456',
+        password: demoPassword,
         role: 'student',
         currentStandard: standard,
         points: Math.floor(Math.random() * 300) + 50,
@@ -215,7 +233,7 @@ async function seedDatabase() {
       studentDocs.push(student);
     }
 
-    console.log('🎓 Demo student: student1@learniq.in / Student@123456 (Standard 1)');
+    console.log('🎓 Demo student: student1@learniq.in (Standard 1)');
 
     // ==================== COURSES ====================
     console.log('📚 Creating courses...');
@@ -506,14 +524,14 @@ async function seedDatabase() {
 
     console.log('\n✅ Database seeded successfully!\n');
     console.log('='.repeat(50));
-    console.log('📝 DEMO ACCOUNTS:');
+    console.log('📝 ACCOUNTS CREATED:');
     console.log('='.repeat(50));
     console.log('ADMIN:');
-    console.log(`  Email: ${adminEmail}`);
-    console.log(`  Password: ${adminPassword}`);
-    console.log('\nTEACHERS (all password: Teacher@123456):');
+    console.log(`  Email: ${adminEmail}  (password = ADMIN_PASSWORD from backend/.env)`);
+    console.log(demoPasswordFromEnv
+      ? '\nTEACHERS & STUDENTS: password = SEED_DEMO_PASSWORD from backend/.env'
+      : '\nTEACHERS & STUDENTS: random passwords were generated (set SEED_DEMO_PASSWORD in backend/.env to sign in as a demo user)');
     TEACHERS.forEach(t => console.log(`  ${t.email} - ${t.name}`));
-    console.log('\nSTUDENTS (all password: Student@123456):');
     for (let i = 1; i <= 5; i++) {
       console.log(`  student${i}@learniq.in - Standard ${i}`);
     }

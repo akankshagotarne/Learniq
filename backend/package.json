@@ -12,11 +12,15 @@
     "seed:olympiad10": "node src/seed/seedOlympiad10.js",
     "test:olympiad": "node --test src/tests/olympiad.test.js",
     "test:payments": "node --test src/tests/paymentStats.test.js",
-    "test:razorpay": "node --test src/tests/razorpayConfig.test.js"
+    "test:razorpay": "node --test src/tests/razorpayConfig.test.js",
+    "test:security": "node --test src/tests/securityFixes.test.js"
   },
   "keywords": [],
   "author": "Learniq",
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -29,7 +33,7 @@
     "mongoose": "^8.24.4",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "^10.0.13",
     "razorpay": "^2.9.4",
     "resend": "^4.4.1",
     "socket.io": "^4.7.5",
