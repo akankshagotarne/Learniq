@@ -67,8 +67,11 @@ const HomePage: React.FC = () => {
     <div className="min-h-screen bg-[#F8F8FC] dark:bg-[#12121F] text-[#22243A] dark:text-[#F4F4FA]">
       <Navbar />
 
-      {/* Section 6.6 Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center pt-24 pb-16 overflow-hidden bg-[#F8F8FC] dark:bg-[#12121F]">
+      {/* All India Olympiad Test 2026 — top promotional banner (directly under the navbar) */}
+      <OlympiadShowcase />
+
+      {/* Section 6.6 Hero Section (the banner above already clears the fixed navbar) */}
+      <section className="relative flex items-center pt-2 pb-16 overflow-hidden bg-[#F8F8FC] dark:bg-[#12121F]">
         {/* Soft pastel blur blobs */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-12 left-10 w-96 h-96 bg-[#6C63F2]/10 dark:bg-[#8B82FF]/15 rounded-full blur-3xl animate-pulse-slow" />
@@ -76,7 +79,7 @@ const HomePage: React.FC = () => {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#B69CF2]/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="page-container relative z-10 py-12">
+        <div className="page-container relative z-10 pt-6 pb-12">
           <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
             {/* Left Col */}
             <div className="lg:col-span-7 animate-slide-up space-y-6">
@@ -200,9 +203,6 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </section>
-
-      {/* All India Olympiad Test 2026 — campaign showcase */}
-      <OlympiadShowcase />
 
       {/* Standards Selection Section */}
       <section className="section bg-white dark:bg-[#1B1C2E] border-t border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
