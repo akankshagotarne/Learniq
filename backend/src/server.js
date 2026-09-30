@@ -16,6 +16,7 @@ const path = require('path');
 const connectDB = require('./config/db');
 const { corsOptions, socketCorsOptions, socketAllowRequest, rejectDisallowedOrigins } = require('./config/cors');
 const { getPrimaryClientUrl } = require('./config/clientUrls');
+const { getTrustProxySetting } = require('./config/trustProxy');
 const { guardPrivateUploads } = require('./services/mediaAccess');
 const Lecture = require('./models/Lecture');
 const Note = require('./models/Note');
@@ -36,6 +37,10 @@ const { startPaymentReconciler } = require('./services/paymentReconciler');
 
 const app = express();
 const server = http.createServer(app);
+
+// Render sits behind a reverse proxy: trust an exact number of hops (1) — never `true` — so req.ip is the real client
+// address and express-rate-limit can key on it. Must be set before any middleware that reads req.ip (see config/trustProxy.js).
+app.set('trust proxy', getTrustProxySetting());
 
 // Allowed browser origins: CLIENT_URL (+ CORS_EXTRA_ORIGINS, + localhost when not in production) — see config/cors.js
 // Socket.IO
@@ -151,6 +156,8 @@ const startServer = async () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 Client URL: ${getPrimaryClientUrl()}`);
+      const proxyHops = app.get('trust proxy');
+      console.log(`🔀 Trust proxy: ${proxyHops ? `${proxyHops} hop(s)` : 'off (no reverse proxy)'}`);
       const rzp = getRazorpayStatus();
       console.log(rzp.configured
         ? `💳 Razorpay: configured (${rzp.mode} mode)`

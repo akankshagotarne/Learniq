@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
+import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, ArrowLeft, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 
 /** Small building blocks shared by the admin Student and Teacher profile pages (LearnIQ card / badge styles). */
 
@@ -91,36 +92,116 @@ export const ProfileError: React.FC<{ message: string; onRetry: () => void; onBa
   </div>
 );
 
-/** Confirmation for actions with consequences (deactivate, revoke approval, send password reset). Escape / Cancel closes it. */
+/** Same masking the server uses for the reset confirmation ("d***@gmail.com") — display only. */
+export const maskEmail = (email?: string | null) => {
+  const [local = '', domain = ''] = String(email || '').split('@');
+  return local ? `${local.slice(0, 1)}***@${domain}` : 'the account email';
+};
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Confirmation for actions with consequences (deactivate, revoke approval, send password reset).
+ * Solid surface panel on a dark backdrop, rendered in a portal on <body> above the sidebar/navbar (z-50) so no page
+ * content or stacking context can show through or cover it. Escape / Cancel closes it (not while busy); Tab stays inside.
+ */
 export const ConfirmDialog: React.FC<{
   open: boolean; title: string; message: React.ReactNode; confirmLabel: string; tone?: 'danger' | 'primary'; busy?: boolean;
+  /** Optional secondary line under the message (e.g. a security note). */
+  note?: React.ReactNode;
   onConfirm: () => void; onCancel: () => void;
-}> = ({ open, title, message, confirmLabel, tone = 'primary', busy = false, onConfirm, onCancel }) => {
+}> = ({ open, title, message, confirmLabel, tone = 'primary', busy = false, note, onConfirm, onCancel }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const busyRef = useRef(busy);
+  const cancelHandlerRef = useRef(onCancel);
+  busyRef.current = busy;
+  cancelHandlerRef.current = onCancel;
+  const uid = useId();
+  const titleId = `${uid}-title`;
+  const descId = `${uid}-desc`;
+
+  // open/close only: focus Cancel (the safe choice), lock page scroll, give focus back afterwards
   useEffect(() => {
     if (!open) return undefined;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     cancelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, busy, onCancel]);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (!busyRef.current) cancelHandlerRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const items = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (items.length === 0) { e.preventDefault(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!panelRef.current.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="card-soft rounded-2xl p-6 w-full max-w-md">
-        <h3 className="font-heading font-bold text-lg text-text-primary">{title}</h3>
-        <div className="text-sm text-text-secondary mt-2">{message}</div>
-        <div className="flex justify-end gap-2 mt-5">
-          <button ref={cancelRef} onClick={onCancel} disabled={busy} className="px-4 py-2 rounded-xl text-xs font-semibold border border-border-subtle bg-surface-alt text-text-primary disabled:opacity-60">Cancel</button>
+  const danger = tone === 'danger';
+  const Icon = danger ? AlertTriangle : KeyRound;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/70 backdrop-blur-[2px] p-4"
+      role="presentation"
+    >
+      <div
+        ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}
+        className="relative w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-border-subtle bg-surface p-5 sm:p-6 shadow-2xl"
+      >
+        <div className="flex items-start gap-3">
+          <span className={`mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${danger ? 'bg-[#FFE4EC] text-[#E1447A]' : 'bg-[#EDE9FE] text-[#6C63F2]'}`}>
+            <Icon className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 id={titleId} className="font-heading font-bold text-lg leading-snug text-text-primary">{title}</h3>
+            <div id={descId} className="mt-2 text-sm leading-relaxed text-text-secondary break-words">{message}</div>
+          </div>
+        </div>
+        {note && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-border-subtle bg-surface-alt px-3 py-2.5 text-xs leading-relaxed text-text-secondary">
+            <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-primary" aria-hidden="true" />
+            <span className="min-w-0 break-words">{note}</span>
+          </div>
+        )}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
-            onClick={onConfirm} disabled={busy}
-            className={`px-4 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-60 inline-flex items-center gap-1.5 ${tone === 'danger' ? 'bg-[#E1447A]' : 'bg-brand-primary'}`}
+            ref={cancelRef} type="button" onClick={onCancel} disabled={busy}
+            className="inline-flex w-full sm:w-auto items-center justify-center rounded-xl border border-border-subtle bg-surface px-4 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {confirmLabel}
+            Cancel
+          </button>
+          <button
+            type="button" onClick={onConfirm} disabled={busy} aria-busy={busy}
+            className={`inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 ${
+              danger ? 'bg-[#E1447A] hover:bg-[#C93A6C] focus-visible:ring-[#E1447A]/60' : 'bg-brand-primary hover:bg-brand-primary-hover focus-visible:ring-[var(--brand-primary)]'
+            }`}
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
