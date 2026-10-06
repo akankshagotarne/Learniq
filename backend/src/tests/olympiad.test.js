@@ -796,7 +796,7 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
   assert.equal(await M.OlympiadQuestion.countDocuments({ exam: a._id }), 60);
   assert.equal(a.fee, 1);
   assert.equal(a.startDate.toISOString(), '2026-09-28T18:30:00.000Z');
-  assert.equal(a.endDate.toISOString(), '2026-10-05T18:29:59.999Z');
+  assert.equal(a.endDate.toISOString(), '2026-10-15T18:29:59.999Z');
 });
 
 // ── 10. auto-seed on server start (fresh / production database) ─────────
@@ -832,7 +832,7 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     assert.equal(e.durationMinutes, 60);
     assert.equal(e.state, 'pay');
     assert.equal(e.startDate, '2026-09-28T18:30:00.000Z');
-    assert.equal(e.endDate, '2026-10-05T18:29:59.999Z');
+    assert.equal(e.endDate, '2026-10-15T18:29:59.999Z');
     assertNoAnswerKeyLeak(r, `listing std ${std}`);
   }
   assert.deepEqual((await api('GET', '/exams', { token: students[11].token })).body.exams, []); // a standard with no exam sees none

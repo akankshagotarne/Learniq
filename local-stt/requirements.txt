@@ -1,0 +1,4 @@
+# LearnIQ local speech-to-text (development only). Python 3.9 - 3.12.
+faster-whisper>=1.0.3
+websockets>=12.0
+numpy>=1.24

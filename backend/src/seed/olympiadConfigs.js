@@ -1,6 +1,6 @@
 /**
  * One config per Olympiad exam (Standards 1–10). All exams share the same schedule, fee and format:
- * MCQs (60 for Std 4–10, 40 for Std 1–3), 1 mark each, ₹1 (temporary — see OLYMPIAD_FEE), 29 Sep 2026 00:00 → 5 Oct 2026 11:59 PM IST (see seedOlympiadExam.js).
+ * MCQs (60 for Std 4–10, 40 for Std 1–3), 1 mark each, ₹1 (temporary — see OLYMPIAD_FEE), 29 Sep 2026 00:00 → 15 Oct 2026 11:59 PM IST (see seedOlympiadExam.js).
  * The papers do not state a duration — set OLYMPIAD_<std>_DURATION_MINUTES (default 60).
  */
 // Exam fee in rupees, temporarily ₹1. Change it here, then re-run the seeder, or run the fee script

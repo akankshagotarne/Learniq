@@ -360,6 +360,18 @@ const createFakeDb = () => {
   });
   const Counter = new FakeModel('Counter', { registry, defaults: () => ({ seq: 0 }) });
 
+  // AI Interview (models/AIInterview.js) — same unique index (student + exam) and defaults as the real schema
+  const AIInterview = new FakeModel('AIInterview', {
+    registry, refs: { student: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam'] }],
+    defaults: () => ({
+      status: 'created', attempt: 1, board: null, subjects: [], difficulty: 'age-appropriate', language: 'en',
+      currentQuestionIndex: 0, questions: [], restarts: 0, attemptConsumed: false, firstQuestionPresentedAt: null, durationSeconds: 0, answeredQuestions: 0, correctAnswers: 0,
+      totalScore: 0, maxScore: 0, percentage: 0, grade: null, passed: false, strengths: [], areasToImprove: [],
+      avatarProvider: 'heygen-liveavatar',
+      usage: { aiCalls: 0, promptTokens: 0, completionTokens: 0, realtimeSessions: 0, avatarSessions: 0, avatarConnectedSeconds: 0, transcribeSeconds: 0, avatarDisconnects: 0, connectFailures: 0, micFailures: 0, transcriptionFailures: 0, aiFailures: 0 },
+    }),
+  });
+
   // teaching content (used by the admin teacher profile counts)
   const Lecture = new FakeModel('Lecture', { registry });
   const Note = new FakeModel('Note', { registry });
@@ -368,7 +380,7 @@ const createFakeDb = () => {
   const Quiz = new FakeModel('Quiz', { registry });
   const Assignment = new FakeModel('Assignment', { registry });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, Lecture, Note, LiveSession, Exam, Quiz, Assignment };
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, Quiz, Assignment };
 };
 
 module.exports = { createFakeDb };

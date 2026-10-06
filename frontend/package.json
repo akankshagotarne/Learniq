@@ -16,6 +16,7 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "@heygen/liveavatar-web-sdk": "^0.0.19",
     "@types/node": "^26.5.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
