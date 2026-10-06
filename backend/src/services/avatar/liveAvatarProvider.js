@@ -13,6 +13,17 @@ const SANDBOX_MAX_SESSION_SECONDS = 60; // LiveAvatar rejects a longer sandbox s
 const SESSION_GRACE_SECONDS = 90;       // provider-side cap sits this far above the interview's own (server-clock) limit
 
 /**
+ * Provider-side session cap: the interview's own limit + a grace period, reduced to the sandbox cap (60 s) in sandbox mode and to the
+ * configured plan cap (LIVEAVATAR_MAX_SESSION_SECONDS, when set) so LiveAvatar never rejects it with "exceeds the maximum allowed".
+ */
+const sessionSeconds = (a, maxDurationSeconds) => {
+  let seconds = Math.ceil(maxDurationSeconds) + SESSION_GRACE_SECONDS;
+  if (a.sandbox) seconds = Math.min(seconds, SANDBOX_MAX_SESSION_SECONDS);
+  if (a.maxSessionSeconds > 0) seconds = Math.min(seconds, a.maxSessionSeconds);
+  return seconds;
+};
+
+/**
  * The FULL-mode token request body. LiveAvatar's API requires EXACTLY ONE of `avatar_persona` / `voice_agent`
  * (otherwise: 422 "Provide exactly one of avatar_persona or voice_agent"). For now we use the inline `avatar_persona`;
  * voice, context and language belong INSIDE it - they are not valid top-level fields.
@@ -35,7 +46,7 @@ const buildSessionTokenBody = (cfg, { maxDurationSeconds }) => {
     is_sandbox: a.sandbox,
     // provider-side hard cap = cost control even if the browser never disconnects. Sandbox sessions are limited by LiveAvatar to 60s:
     // only the AVATAR session is capped there; the interview itself (AI_INTERVIEW_MAX_DURATION_SECONDS, server clock) is unchanged.
-    max_session_duration: a.sandbox ? Math.min(maxDurationSeconds + SESSION_GRACE_SECONDS, SANDBOX_MAX_SESSION_SECONDS) : maxDurationSeconds + SESSION_GRACE_SECONDS,
+    max_session_duration: sessionSeconds(a, maxDurationSeconds),
     video_settings: { quality: 'medium', encoding: 'H264' },
     avatar_persona: persona,
   };
