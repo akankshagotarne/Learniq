@@ -33,6 +33,8 @@ const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 const OlympiadExamPage = lazy(() => import('./pages/student/OlympiadExamPage'));
 const OlympiadTakerPage = lazy(() => import('./pages/student/OlympiadTakerPage'));
 const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage'));
+const AIInterviewPage = lazy(() => import('./pages/student/AIInterviewPage'));
+const AIInterviewResultPage = lazy(() => import('./pages/student/AIInterviewResultPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
 
 // Teacher pages
@@ -185,6 +187,16 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/olympiad/:examId/result" element={
         <ProtectedRoute roles={['student']}>
           <OlympiadResultPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/ai-interview/:examId" element={
+        <ProtectedRoute roles={['student']}>
+          <AIInterviewPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/ai-interview/:examId/result" element={
+        <ProtectedRoute roles={['student']}>
+          <AIInterviewResultPage />
         </ProtectedRoute>
       } />
       <Route path="/student/certificates" element={

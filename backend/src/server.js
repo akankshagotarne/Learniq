@@ -32,6 +32,7 @@ const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
 const certificateRoutes = require('./routes/certificates');
+const aiInterviewRoutes = require('./routes/aiInterviews');
 const { startOlympiadSweeper } = require('./controllers/olympiadController');
 const { startPaymentReconciler } = require('./services/paymentReconciler');
 
@@ -68,6 +69,8 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // Body parsing
+// AI Interview bodies are tiny (a transcript of at most a few hundred characters): cap them at 8kb BEFORE the global 50mb parser
+app.use('/api/ai-interviews', express.json({ limit: '8kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 // rawBody is kept so the Razorpay webhook signature can be verified against the exact bytes received
 app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -100,6 +103,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/ai-interviews', aiInterviewRoutes);
 app.use('/api', miscRoutes);
 
 // 404

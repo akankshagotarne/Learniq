@@ -34,6 +34,11 @@
 - **Teacher Approvals**: Verification and 1-click approval/rejection workflow for educator applications.
 - **User & Content Management**: Full administrative control over user accounts and course listings.
 
+### 🤖 AI Interview (included with a purchased Olympiad exam)
+- **🤖 Start AI Interview** appears directly under **Start Exam** on the exam card and unlocks only after a verified exam payment (checked on the server).
+- A real-time voice interview with an avatar: one question at a time, live subtitles, server-side scoring, and a result page with strengths and areas to improve.
+- One interview per purchase. Setup, environment variables, deployment and troubleshooting: see [`docs/AI_INTERVIEW.md`](docs/AI_INTERVIEW.md).
+
 ---
 
 ## 🛠️ Technology Stack
@@ -42,6 +47,7 @@
 |---|---|
 | **Frontend** | React 19, TypeScript, Vite 8, TailwindCSS, React Router 7, Recharts, Lucide React, Socket.IO Client, React Hot Toast |
 | **Backend** | Node.js, Express, Socket.IO (WebSockets), JWT, Mongoose, Multer, Helmet, Morgan, bcryptjs |
+| **AI Interview** | OpenAI (structured outputs + Realtime transcription), HeyGen LiveAvatar |
 | **Database** | MongoDB (Atlas or Local) |
 
 ---
@@ -149,7 +155,7 @@ LearnIQ/
 │   │   ├── controllers/     # Route business logic
 │   │   ├── middleware/      # Auth, upload, validation
 │   │   ├── models/          # Mongoose models (User, Course, Lecture, etc.)
-│   │   ├── routes/          # Express route definitions
+│   │   ├── routes/          # Express route definitions (incl. /api/ai-interviews)
 │   │   ├── seed/            # Comprehensive seed script
 │   │   ├── socket/          # Real-time WebSocket signaling
 │   │   └── server.js        # Server entry point

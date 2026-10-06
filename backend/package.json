@@ -17,6 +17,7 @@
     "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js src/tests/trustProxy.test.js",
     "test:adminprofiles": "node --test src/tests/adminProfiles.test.js src/tests/adminProfilesUi.test.js",
     "test:fee": "node --test src/tests/olympiadFee.test.js",
+    "test:aiinterview": "node --test src/tests/aiInterview.test.js src/tests/aiInterviewLocalStt.test.js src/tests/aiInterviewOpenAiStt.test.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateUi.test.js"
   },
   "keywords": [],

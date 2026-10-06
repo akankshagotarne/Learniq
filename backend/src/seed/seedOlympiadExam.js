@@ -8,9 +8,11 @@
 const connectDB = require('../config/db');
 const { OlympiadExam, OlympiadQuestion, OlympiadAttempt } = require('../models/Olympiad');
 
-// Availability window in IST (UTC+05:30): 29 Sep 2026 00:00:00 → 5 Oct 2026 23:59:59.999
+// Availability window in IST (UTC+05:30): 29 Sep 2026 00:00:00 → 15 Oct 2026 23:59:59.999
+// (extended from 5 Oct 2026). Registration closes at END too. Exams already in the database keep their stored
+// endDate — run `node src/scripts/setOlympiadEndDate.js --apply` to move them to this value.
 const START = new Date('2026-09-29T00:00:00.000+05:30');
-const END = new Date('2026-10-05T23:59:59.999+05:30');
+const END = new Date('2026-10-15T23:59:59.999+05:30');
 
 const INSTRUCTIONS = [
   'Read every question carefully before answering.',
