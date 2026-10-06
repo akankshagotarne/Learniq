@@ -98,6 +98,9 @@ const getConfig = (env = process.env) => {
       voiceId: str(env.HEYGEN_VOICE_ID),
       contextId: str(env.HEYGEN_CONTEXT_ID),
       sandbox: flag(env.LIVEAVATAR_SANDBOX, false), // free test mode: one avatar, ~1-minute sessions
+      // Optional cap (seconds) on ONE avatar session, to match the LiveAvatar plan (Free = 120, Starter = 300, Essential = 1200).
+      // 0 / unset = no cap (the session is the interview limit + a grace period). When set, the avatar session never asks for more.
+      maxSessionSeconds: int(env.LIVEAVATAR_MAX_SESSION_SECONDS, 0, 0, 7200),
       requestTimeoutMs: int(env.AI_INTERVIEW_AVATAR_TIMEOUT_MS, 15000, 3000, 60000),
     },
   };
