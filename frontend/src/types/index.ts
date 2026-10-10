@@ -200,6 +200,8 @@ export interface Payment {
   student: User | string;
   course?: Course;
   lecture?: Lecture;
+  /** title of what was bought, kept after the course / lecture / note itself was removed */
+  itemTitle?: string;
   /** Olympiad exam fee payments (source === 'olympiad') */
   exam?: { _id: string; title: string; standard: number } | null;
   source?: 'course' | 'olympiad';

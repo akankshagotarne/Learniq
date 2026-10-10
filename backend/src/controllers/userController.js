@@ -218,4 +218,25 @@ const updateUserAdmin = async (req, res) => {
   }
 };
 
-module.exports = { getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin };
+// DELETE /api/admin/users/:id — permanently delete a STUDENT account (payments are kept; see services/studentDeletion.js)
+const deleteStudentAdmin = async (req, res) => {
+  try {
+    const { deleteStudentAccount } = require('../services/studentDeletion');
+    const outcome = await deleteStudentAccount(req.params.id);
+    if (!outcome) {
+      return res.status(404).json({ success: false, code: 'STUDENT_NOT_FOUND', message: 'Student not found. Only student accounts can be deleted.' });
+    }
+    console.info(`Admin ${req.user._id} deleted student ${req.params.id} (payments kept: ${outcome.paymentsKept})`); // ids only
+    return res.json({
+      success: true,
+      message: `${outcome.name} was deleted permanently.`,
+      paymentsKept: outcome.paymentsKept,
+      removed: outcome.removed,
+    });
+  } catch (error) {
+    console.error('DELETE /admin/users/:id failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Server error. The student was not deleted — please try again.' });
+  }
+};
+
+module.exports = { getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin, deleteStudentAdmin };

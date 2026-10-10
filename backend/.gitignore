@@ -7,3 +7,5 @@ uploads/*
 !uploads/.gitkeep
 logs/
 *.log
+# local backups written by the course-removal script (contain database records)
+course-backup-*.json

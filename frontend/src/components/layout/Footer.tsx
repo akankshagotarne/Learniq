@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { LogoLink } from '../ui/Logo';
 import { Mail, Phone, MapPin } from 'lucide-react';
 import { LinkedinIcon, TwitterIcon, InstagramIcon, YoutubeIcon } from '../ui/SocialIcons';
+import { COURSES_ENABLED } from '../../constants/features';
 
 const Footer: React.FC = () => {
   return (
@@ -41,7 +42,7 @@ const Footer: React.FC = () => {
                 { label: 'Live Classes', href: '/live-sessions' },
                 { label: 'About Learniq', href: '/about' },
                 { label: 'Contact', href: '/contact' },
-              ].map(link => (
+              ].filter(link => COURSES_ENABLED || link.href !== '/courses').map(link => (
                 <li key={link.label}>
                   <Link to={link.href} className="text-text-secondary hover:text-brand-primary text-sm transition-colors">
                     {link.label}
@@ -83,8 +84,8 @@ const Footer: React.FC = () => {
           </div>
         </div>
 
-        {/* Standards */}
-        <div className="border-t border-border-subtle pt-8 pb-4">
+        {/* Standards (links into the course catalogue — hidden while courses are switched off) */}
+        {COURSES_ENABLED && <div className="border-t border-border-subtle pt-8 pb-4">
           <p className="text-text-secondary text-xs font-medium mb-3">Classes available for:</p>
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: 10 }, (_, i) => i + 1).map(std => (
@@ -97,7 +98,7 @@ const Footer: React.FC = () => {
               </Link>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Copyright */}
         <div className="border-t border-border-subtle pt-6 flex flex-col sm:flex-row items-center justify-between gap-2">

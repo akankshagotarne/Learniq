@@ -77,6 +77,12 @@ const olympiadPaymentSchema = new mongoose.Schema({
   // UNCONFIRMED = kept for audit, but NOT matched to a captured LIVE Razorpay payment: never revenue, never grants access.
   status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'UNCONFIRMED'], default: 'PENDING' },
   statusBeforeReview: { type: String, trim: true }, // the status the record had before it was marked UNCONFIRMED (lets the change be reversed exactly)
+  // Set when an admin deletes the student: the record is kept for accounting and still shows who paid.
+  deletedStudent: {
+    name: { type: String, trim: true },
+    email: { type: String, trim: true },
+    deletedAt: { type: Date },
+  },
   reviewNote: { type: String, trim: true },         // why it was marked UNCONFIRMED
   verifiedAt: { type: Date },
   verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { COURSES_ENABLED } from './constants/features';
 
 // Eager loaded (critical path)
 import LoginPage from './pages/LoginPage';
@@ -108,8 +109,9 @@ const AppRoutes: React.FC = () => (
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<HomePage />} />
-      <Route path="/courses" element={<CoursesPage />} />
-      <Route path="/courses/:id" element={<CourseDetailPage />} />
+      {/* Courses (Std 1–10) are switched off — see constants/features.ts. Old links land on the home page. */}
+      <Route path="/courses" element={COURSES_ENABLED ? <CoursesPage /> : <Navigate to="/" replace />} />
+      <Route path="/courses/:id" element={COURSES_ENABLED ? <CourseDetailPage /> : <Navigate to="/" replace />} />
       <Route path="/live-sessions" element={<LiveSessionsListPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/contact" element={<ContactPage />} />
@@ -123,18 +125,18 @@ const AppRoutes: React.FC = () => (
       <Route path="/verify-certificate/:certificateNumber" element={<PublicVerifyCertificatePage />} />
 
       {/* Payment & Checkout route */}
-      <Route path="/payment" element={
+      <Route path="/payment" element={!COURSES_ENABLED ? <Navigate to="/" replace /> : (
         <ProtectedRoute>
           <PaymentPage />
         </ProtectedRoute>
-      } />
+      )} />
 
       {/* Course lecture player */}
-      <Route path="/courses/:courseId/lecture/:lectureId" element={
+      <Route path="/courses/:courseId/lecture/:lectureId" element={!COURSES_ENABLED ? <Navigate to="/" replace /> : (
         <ProtectedRoute>
           <LecturePlayerPage />
         </ProtectedRoute>
-      } />
+      )} />
 
       {/* Live session (all authenticated users) */}
       <Route path="/live/:code" element={
@@ -154,11 +156,11 @@ const AppRoutes: React.FC = () => (
           <StandardSelectionPage />
         </ProtectedRoute>
       } />
-      <Route path="/student/my-courses" element={
+      <Route path="/student/my-courses" element={!COURSES_ENABLED ? <Navigate to="/student" replace /> : (
         <ProtectedRoute roles={['student']}>
           <MyCoursesPage />
         </ProtectedRoute>
-      } />
+      )} />
       <Route path="/student/progress" element={
         <ProtectedRoute roles={['student']}>
           <StudentProgress />
@@ -224,11 +226,11 @@ const AppRoutes: React.FC = () => (
           <TeacherLiveSessions />
         </ProtectedRoute>
       } />
-      <Route path="/teacher/courses" element={
+      <Route path="/teacher/courses" element={!COURSES_ENABLED ? <Navigate to="/dashboard" replace /> : (
         <ProtectedRoute roles={['teacher', 'admin']}>
           <TeacherCourses />
         </ProtectedRoute>
-      } />
+      )} />
       <Route path="/teacher/students" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
           <TeacherStudents />
@@ -292,11 +294,11 @@ const AppRoutes: React.FC = () => (
           <AdminTeacherProfile />
         </ProtectedRoute>
       } />
-      <Route path="/admin/courses" element={
+      <Route path="/admin/courses" element={!COURSES_ENABLED ? <Navigate to="/admin" replace /> : (
         <ProtectedRoute roles={['admin']}>
           <AdminCourses />
         </ProtectedRoute>
-      } />
+      )} />
       <Route path="/admin/support" element={
         <ProtectedRoute roles={['admin']}>
           <AdminSupport />

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Award, BookOpen, CheckCircle2, CreditCard, Flame, IndianRupee, KeyRound, Mail, Phone, Power, Trophy, UserCheck, UserX, Users,
+  Award, BookOpen, CheckCircle2, CreditCard, Flame, IndianRupee, KeyRound, Mail, Phone, Power, Trash2, Trophy, UserCheck, UserX, Users,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import {
@@ -12,9 +12,10 @@ import { adminProfilesApi } from '../../services/adminProfiles';
 import { olympiadErrorMessage } from '../../services/olympiad';
 import { AdminProfilePayment, AdminStudentProfile } from '../../types/adminProfile';
 import { formatDuration, formatISTDate, formatISTDateTime, formatRupees } from '../../utils/olympiadFormat';
+import { COURSES_ENABLED } from '../../constants/features';
 
 type TabId = 'overview' | 'courses' | 'olympiad' | 'payments';
-type Pending = 'deactivate' | 'reset' | null;
+type Pending = 'deactivate' | 'reset' | 'delete' | null;
 
 const PAYMENT_TONE: Record<AdminProfilePayment['status'], Tone> = { completed: 'green', pending: 'amber', failed: 'pink', refunded: 'gray', unconfirmed: 'gray' };
 const PAYMENT_LABEL: Record<AdminProfilePayment['status'], string> = { completed: 'Paid', pending: 'Pending', failed: 'Failed', refunded: 'Refunded', unconfirmed: 'Under review' };
@@ -76,6 +77,19 @@ const AdminStudentProfilePage: React.FC = () => {
     } finally { setBusy(false); }
   };
 
+  const deleteStudent = async () => {
+    if (!profile) return;
+    setBusy(true);
+    try {
+      const r = await adminProfilesApi.deleteStudent(profile.user._id);
+      toast.success(r.message || 'Student deleted.');
+      setPending(null);
+      navigate('/admin/students', { replace: true });
+    } catch (err: any) {
+      toast.error(olympiadErrorMessage(err, 'Failed to delete student.'));
+    } finally { setBusy(false); }
+  };
+
   const u = profile?.user;
   const a = profile?.academic;
 
@@ -121,14 +135,19 @@ const AdminStudentProfilePage: React.FC = () => {
                   <button onClick={() => setPending('reset')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" /> Send password reset
                   </button>
-                  <button onClick={() => setTab('courses')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5" /> View enrolled courses
-                  </button>
+                  {COURSES_ENABLED && (
+                    <button onClick={() => setTab('courses')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5" /> View enrolled courses
+                    </button>
+                  )}
                   <button onClick={() => setTab('payments')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <CreditCard className="w-3.5 h-3.5" /> View payment history
                   </button>
                   <button onClick={() => setTab('olympiad')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <Trophy className="w-3.5 h-3.5" /> View Olympiad history
+                  </button>
+                  <button onClick={() => setPending('delete')} className="px-3 py-2 rounded-lg text-xs font-medium border bg-surface text-[#E1447A] border-[#F9C6D7] hover:bg-[#FFE4EC] inline-flex items-center gap-1.5 sm:ml-auto">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete student
                   </button>
                 </div>
                 <p className="text-text-muted text-xs mt-3">Passwords are stored securely and can never be viewed. "Send password reset" emails the student a link to choose a new one.</p>
@@ -141,7 +160,7 @@ const AdminStudentProfilePage: React.FC = () => {
                   { id: 'courses', label: 'Courses', count: profile.courses.length },
                   { id: 'olympiad', label: 'Olympiad', count: profile.olympiad.attempts.length },
                   { id: 'payments', label: 'Payments', count: profile.payments.summary.total },
-                ]}
+                ].filter(t => COURSES_ENABLED || t.id !== 'courses') as { id: TabId; label: string; count?: number }[]}
               />
 
               {tab === 'overview' && (
@@ -149,8 +168,8 @@ const AdminStudentProfilePage: React.FC = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Stat label="Points" value={a.points} icon={<Award className="w-4 h-4" />} tone="amber" />
                     <Stat label="Day streak" value={a.streak} icon={<Flame className="w-4 h-4" />} tone="pink" />
-                    <Stat label="Courses enrolled" value={a.coursesEnrolled} icon={<BookOpen className="w-4 h-4" />} tone="violet" />
-                    <Stat label="Courses completed" value={a.coursesCompleted} icon={<CheckCircle2 className="w-4 h-4" />} tone="green" />
+                    {COURSES_ENABLED && <Stat label="Courses enrolled" value={a.coursesEnrolled} icon={<BookOpen className="w-4 h-4" />} tone="violet" />}
+                    {COURSES_ENABLED && <Stat label="Courses completed" value={a.coursesCompleted} icon={<CheckCircle2 className="w-4 h-4" />} tone="green" />}
                     <Stat label="Olympiad registrations" value={a.olympiadRegistrations} icon={<Users className="w-4 h-4" />} tone="violet" />
                     <Stat label="Olympiad attempts" value={a.olympiadAttempts} icon={<Trophy className="w-4 h-4" />} tone="amber" />
                     <Stat label="Best Olympiad score" value={a.olympiadBestPercentage == null ? '—' : `${a.olympiadBestPercentage}%`} icon={<Trophy className="w-4 h-4" />} tone="green" />
@@ -180,7 +199,7 @@ const AdminStudentProfilePage: React.FC = () => {
                 </div>
               )}
 
-              {tab === 'courses' && (
+              {COURSES_ENABLED && tab === 'courses' && (
                 <Section title="Enrolled courses">
                   {profile.courses.length === 0 ? <EmptyState icon={<BookOpen className="w-10 h-10" />} text="This student has not enrolled in any course yet." /> : (
                     <ul className="divide-y divide-border-subtle">
@@ -313,6 +332,12 @@ const AdminStudentProfilePage: React.FC = () => {
         message={<>A link to choose a new password will be emailed to <b className="text-text-primary">{maskEmail(u?.email)}</b>. The link expires in 15 minutes. The current password is never shown.</>}
         note="Passwords are stored securely and cannot be viewed."
         onConfirm={() => void sendReset()} onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={pending === 'delete'} tone="danger" busy={busy} title="Delete this student permanently?" confirmLabel="Delete student"
+        message={<><b className="text-text-primary">{u?.name}</b> ({u?.email}) and all of their activity — results, certificates, AI interviews and notifications — will be removed. This cannot be undone.</>}
+        note="Payment records are kept for accounting and will show the student's name. To pause an account instead, use Deactivate."
+        onConfirm={() => void deleteStudent()} onCancel={() => setPending(null)}
       />
     </div>
   );

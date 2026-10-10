@@ -5,6 +5,7 @@ import {
   BookOpen, ClipboardList, FileText, GraduationCap, KeyRound, Mail, Phone, Radio, ShieldOff, Trophy, UserCheck, UserX, Users, Video,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import { COURSES_ENABLED } from '../../constants/features';
 import {
   Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor, maskEmail,
 } from '../../components/admin/ProfileParts';
@@ -131,17 +132,18 @@ const AdminTeacherProfilePage: React.FC = () => {
 
               <Tabs<TabId>
                 active={tab} onChange={setTab}
-                tabs={[{ id: 'overview', label: 'Overview' }, { id: 'courses', label: 'Courses', count: profile.courseList.length }, { id: 'activity', label: 'Activity' }]}
+                tabs={([{ id: 'overview', label: 'Overview' }, { id: 'courses', label: 'Courses', count: profile.courseList.length }, { id: 'activity', label: 'Activity' }] as { id: TabId; label: string; count?: number }[])
+                  .filter(t => COURSES_ENABLED || t.id !== 'courses')}
               />
 
               {tab === 'overview' && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Stat label="Courses created" value={t.courses.total} icon={<BookOpen className="w-4 h-4" />} tone="violet" />
-                    <Stat label="Active courses" value={t.courses.active} icon={<UserCheck className="w-4 h-4" />} tone="green" />
-                    <Stat label="Archived courses" value={t.courses.archived} icon={<ShieldOff className="w-4 h-4" />} tone="amber" />
+                    {COURSES_ENABLED && <Stat label="Courses created" value={t.courses.total} icon={<BookOpen className="w-4 h-4" />} tone="violet" />}
+                    {COURSES_ENABLED && <Stat label="Active courses" value={t.courses.active} icon={<UserCheck className="w-4 h-4" />} tone="green" />}
+                    {COURSES_ENABLED && <Stat label="Archived courses" value={t.courses.archived} icon={<ShieldOff className="w-4 h-4" />} tone="amber" />}
                     <Stat label="Students" value={t.students} icon={<Users className="w-4 h-4" />} tone="violet" />
-                    <Stat label="Lectures uploaded" value={t.lectures} icon={<Video className="w-4 h-4" />} tone="pink" />
+                    {COURSES_ENABLED && <Stat label="Lectures uploaded" value={t.lectures} icon={<Video className="w-4 h-4" />} tone="pink" />}
                     <Stat label="Live sessions" value={t.liveSessions} icon={<Radio className="w-4 h-4" />} tone="green" />
                     <Stat label="Exams (published / draft)" value={`${t.exams.published} / ${t.exams.drafts}`} icon={<Trophy className="w-4 h-4" />} tone="amber" />
                     <Stat label="Quizzes / Assignments" value={`${t.quizzes} / ${t.assignments}`} icon={<ClipboardList className="w-4 h-4" />} tone="violet" />
@@ -171,7 +173,7 @@ const AdminTeacherProfilePage: React.FC = () => {
                 </div>
               )}
 
-              {tab === 'courses' && (
+              {COURSES_ENABLED && tab === 'courses' && (
                 <Section title="Courses created">
                   {profile.courseList.length === 0 ? <EmptyState icon={<BookOpen className="w-10 h-10" />} text="This teacher has not created any course yet." /> : (
                     <div className="overflow-x-auto">

@@ -383,4 +383,4 @@ const createFakeDb = () => {
   return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, Quiz, Assignment };
 };
 
-module.exports = { createFakeDb };
+module.exports = { createFakeDb, FakeModel };

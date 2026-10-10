@@ -14,4 +14,7 @@ export const adminProfilesApi = {
   update: async (id: string, patch: { isActive?: boolean; isApproved?: boolean }): Promise<void> => {
     await api.put(`/admin/users/${encodeURIComponent(id)}`, patch);
   },
+  /** Permanently deletes a STUDENT account. Payment records are kept on the server for accounting. */
+  deleteStudent: async (id: string): Promise<{ message: string; paymentsKept: number }> =>
+    (await api.delete(`/admin/users/${encodeURIComponent(id)}`)).data,
 };

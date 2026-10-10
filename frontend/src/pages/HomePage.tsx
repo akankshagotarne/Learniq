@@ -10,6 +10,7 @@ import OlympiadShowcase from '../components/olympiad/promo/OlympiadShowcase';
 import api from '../services/api';
 import { Course, LiveSession } from '../types';
 import { getCourseThumbnail } from '../utils/courseImage';
+import { COURSES_ENABLED } from '../constants/features';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -24,7 +25,7 @@ const HomePage: React.FC = () => {
   const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
 
   useEffect(() => {
-    api.get('/courses?limit=6').then(r => setCourses(r.data.courses || [])).catch(() => {});
+    if (COURSES_ENABLED) api.get('/courses?limit=6').then(r => setCourses(r.data.courses || [])).catch(() => {});
     api.get('/live-sessions?status=live').then(r => setLiveSessions(r.data.sessions || [])).catch(() => {});
   }, []);
 
@@ -204,8 +205,8 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Standards Selection Section */}
-      <section className="section bg-white dark:bg-[#1B1C2E] border-t border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
+      {/* Standards Selection Section (opens the Std 1–10 course catalogue — hidden while courses are switched off) */}
+      {COURSES_ENABLED && <section className="section bg-white dark:bg-[#1B1C2E] border-t border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
         <div className="page-container">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="badge-primary text-xs mb-2 inline-block">Curriculum Standards 1–10</span>
@@ -236,10 +237,10 @@ const HomePage: React.FC = () => {
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Featured Courses Section */}
-      {courses.length > 0 && (
+      {COURSES_ENABLED && courses.length > 0 && (
         <section className="section bg-[#F8F8FC] dark:bg-[#12121F]">
           <div className="page-container">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">

@@ -910,7 +910,9 @@ const toAdminPayment = (p, exam) => {
   const ex = exam || p.exam;
   return {
     _id: p._id,
-    student: p.student ? { name: p.student.name, email: maskEmail(p.student.email) } : null,
+    student: p.student
+      ? { name: p.student.name, email: maskEmail(p.student.email) }
+      : (p.deletedStudent && p.deletedStudent.name ? { name: `${p.deletedStudent.name} (deleted)`, email: maskEmail(p.deletedStudent.email) } : null),
     exam: ex && ex.title ? { _id: ex._id, title: ex.title, standard: ex.standard } : null,
     amount: p.amount,
     currency: p.currency,

@@ -6,6 +6,7 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Course, Notification, LiveSession } from '../../types';
 import { getCourseThumbnail } from '../../utils/courseImage';
+import { COURSES_ENABLED } from '../../constants/features';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -30,7 +31,7 @@ const StudentDashboard: React.FC = () => {
     }
     const std = user.currentStandard;
     Promise.all([
-      api.get(`/courses?standard=${std}`),
+      COURSES_ENABLED ? api.get(`/courses?standard=${std}`) : Promise.resolve({ data: { courses: [] } }),
       api.get(`/live-sessions?standard=${std}`),
       api.get('/notifications'),
     ]).then(([c, l, n]) => {
@@ -71,10 +72,15 @@ const StudentDashboard: React.FC = () => {
       icon: Flame,
       iconBg: 'bg-[#DCFCE7] text-[#16A34A]',
     },
-    {
+    COURSES_ENABLED ? {
       label: 'My Courses',
       value: courses.length,
       icon: BookOpen,
+      iconBg: 'bg-[#EDE9FE] text-[#6C63F2]',
+    } : {
+      label: 'Upcoming Live Classes',
+      value: liveSessions.length,
+      icon: Radio,
       iconBg: 'bg-[#EDE9FE] text-[#6C63F2]',
     },
     {
@@ -130,8 +136,32 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
-            {/* Left 2 Cols: Courses */}
+            {/* Left 2 Cols: Courses (or, while courses are switched off, the student's exams & results) */}
             <div className="lg:col-span-2 space-y-6">
+              {!COURSES_ENABLED ? (
+                <div className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-6 sm:p-8 shadow-[0_4px_20px_rgba(34,36,58,0.06)]">
+                  <h2 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">Your Olympiad & exams</h2>
+                  <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] mt-1">Take your exams, then check your results and certificates.</p>
+                  <div className="grid sm:grid-cols-2 gap-4 mt-6">
+                    <Link to="/student/exams" className="group flex items-center gap-4 rounded-2xl border border-[#E7E7F2] dark:border-[#2E2F4A] bg-[#F8F8FC] dark:bg-[#242540] p-5 hover:border-[#6C63F2]/40 hover:bg-white dark:hover:bg-[#1B1C2E] transition-all">
+                      <span className="w-11 h-11 rounded-xl flex items-center justify-center bg-[#EDE9FE] text-[#6C63F2] flex-shrink-0"><ClipboardList className="w-5 h-5" /></span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-display font-semibold text-sm text-[#22243A] dark:text-[#F4F4FA]">Exams</span>
+                        <span className="block text-xs text-[#6B6E8C] dark:text-[#A6A8C4]">Olympiad and practice tests</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-[#A0A3C0] group-hover:text-[#6C63F2] transition-colors" />
+                    </Link>
+                    <Link to="/student/certificates" className="group flex items-center gap-4 rounded-2xl border border-[#E7E7F2] dark:border-[#2E2F4A] bg-[#F8F8FC] dark:bg-[#242540] p-5 hover:border-[#6C63F2]/40 hover:bg-white dark:hover:bg-[#1B1C2E] transition-all">
+                      <span className="w-11 h-11 rounded-xl flex items-center justify-center bg-[#FEF3C7] text-[#D97706] flex-shrink-0"><Award className="w-5 h-5" /></span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-display font-semibold text-sm text-[#22243A] dark:text-[#F4F4FA]">Results & Certificates</span>
+                        <span className="block text-xs text-[#6B6E8C] dark:text-[#A6A8C4]">Scores and downloadable certificates</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-[#A0A3C0] group-hover:text-[#6C63F2] transition-colors" />
+                    </Link>
+                  </div>
+                </div>
+              ) : (<>
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">
@@ -198,6 +228,7 @@ const StudentDashboard: React.FC = () => {
                   ))}
                 </div>
               )}
+              </>)}
             </div>
 
             {/* Right Column: Live Sessions & Badges */}

@@ -23,6 +23,14 @@ const paymentSchema = new mongoose.Schema({
   // 'unconfirmed' = kept for audit, but NOT matched to a captured LIVE Razorpay payment: never revenue.
   status: { type: String, enum: ['pending', 'completed', 'failed', 'refunded', 'unconfirmed'], default: 'pending' },
   statusBeforeReview: { type: String, trim: true }, // the status before it was marked unconfirmed (reversible)
+  // Title of what was bought, saved when the course / lecture / note itself is removed (scripts/deleteAllCourses.js).
+  itemTitle: { type: String, trim: true },
+  // Set when an admin deletes the student: the record is kept for accounting and still shows who paid.
+  deletedStudent: {
+    name: { type: String, trim: true },
+    email: { type: String, trim: true },
+    deletedAt: { type: Date },
+  },
   reviewNote: { type: String, trim: true },         // why it was marked unconfirmed
   type: { type: String, enum: ['course', 'lecture', 'note'], required: true },
   failureReason: { type: String },

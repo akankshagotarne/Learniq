@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, BookOpen, Radio, CreditCard, TrendingUp, Award, BarChart2, ChevronRight, UserCheck, UserX } from 'lucide-react';
+import { Users, BookOpen, Radio, CreditCard, TrendingUp, Award, BarChart2, ChevronRight, UserCheck, UserX, Trophy } from 'lucide-react';
+import { COURSES_ENABLED } from '../../constants/features';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
@@ -32,12 +33,12 @@ const AdminDashboard: React.FC = () => {
   const statCards = [
     { label: 'Total Students', value: stats?.students || 0, icon: Users, iconBg: 'bg-[#EDE9FE] text-[#6C63F2]' },
     { label: 'Total Teachers', value: stats?.teachers || 0, icon: Award, iconBg: 'bg-[#DCFCE7] text-[#16A34A]' },
-    { label: 'Total Courses', value: stats?.courses || 0, icon: BookOpen, iconBg: 'bg-[#FEF3C7] text-[#D97706]' },
+    { label: 'Total Courses', value: stats?.courses || 0, icon: BookOpen, iconBg: 'bg-[#FEF3C7] text-[#D97706]', courses: true },
     { label: 'Live Sessions', value: stats?.sessions || 0, icon: Radio, iconBg: 'bg-[#FFE4EC] text-[#E1447A]' },
-    { label: 'Total Lectures', value: stats?.lectures || 0, icon: BarChart2, iconBg: 'bg-[#E0F2FE] text-[#0284C7]' },
+    { label: 'Total Lectures', value: stats?.lectures || 0, icon: BarChart2, iconBg: 'bg-[#E0F2FE] text-[#0284C7]', courses: true },
     // totalRevenue is already in rupees (server: services/paymentStats.js) — do not divide by 100
     { label: 'Revenue', value: `₹${Number(stats?.totalRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, icon: CreditCard, iconBg: 'bg-[#F3E8FF] text-[#9333EA]' },
-  ];
+  ].filter(card => COURSES_ENABLED || !card.courses); // course counters are hidden while courses are switched off
 
   const chartData = [
     { name: 'Std 1-2', students: 120, courses: 8 },
@@ -70,7 +71,7 @@ const AdminDashboard: React.FC = () => {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          <div className={`grid grid-cols-2 md:grid-cols-3 ${COURSES_ENABLED ? 'lg:grid-cols-6' : 'md:grid-cols-4 lg:grid-cols-4'} gap-4 mb-8`}>
             {statCards.map(({ label, value, icon: Icon, iconBg }) => (
               <div key={label} className="card-soft p-4 flex flex-col justify-between">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconBg}`}>
@@ -199,7 +200,7 @@ const AdminDashboard: React.FC = () => {
             {[
               { label: 'Manage Students', href: '/admin/students', icon: Users },
               { label: 'Manage Teachers', href: '/admin/teachers', icon: Award },
-              { label: 'All Courses', href: '/admin/courses', icon: BookOpen },
+              COURSES_ENABLED ? { label: 'All Courses', href: '/admin/courses', icon: BookOpen } : { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy },
               { label: 'Payments', href: '/admin/payments', icon: CreditCard },
             ].map(({ label, href, icon: Icon }) => (
               <Link key={label} to={href} className="card-soft p-4 flex items-center gap-3 group hover:-translate-y-0.5 transition-all">

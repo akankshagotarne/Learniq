@@ -71,7 +71,7 @@ const byId = (docs) => new Map(docs.map((d) => [String(d._id), d]));
 async function paymentsFor(studentId) {
   const [coursePays, olyPays] = await Promise.all([
     Payment.find({ student: studentId })
-      .select('type course lecture note amount currency status razorpayOrderId razorpayPaymentId createdAt verifiedAt archivedAt') // never the signature
+      .select('type course lecture note itemTitle amount currency status razorpayOrderId razorpayPaymentId createdAt verifiedAt archivedAt') // never the signature
       .sort('-createdAt').limit(LIST_CAP),
     OlympiadPayment.find({ student: studentId })
       .select('exam amount currency status razorpayOrderId razorpayPaymentId createdAt verifiedAt archivedAt')
@@ -91,7 +91,7 @@ async function paymentsFor(studentId) {
     ...coursePays.map((p) => {
       const ref = p.type === 'lecture' ? L.get(String(p.lecture)) : p.type === 'note' ? N.get(String(p.note)) : C.get(String(p.course));
       return {
-        _id: str(p._id), kind: p.type || 'course', title: (ref && ref.title) || `${p.type || 'Course'} purchase`,
+        _id: str(p._id), kind: p.type || 'course', title: (ref && ref.title) || p.itemTitle || `${p.type || 'Course'} purchase`,
         amount: roundRupees(p.amount), currency: p.currency || 'INR', status: COURSE_STATUS[p.status] || String(p.status || '').toLowerCase(),
         date: iso(p.createdAt), orderId: maskId(p.razorpayOrderId), paymentId: maskId(p.razorpayPaymentId),
         archived: Boolean(p.archivedAt && p.status !== 'completed'),
