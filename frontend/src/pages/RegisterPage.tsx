@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,9 @@ const RegisterPage: React.FC = () => {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Field-level problems reported by the server (email / phone already registered, invalid phone, ...)
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; phone?: string }>({});
+  const submitting = useRef(false); // blocks a second request before React has re-rendered the disabled button
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -21,13 +24,18 @@ const RegisterPage: React.FC = () => {
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
     setError('');
+    // correcting a field clears ITS error only
+    if (name === 'email' || name === 'phone') setFieldErrors(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
     setError('');
+    setFieldErrors({});
 
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match.');
@@ -39,14 +47,27 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
+    submitting.current = true;
     setLoading(true);
     try {
       await register({ name: form.name, email: form.email, password: form.password, role: form.role, phone: form.phone });
       toast.success('Account created successfully!');
       navigate(form.role === 'student' ? '/student/standard' : form.role === 'teacher' ? '/teacher' : '/admin');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      const data = err.response?.data;
+      const apiErrors: Array<{ field?: string; message?: string }> = Array.isArray(data?.errors) ? data.errors : [];
+      const next: { email?: string; phone?: string } = {};
+      for (const fe of apiErrors) if ((fe.field === 'email' || fe.field === 'phone') && fe.message) next[fe.field] = fe.message;
+      if (!apiErrors.length && (data?.field === 'email' || data?.field === 'phone') && data?.message) next[data.field as 'email' | 'phone'] = data.message;
+      if (next.email || next.phone) {
+        setFieldErrors(next);
+        // both taken: one clear combined message on top (the two fields are outlined); otherwise the message sits under its field
+        if (next.email && next.phone) setError(data?.message || '');
+      } else {
+        setError(data?.message || (err.response ? 'Registration failed.' : 'Could not reach the server. Please check your connection and try again.'));
+      }
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
@@ -69,7 +90,7 @@ const RegisterPage: React.FC = () => {
           <h2 className="font-heading text-2xl font-bold text-text-primary mb-6">Get Started</h2>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4">
+            <div role="alert" data-testid="form-error" className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4">
               <AlertCircle className="w-4 h-4 text-[#E1447A] flex-shrink-0" />
               <p className="text-[#E1447A] text-xs font-medium">{error}</p>
             </div>
@@ -114,8 +135,13 @@ const RegisterPage: React.FC = () => {
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                 <input name="email" type="email" value={form.email} onChange={handleChange}
-                  placeholder="you@example.com" className="w-full bg-surface-alt border border-border-subtle rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30" required />
+                  placeholder="you@example.com" aria-invalid={!!fieldErrors.email} aria-describedby={fieldErrors.email ? 'email-error' : undefined} className={`w-full bg-surface-alt border ${fieldErrors.email ? 'border-[#E1447A]' : 'border-border-subtle'} rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30`} required />
               </div>
+              {fieldErrors.email && !(fieldErrors.email && fieldErrors.phone) && (
+                <p id="email-error" role="alert" data-testid="email-error" className="flex items-start gap-1.5 text-[#E1447A] text-xs font-medium mt-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" />{fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -123,8 +149,13 @@ const RegisterPage: React.FC = () => {
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                 <input name="phone" type="tel" value={form.phone} onChange={handleChange}
-                  placeholder="+91 98765 43210" className="w-full bg-surface-alt border border-border-subtle rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30" />
+                  placeholder="+91 98765 43210" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone ? 'phone-error' : undefined} className={`w-full bg-surface-alt border ${fieldErrors.phone ? 'border-[#E1447A]' : 'border-border-subtle'} rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30`} />
               </div>
+              {fieldErrors.phone && !(fieldErrors.email && fieldErrors.phone) && (
+                <p id="phone-error" role="alert" data-testid="phone-error" className="flex items-start gap-1.5 text-[#E1447A] text-xs font-medium mt-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" />{fieldErrors.phone}
+                </p>
+              )}
             </div>
 
             <div>

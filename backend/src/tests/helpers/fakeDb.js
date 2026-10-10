@@ -100,7 +100,8 @@ const applyUpdate = (doc, update, { inserting = false } = {}) => {
   doc.updatedAt = new Date();
 };
 
-const dupError = (msg) => Object.assign(new Error(`E11000 duplicate key error: ${msg}`), { code: 11000 });
+// like MongoDB >= 4.2, the error carries `keyPattern` (the violated index's fields)
+const dupError = (msg, fields = []) => Object.assign(new Error(`E11000 duplicate key error: ${msg}`), { code: 11000, keyPattern: Object.fromEntries(fields.map((f) => [f, 1])) });
 
 class Query {
   constructor(model, filter, single) {
@@ -175,7 +176,7 @@ class FakeModel {
       const clash = this.docs.find((d) =>
         !eq(d._id, candidate._id) && (!u.where || u.where(d)) &&
         u.fields.every((f) => getPath(d, f) !== undefined && eq(getPath(d, f), getPath(candidate, f))));
-      if (clash && u.fields.every((f) => getPath(candidate, f) !== undefined)) throw dupError(`${this.name} ${u.fields.join('+')}`);
+      if (clash && u.fields.every((f) => getPath(candidate, f) !== undefined)) throw dupError(`${this.name} ${u.fields.join('+')}`, u.fields);
     }
   }
 
@@ -339,7 +340,9 @@ const createFakeDb = () => {
     }),
   });
   const User = new FakeModel('User', {
-    registry, hidden: ['password'], unique: [{ fields: ['email'] }],
+    registry, hidden: ['password'],
+    // same indexes as models/User.js: unique email + PARTIAL unique phoneNormalized (only real string values)
+    unique: [{ fields: ['email'] }, { fields: ['phoneNormalized'], where: (d) => typeof d.phoneNormalized === 'string' }],
     defaults: () => ({ role: 'student', isActive: true }),
   });
   const Notification = new FakeModel('Notification', { registry });

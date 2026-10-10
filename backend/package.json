@@ -16,6 +16,7 @@
     "test:adminpayments": "node --test src/tests/adminOlympiadPayments.test.js src/tests/unconfirmedPayments.test.js src/tests/unconfirmedSchema.test.js src/tests/paymentReconciler.test.js src/tests/paymentCleanup.test.js",
     "test:security": "node --test src/tests/securityFixes.test.js src/tests/teacherAndUploads.test.js src/tests/trustProxy.test.js",
     "test:adminprofiles": "node --test src/tests/adminProfiles.test.js src/tests/adminProfilesUi.test.js",
+    "test:identity": "node --test src/tests/uniqueIdentity.test.js src/tests/uniqueIdentitySchema.test.js",
     "test:fee": "node --test src/tests/olympiadFee.test.js",
     "test:aiinterview": "node --test src/tests/aiInterview.test.js src/tests/aiInterviewLocalStt.test.js src/tests/aiInterviewOpenAiStt.test.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateUi.test.js"
@@ -35,6 +36,7 @@
     "express-validator": "^7.1.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.12.10",
     "mongoose": "^8.24.4",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",

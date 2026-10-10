@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { normalizePhone } = require('../services/identity');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -7,6 +8,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 6 },
   role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
   phone: { type: String, trim: true },
+  // Canonical E.164 form of `phone` ("+919876543210"); the unique index below makes a phone number usable by ONE account only.
+  // Unset (not empty) when the account has no phone, so accounts without one never collide.
+  phoneNormalized: { type: String, default: undefined },
   avatar: { type: String, default: null },
   isActive: { type: Boolean, default: true },
   isApproved: { type: Boolean, default: true }, // teachers need approval
@@ -27,6 +31,21 @@ const userSchema = new mongoose.Schema({
   streak: { type: Number, default: 0 },
   lastActiveDate: { type: Date },
 }, { timestamps: true });
+
+// Global uniqueness (students + teachers + admins share this collection). `email` is unique via the field definition above
+// (lower-cased + trimmed by the schema). The phone index is PARTIAL: only real string values are indexed.
+userSchema.index(
+  { phoneNormalized: 1 },
+  { unique: true, name: 'uniq_phoneNormalized', partialFilterExpression: { phoneNormalized: { $type: 'string' } } },
+);
+
+// Keep phoneNormalized in step with phone for every save path (registration, seeds, admin tools).
+userSchema.pre('validate', function () {
+  // Only when the phone is new/changed: an unrelated save (password reset...) of a legacy account must never fail on it.
+  if (!this.isNew && !this.isModified('phone')) return;
+  const n = normalizePhone(this.phone);
+  this.phoneNormalized = n.valid ? n.e164 : undefined;
+});
 
 userSchema.pre('save', async function() {
   if (!this.isModified('password')) return;
