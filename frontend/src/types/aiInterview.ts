@@ -64,9 +64,10 @@ export type AIInterviewSttSession =
   | { provider?: 'openai'; clientSecret: string; expiresAt: number; model: string; language: string; callsUrl: string }
   | { provider: 'local'; url: string; model: string; language: string; silenceDurationMs: number };
 
+/** Present only for the parts that were asked for (both by default; one when a single connection is renewed). */
 export interface AIInterviewRealtimeSession {
-  stt: AIInterviewSttSession;
-  avatar: { provider: string; sessionToken: string };
+  stt?: AIInterviewSttSession;
+  avatar?: { provider: string; sessionToken: string };
   config: AIInterviewPublicConfig;
 }
 
@@ -123,4 +124,5 @@ export interface AIInterviewBeginResponse {
 
 export type AIInterviewClientEvent =
   | 'avatar_connected' | 'avatar_disconnected' | 'stt_connected' | 'stt_error'
-  | 'mic_denied' | 'mic_unavailable' | 'reconnect_attempt' | 'unsupported_browser';
+  | 'mic_denied' | 'mic_unavailable' | 'reconnect_attempt' | 'unsupported_browser'
+  | 'stt_connect_failed' | 'avatar_connect_failed' | 'stt_disconnected' | 'avatar_reconnected' | 'stt_reconnected';

@@ -55,7 +55,10 @@ const getConfig = (env = process.env) => {
     maxAnswerChars: 600,
     maxSilencePrompts: 2,          // per question, then the interview moves on
     maxRepeatsPerQuestion: 2,
-    maxRealtimeSessions: 4,        // token mints per interview (first connection + reconnects)
+    maxRealtimeSessions: 4,        // speech-to-text credential mints per interview (first connection + reconnects)
+    // avatar session tokens per interview: LiveAvatar caps one session (sandbox 60 s, Free plan 120 s), so a longer interview needs a
+    // fresh avatar session now and then. The avatar is reconnected ON ITS OWN (speech-to-text keeps running), see realtimeSession.
+    maxAvatarSessions: int(env.AI_INTERVIEW_MAX_AVATAR_SESSIONS, 6, 1, 20),
     // ONE interview per purchase. The ONLY re-start is after a purely TECHNICAL failure (provider / server / browser) before any
     // real answer; this cap just bounds provider cost if a technical fault keeps repeating (it is not an extra attempt).
     maxTechnicalRetries: int(env.AI_INTERVIEW_MAX_TECHNICAL_RETRIES, 5, 0, 10),
@@ -81,6 +84,8 @@ const getConfig = (env = process.env) => {
       model: str(env.OLLAMA_MODEL, 'gemma3:4b'),
       // local models on a laptop CPU are slow: much more generous than the hosted-API timeout
       requestTimeoutMs: int(env.OLLAMA_REQUEST_TIMEOUT_MS, 60000, 3000, 300000),
+      // how long Ollama keeps the model in memory after a request (Ollama's own default is 5m; a cold reload is slow)
+      keepAlive: str(env.OLLAMA_KEEP_ALIVE, '30m'),
     },
 
     // ── Local speech-to-text (development only; selected with AI_INTERVIEW_STT_PROVIDER=local, see local-stt/README.md) ──

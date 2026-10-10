@@ -793,7 +793,7 @@ const ParticipantsDrawer: React.FC<{
   onClose: () => void;
 }> = ({ participants, mySocketId, isViewerTeacher, isLocalParticipant, onRequestMedia, onRemoveParticipant, onClose }) => {
   return (
-    <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10 animate-slide-left">
+    <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[22rem] shadow-2xl md:static md:z-10 md:w-80 md:max-w-none md:shadow-none bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 animate-slide-left">
       <div className="p-3.5 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-brand-primary" />
@@ -1112,7 +1112,8 @@ const LiveSessionPage: React.FC = () => {
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [showChat, setShowChat] = useState(true);
+  // open beside the video on tablets/desktops; on phones the chat is an overlay, so it starts closed
+  const [showChat, setShowChat] = useState(() => typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches);
   const [showParticipants, setShowParticipants] = useState(false);
 
   // Media states
@@ -2264,7 +2265,7 @@ const LiveSessionPage: React.FC = () => {
       )}
 
       {/* ── Main Content: VideoGrid + Chat ── */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden relative">
 
         {/* Stage */}
         <div className="flex-1 min-h-0 p-2 sm:p-3 flex flex-col overflow-hidden relative">
@@ -2400,10 +2401,10 @@ const LiveSessionPage: React.FC = () => {
 
         {/* Chat Drawer */}
         {showChat && (
-          <div className="w-72 sm:w-80 bg-surface border-l border-border-subtle flex flex-col flex-shrink-0 z-10">
+          <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[22rem] shadow-2xl md:static md:z-10 md:w-80 md:max-w-none md:shadow-none bg-surface border-l border-border-subtle flex flex-col flex-shrink-0">
             <div className="p-3 border-b border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-brand-primary" /><span className="font-heading text-text-primary text-sm font-semibold">Class Chat</span></div>
-              <button onClick={() => setShowChat(false)} className="text-text-muted hover:text-text-primary p-1"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowChat(false)} aria-label="Close chat" className="w-9 h-9 -mr-1.5 inline-flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               {messages.map((msg, i) => (

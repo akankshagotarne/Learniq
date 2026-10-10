@@ -67,8 +67,8 @@ const AdminPayments: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Admin</p>
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Payments</h1>
@@ -146,12 +146,13 @@ const AdminPayments: React.FC = () => {
           ) : (
             <div className="space-y-2.5">
               {filtered.map(payment => (
-                <div key={payment._id} className="card-soft p-4 flex items-center gap-3 flex-wrap sm:flex-nowrap">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-text-primary font-semibold text-sm font-heading truncate">
+                <div key={payment._id} className="card-soft p-4 flex items-center gap-x-3 gap-y-2 flex-wrap sm:flex-nowrap">
+                  {/* phones: who / what on the first line (wrapping, nothing cut off), status · amount · date below */}
+                  <div className="w-full sm:w-auto sm:flex-1 min-w-0">
+                    <p className="text-text-primary font-semibold text-sm font-heading break-words sm:truncate">
                       {(payment.student as any)?.name || 'Unknown student'}
                     </p>
-                    <p className="text-text-secondary text-xs truncate">
+                    <p className="text-text-secondary text-xs break-words sm:truncate">
                       {itemTitle(payment)} • {payment.type}
                     </p>
                   </div>
@@ -162,8 +163,8 @@ const AdminPayments: React.FC = () => {
                     {statusLabel(payment.status)}
                   </span>
                   {payment.archivedAt && <span className="text-[10px] text-text-muted" title={payment.archiveReason || 'Archived — kept for audit'}>Archived</span>}
-                  <p className="text-text-primary text-sm font-bold w-24 text-right">₹{payment.amount?.toLocaleString('en-IN')}</p>
-                  <p className="text-text-muted text-xs w-28 text-right">{new Date(payment.createdAt).toLocaleDateString('en-IN')}</p>
+                  <p className="text-text-primary text-sm font-bold ml-auto sm:ml-0 sm:w-24 text-right">₹{payment.amount?.toLocaleString('en-IN')}</p>
+                  <p className="text-text-muted text-xs sm:w-28 text-right">{new Date(payment.createdAt).toLocaleDateString('en-IN')}</p>
                 </div>
               ))}
             </div>

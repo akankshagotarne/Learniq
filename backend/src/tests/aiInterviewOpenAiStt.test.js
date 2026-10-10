@@ -23,8 +23,9 @@ class FakeTrack {
   constructor(label = 'Test Microphone') { this.kind = 'audio'; this.enabled = true; this.muted = false; this.readyState = 'live'; this.label = label; }
 }
 class FakeDC {
-  constructor() { this.readyState = 'open'; this.closed = false; }
-  close() { this.closed = true; this.readyState = 'closed'; }
+  constructor() { this.readyState = 'open'; this.closed = false; this.sent = []; }
+  send(d) { this.sent.push(JSON.parse(d)); }
+  close() { this.closed = true; this.readyState = 'closed'; if (this.onclose) this.onclose(); }
 }
 class FakePC {
   constructor() {
@@ -43,7 +44,7 @@ class FakePC {
 }
 FakePC.instances = [];
 
-const makeEnv = (extraWindow = {}, callsStatus = 201) => {
+const makeEnv = (extraWindow = {}, callsStatus = 201, callsBody = 'v=0 fake answer', fetchImpl = null) => {
   const ts = require(tsPath);
   const compile = (f) => ts.transpileModule(fs.readFileSync(path.join(HOOKS, f), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
   const infos = [];
@@ -59,7 +60,7 @@ const makeEnv = (extraWindow = {}, callsStatus = 201) => {
     window: win, navigator: { mediaDevices: { getUserMedia: () => {} } }, RTCPeerConnection: FakePC,
     URLSearchParams, setTimeout, clearTimeout, setInterval, clearInterval, JSON, Promise, Error, Date, Map, AbortController,
     console: { info: (...a) => infos.push(a), log() {}, warn() {}, error() {} },
-    fetch: async (url, init) => { fetchCalls.push([url, init]); return { ok: callsStatus < 300, status: callsStatus, text: async () => 'v=0 fake answer' }; },
+    fetch: async (url, init) => { fetchCalls.push([url, init]); if (fetchImpl) return fetchImpl(url, init); return { ok: callsStatus < 300, status: callsStatus, text: async () => callsBody }; },
   };
   const modules = {};
   const load = (file) => {
@@ -215,4 +216,135 @@ test('diagnostics: the monitor reports packets / bytes / level and warns when th
   assert.ok(lines.some((l) => l.startsWith('status') && l.includes('"packetsSent":10') && l.includes('"bytesSent":800') && l.includes('"micLevel":0.2')), 'a status line has packets, bytes and level');
   assert.ok(lines.some((l) => l.includes('WARNING the microphone track is DISABLED')), 'disabled track while listening is flagged');
   assert.ok(lines.some((l) => l.includes('WARNING no audio packets')), 'a stalled sender is flagged');
+});
+
+
+// ── rebuilt hook: precise errors, turn control, provider notices ─────────────────────────────────────────────────────────
+test('OpenAI hook: a refused /calls carries OpenAI\'s own reason (code / type / message) and never reports a "lost connection" too', opts, async () => {
+  const body = JSON.stringify({ error: { type: 'invalid_request_error', code: 'insufficient_quota', message: 'You exceeded your current quota', param: null } });
+  const env = makeEnv({}, 429, body);
+  const r = recorder();
+  FakePC.instances = [];
+  const hook = env.useOpenAITranscription(r.h);
+  const err = await hook.connect(micStream(), CREDS).then(() => null, (e) => e);
+  assert.ok(err, 'connect must fail');
+  assert.equal(err.message, 'stt_connect_429');
+  assert.equal(err.code, 'stt_connect_429');
+  assert.equal(err.status, 429);
+  assert.deepEqual(JSON.parse(JSON.stringify(err.detail)), { type: 'invalid_request_error', code: 'insufficient_quota', message: 'You exceeded your current quota' });
+  assert.equal(FakePC.instances[0].closed, true, 'the half-open peer connection is closed');
+  FakePC.instances[0].dc.close(); // its data channel closing afterwards must not look like a dropped live connection
+  assert.equal(r.calls.filter((c) => c[0] === 'onConnectionLost').length, 0);
+});
+
+test('OpenAI hook: an unreachable OpenAI is "stt_connect_network" (a real network failure), a stalled one "stt_connect_timeout"', opts, async () => {
+  const net = makeEnv({}, 201, '', async () => { throw new TypeError('Failed to fetch'); });
+  await assert.rejects(() => net.useOpenAITranscription(recorder().h).connect(micStream(), CREDS), /^Error: stt_connect_network$/);
+  const slow = makeEnv({}, 201, '', async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; });
+  await assert.rejects(() => slow.useOpenAITranscription(recorder().h).connect(micStream(), CREDS), /stt_connect_timeout/);
+});
+
+test('OpenAI hook: a new listening turn clears stale audio; "I\'m done" commits the buffer; both go over the data channel', opts, async () => {
+  const env = makeEnv();
+  const { hook, pc } = await connected(env, recorder().h);
+  hook.setListening(true);
+  hook.setListening(true); // already listening: no second clear
+  assert.deepEqual(pc.dc.sent, [{ type: 'input_audio_buffer.clear' }]);
+  assert.equal(hook.commit(), true);
+  assert.deepEqual(pc.dc.sent[1], { type: 'input_audio_buffer.commit' });
+  hook.setListening(false);
+  assert.equal(pc.dc.sent.length, 2, 'stopping to listen sends nothing');
+  pc.dc.readyState = 'closing';
+  assert.equal(hook.commit(), false, 'never sends on a channel that is not open');
+});
+
+test('OpenAI hook: an empty-commit notice is ignored, a session-ending error is a lost connection (reconnect), other errors a failed turn', opts, async () => {
+  const env = makeEnv();
+  const r = recorder();
+  const { pc } = await connected(env, r.h);
+  send(pc, { type: 'error', error: { type: 'invalid_request_error', code: 'input_audio_buffer_commit_empty', message: 'buffer too small' } });
+  assert.equal(r.calls.length, 0);
+  send(pc, { type: 'error', error: { type: 'invalid_request_error', code: 'session_expired', message: 'Your session hit the maximum duration' } });
+  assert.deepEqual(r.calls.map((c) => c[0]), ['onConnectionLost']);
+  assert.equal(r.calls[0][1], 'provider_session_expired');
+});
+
+test('OpenAI hook: the snapshot shows the session config OpenAI applied, the last event / error and the real RTP counters (no secret)', opts, async () => {
+  const env = makeEnv();
+  const { hook, pc } = await connected(env, recorder().h);
+  send(pc, { type: 'session.created', session: { type: 'transcription', audio: { input: { format: { type: 'audio/pcm', rate: 24000 }, transcription: { model: 'gpt-4o-mini-transcribe', language: 'en' }, turn_detection: { type: 'server_vad' } } } } });
+  send(pc, { type: 'conversation.item.input_audio_transcription.failed', error: { code: 'rate_limit_exceeded', message: 'slow down' } });
+  const snap = await hook.snapshot();
+  assert.equal(snap.session, 'type=transcription model=gpt-4o-mini-transcribe lang=en vad=server_vad format=audio/pcm');
+  assert.equal(snap.lastEvent, 'conversation.item.input_audio_transcription.failed');
+  assert.equal(snap.lastError, 'rate_limit_exceeded / slow down');
+  assert.equal(snap.packetsSent, 10);
+  assert.equal(snap.bytesSent, 800);
+  assert.equal(snap.micLevel, 0.2);
+  assert.equal(snap.senderIsMic, true);
+  assert.ok(!JSON.stringify(snap).includes(SECRET));
+});
+
+// ── the page's error wording: only a real network failure is a "network problem" ───────────────────────────────────────
+const loadService = () => {
+  const ts = require(tsPath);
+  const src = fs.readFileSync(path.join(FE, 'src', 'services', 'aiInterview.ts'), 'utf8');
+  const out = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const m = { exports: {} };
+  vm.runInNewContext(out, { module: m, exports: m.exports, require: (n) => (n === './api' ? { default: {} } : {}), String, RegExp, Object }, { filename: 'aiInterview.ts' });
+  return m.exports;
+};
+
+test('error wording: STT, avatar, timeout and server errors are never called a "network problem"; a real network failure is', opts, () => {
+  const { describeInterviewError, aiInterviewErrorMessage } = loadService();
+  const NET = /Network problem/;
+  // the exact failure behind the reported screenshot: the local STT WebSocket could not be opened
+  const local = describeInterviewError(new Error('stt_connect_failed'));
+  assert.equal(local.kind, 'stt');
+  assert.doesNotMatch(local.message, NET);
+  assert.match(local.message, /local speech-to-text/i);
+  const quota = describeInterviewError(Object.assign(new Error('stt_connect_429'), { code: 'stt_connect_429', detail: { code: 'insufficient_quota' } }));
+  assert.equal(quota.kind, 'stt');
+  assert.match(quota.technical, /insufficient_quota/);
+  assert.equal(describeInterviewError(Object.assign(new Error('stt_connect_401'), { code: 'stt_connect_401' })).kind, 'stt');
+  assert.equal(describeInterviewError(new Error('stt_channel_timeout')).kind, 'stt');
+  assert.equal(describeInterviewError(Object.assign(new Error('avatar_start_failed'), { code: 'avatar_start_failed', part: 'avatar' })).kind, 'avatar');
+  assert.doesNotMatch(aiInterviewErrorMessage(new Error('avatar_stream_timeout')), NET);
+  assert.doesNotMatch(aiInterviewErrorMessage(new Error('something odd')), NET);
+  const timeout = describeInterviewError({ isAxiosError: true, code: 'ECONNABORTED', config: { url: '/ai-interviews/x/answer' } });
+  assert.equal(timeout.kind, 'timeout');
+  assert.doesNotMatch(timeout.message, NET);
+  const server = describeInterviewError({ isAxiosError: true, response: { status: 502, data: { code: 'AI_UNAVAILABLE', message: 'The AI interviewer is having trouble. Please try again.', debug: { provider: 'ollama', providerCode: 'NETWORK', detail: 'ECONNREFUSED' } } } });
+  assert.equal(server.kind, 'server');
+  assert.equal(server.message, 'The AI interviewer is having trouble. Please try again.');
+  assert.match(server.technical, /AI_UNAVAILABLE · HTTP 502 · provider=ollama providerCode=NETWORK detail=ECONNREFUSED/);
+  const net = describeInterviewError({ isAxiosError: true, code: 'ERR_NETWORK', config: { url: '/ai-interviews/start' } });
+  assert.equal(net.kind, 'network');
+  assert.match(net.message, NET);
+});
+
+test('page: an ACCOUNT problem at the speech provider (no credit / quota / bad key) stops the interview with the real reason; a one-off failed turn does not', opts, () => {
+  const page = fs.readFileSync(path.join(FE, 'src', 'pages', 'student', 'AIInterviewPage.tsx'), 'utf8');
+  const m = page.match(/const PROVIDER_ACCOUNT_ERRORS = (\/.*\/i);/);
+  assert.ok(m, 'PROVIDER_ACCOUNT_ERRORS not found');
+  const re = vm.runInNewContext(m[1]);
+  // the exact event OpenAI sent in the real browser test: code credit_balance_exhausted, type insufficient_quota
+  assert.ok(re.test('credit_balance_exhausted insufficient_quota You have no credits remaining.'));
+  assert.ok(re.test('insufficient_quota'));
+  assert.ok(re.test('invalid_api_key'));
+  assert.ok(!re.test('server_error boom'), 'a transient provider error is only a failed turn');
+  assert.ok(!re.test('rate_limit_exceeded'), 'a rate limit is only a failed turn');
+  assert.match(page, /This is not a problem with your microphone, and nothing has been used up/);
+  // and the hook does not turn an account problem into a reconnect loop
+  const hook = fs.readFileSync(path.join(HOOKS, 'useOpenAITranscription.ts'), 'utf8');
+  assert.match(hook, /const FATAL_CODES = new Set\(\['session_expired', 'session_closed'\]\);/);
+});
+
+test('OpenAI hook: no credit (credit_balance_exhausted / insufficient_quota) reaches the page as a failed turn with the code, never as a lost connection', opts, async () => {
+  const env = makeEnv();
+  const r = recorder();
+  const { pc } = await connected(env, r.h);
+  send(pc, { type: 'conversation.item.input_audio_transcription.failed', item_id: 'i1', error: { type: 'insufficient_quota', code: 'credit_balance_exhausted', message: 'You have no credits remaining.' } });
+  assert.deepEqual(r.calls.map((c) => c[0]), ['onTranscriptionFailed']);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.calls[0][1])), { type: 'insufficient_quota', code: 'credit_balance_exhausted', message: 'You have no credits remaining.' });
 });

@@ -238,8 +238,8 @@ const ExamBuilderPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
           {/* Top Bar Navigation */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-subtle pb-4">
             <div>
@@ -509,10 +509,10 @@ const ExamBuilderPage: React.FC = () => {
             {questions.map((q, qIndex) => (
               <div
                 key={qIndex}
-                className="card-soft p-5 sm:p-6 rounded-2xl border border-border-subtle bg-surface space-y-4 relative"
+                className="card-soft p-4 sm:p-6 rounded-2xl border border-border-subtle bg-surface space-y-4 relative"
               >
                 {/* Question Header with Order, Reorder buttons and Delete */}
-                <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-3">
                   <div className="flex items-center gap-2">
                     <span className="w-7 h-7 rounded-xl bg-brand-primary/10 text-brand-primary font-bold text-xs flex items-center justify-center">
                       {qIndex + 1}
@@ -522,8 +522,8 @@ const ExamBuilderPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 text-xs">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <label className="flex items-center gap-1 text-xs">
                       <span className="text-text-muted font-medium">Marks:</span>
                       <input
                         type="number"
@@ -531,16 +531,17 @@ const ExamBuilderPage: React.FC = () => {
                         step={0.5}
                         value={q.marks}
                         onChange={e => handleUpdateQuestion(qIndex, 'marks', parseFloat(e.target.value) || 1)}
-                        className="w-16 p-1 bg-surface-alt border border-border-subtle rounded-lg text-center font-bold text-text-primary"
+                        className="w-16 min-h-[36px] p-1 bg-surface-alt border border-border-subtle rounded-lg text-center font-bold text-text-primary"
                       />
-                    </div>
+                    </label>
 
                     <button
                       type="button"
                       onClick={() => handleMoveQuestion(qIndex, 'up')}
                       disabled={qIndex === 0}
-                      className="p-1.5 rounded-lg text-text-muted hover:text-text-primary disabled:opacity-30"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary disabled:opacity-30"
                       title="Move up"
+                      aria-label={`Move question ${qIndex + 1} up`}
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
                     </button>
@@ -549,8 +550,9 @@ const ExamBuilderPage: React.FC = () => {
                       type="button"
                       onClick={() => handleMoveQuestion(qIndex, 'down')}
                       disabled={qIndex === questions.length - 1}
-                      className="p-1.5 rounded-lg text-text-muted hover:text-text-primary disabled:opacity-30"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary disabled:opacity-30"
                       title="Move down"
+                      aria-label={`Move question ${qIndex + 1} down`}
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
@@ -558,8 +560,9 @@ const ExamBuilderPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleDeleteQuestion(qIndex)}
-                      className="p-1.5 rounded-lg text-[#E1447A] hover:bg-[#E1447A]/10 transition-colors"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-[#E1447A] hover:bg-[#E1447A]/10 transition-colors"
                       title="Delete question"
+                      aria-label={`Delete question ${qIndex + 1}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -582,7 +585,7 @@ const ExamBuilderPage: React.FC = () => {
 
                 {/* 4 Options with Radio to mark correct answer */}
                 <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between text-text-muted font-bold text-[11px] mb-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-text-muted font-bold text-[11px] mb-1">
                     <span>Options (Mark the radio button next to the correct answer)</span>
                     <span className="text-brand-primary">
                       Selected Correct: Option {String.fromCharCode(65 + q.correctAnswer)}
@@ -624,7 +627,7 @@ const ExamBuilderPage: React.FC = () => {
                           placeholder={`Option ${String.fromCharCode(65 + optIndex)} text...`}
                           value={opt}
                           onChange={e => handleUpdateOption(qIndex, optIndex, e.target.value)}
-                          className="flex-1 p-1.5 bg-transparent border-none text-text-primary focus:outline-none text-xs"
+                          className="flex-1 min-w-0 p-1.5 bg-transparent border-none text-text-primary focus:outline-none text-xs"
                         />
                       </div>
                     );
@@ -658,8 +661,8 @@ const ExamBuilderPage: React.FC = () => {
           </div>
 
           {/* Bottom Save CTA Bar */}
-          <div className="pt-4 border-t border-border-subtle flex items-center justify-end gap-3">
-            <Link to="/teacher/exams" className="btn-secondary text-xs py-2.5 px-4 rounded-xl font-medium">
+          <div className="pt-4 border-t border-border-subtle flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
+            <Link to="/teacher/exams" className="btn-secondary text-xs py-2.5 px-4 min-h-[44px] rounded-xl font-medium">
               Cancel
             </Link>
 
@@ -667,7 +670,7 @@ const ExamBuilderPage: React.FC = () => {
               type="button"
               onClick={() => handleSave(false)}
               disabled={saving}
-              className="btn-secondary text-xs py-2.5 px-5 rounded-xl font-bold flex items-center gap-1.5"
+              className="btn-secondary text-xs py-2.5 px-5 min-h-[44px] rounded-xl font-bold flex items-center justify-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" /> Save as Draft
             </button>
@@ -676,7 +679,7 @@ const ExamBuilderPage: React.FC = () => {
               type="button"
               onClick={() => handleSave(true)}
               disabled={saving}
-              className="btn-primary text-xs py-2.5 px-6 rounded-xl font-bold flex items-center gap-1.5 shadow-lg shadow-brand-primary/20"
+              className="btn-primary text-xs py-2.5 px-6 min-h-[44px] rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-primary/20"
             >
               <Globe className="w-4 h-4" /> Publish Examination
             </button>

@@ -347,7 +347,7 @@ const CourseDetailPage: React.FC = () => {
         <Navbar />
         <div className="pt-24 page-container py-8">
           <div className="card-soft h-64 rounded-2xl mb-8 animate-pulse bg-surface-alt" />
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
               {[...Array(5)].map((_, i) => <div key={i} className="card-soft h-16 rounded-xl animate-pulse bg-surface-alt" />)}
             </div>
@@ -399,7 +399,7 @@ const CourseDetailPage: React.FC = () => {
 
         {/* Content */}
         <div className="page-container py-8">
-          <div className="grid lg:grid-cols-3 gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             <div className="lg:col-span-2 space-y-8">
               {/* Teacher Profile */}
               {teacher && (
@@ -494,7 +494,7 @@ const CourseDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className="grid sm:grid-cols-2 gap-2.5 pt-2 max-h-96 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 max-h-96 overflow-y-auto pr-1">
                   {((course.syllabus && course.syllabus.length > 0) ? course.syllabus : (lectures.length > 0 ? lectures.map(l => l.title) : [])).map((chap, idx) => (
                     <div
                       key={idx}

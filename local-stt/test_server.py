@@ -324,5 +324,49 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                 await ws.close()
 
 
+    # -- "I'm done answering" and real (synthesised) spoken words instead of a test tone ----------------------------------
+
+    async def test_commit_ends_the_turn_at_once_without_waiting_for_the_pause(self):
+        async with await self.connect("http://localhost:5173") as ws:
+            await self.start(ws, silenceMs=4000)                     # a long pause setting: only the commit can end the turn quickly
+            await self.stream(ws, np.concatenate([silence(0.3), tone(1.0)]))
+            first = await self.collect(ws, until={"speech_started"}, timeout=2)
+            self.assertIn("speech_started", [m["type"] for m in first])
+            t0 = time.monotonic()
+            await ws.send(json.dumps({"type": "commit"}))
+            msgs = await self.collect(ws, until={"final"}, timeout=3)
+            self.assertLess(time.monotonic() - t0, 2.0)
+        types = [m["type"] for m in msgs]
+        self.assertIn("speech_stopped", types)
+        self.assertEqual(types[-1], "final")
+
+    async def test_commit_while_nobody_speaks_says_so(self):
+        async with await self.connect("http://localhost:5173") as ws:
+            await self.start(ws)
+            await self.stream(ws, silence(0.5))
+            await ws.send(json.dumps({"type": "commit"}))
+            msgs = await self.collect(ws, until={"commit_empty"}, timeout=2)
+        self.assertEqual([m["type"] for m in msgs], ["commit_empty"])
+
+    async def test_real_spoken_words_are_detected_as_one_turn_each(self):
+        import os
+        clips = os.environ.get("LEARNIQ_TTS_DIR")
+        if not clips:
+            self.skipTest("set LEARNIQ_TTS_DIR to a folder with two.wav / i_dont_know.wav (16 kHz mono) to run this")
+        def load(name):
+            raw = open(os.path.join(clips, name), "rb").read()
+            return np.frombuffer(raw[44:], dtype="<i2").astype(np.float32) / 32768.0
+        for name in ("two.wav", "i_dont_know.wav"):
+            async with await self.connect("http://localhost:5173") as ws:
+                await self.start(ws, silenceMs=1400)
+                await self.stream(ws, np.concatenate([silence(0.5), load(name), silence(2.0)]))
+                msgs = await self.collect(ws, until={"final"}, timeout=5)
+            types = [m["type"] for m in msgs]
+            self.assertEqual(types[0], "speech_started", name)
+            self.assertIn("speech_stopped", types, name)
+            self.assertEqual(types[-1], "final", name)
+            self.assertEqual(types.count("speech_started"), 1, f"{name}: one word = one turn")
+
+
 if __name__ == "__main__":
     unittest.main()

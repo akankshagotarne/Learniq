@@ -25,10 +25,10 @@ const CertificateBanner: React.FC<Props> = ({ examId, result, certificate, onCer
 
   if (!passed) {
     return (
-      <div className="card-soft rounded-2xl p-6 mb-6 border border-[#E1447A]/30" data-testid="certificate-fail">
-        <div className="flex items-start gap-3">
-          <span className="p-2 rounded-xl bg-[#E1447A]/10 text-[#E1447A]"><XCircle className="w-5 h-5" /></span>
-          <div className="flex-1">
+      <div className="card-soft rounded-2xl p-4 sm:p-6 mb-6 border border-[#E1447A]/30" data-testid="certificate-fail">
+        <div className="flex flex-col sm:flex-row items-start gap-3">
+          <span className="p-2 rounded-xl bg-[#E1447A]/10 text-[#E1447A] flex-shrink-0"><XCircle className="w-5 h-5" /></span>
+          <div className="flex-1 min-w-0 w-full">
             <h2 className="font-heading font-bold text-lg text-text-primary">Result: FAIL</h2>
             <p className="text-sm text-text-secondary mt-1">A minimum of {result.passPercentage ?? PASS_MARK}% is required to receive a certificate.</p>
             <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
@@ -54,11 +54,11 @@ const CertificateBanner: React.FC<Props> = ({ examId, result, certificate, onCer
   };
 
   return (
-    <div className="card-soft rounded-2xl p-6 mb-6 border border-[#4ADE9A]/40 relative overflow-hidden" data-testid="certificate-pass">
+    <div className="card-soft rounded-2xl p-4 sm:p-6 mb-6 border border-[#4ADE9A]/40 relative overflow-hidden" data-testid="certificate-pass">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#4ADE9A] to-[#FFC24B]" />
-      <div className="flex items-start gap-3 mt-1">
-        <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#D97706]"><Award className="w-5 h-5" /></span>
-        <div className="flex-1 min-w-0">
+      <div className="flex flex-col sm:flex-row items-start gap-3 mt-1">
+        <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#D97706] flex-shrink-0"><Award className="w-5 h-5" /></span>
+        <div className="flex-1 min-w-0 w-full">
           <h2 className="font-heading font-bold text-xl text-text-primary">Congratulations! 🎉</h2>
           <p className="text-sm text-text-secondary mt-1">You have successfully passed the LearnIQ All India Olympiad Test 2026.</p>
 

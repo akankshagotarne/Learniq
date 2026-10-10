@@ -8,6 +8,7 @@ const { subjectsFor, difficultyFor, subjectAt } = require('../services/aiIntervi
 const { computeResult } = require('../services/aiInterview/scoring');
 const svc = require('../services/aiInterview/AIInterviewService');
 const { mintTranscriptionClientSecret } = require('../services/aiInterview/openaiClient');
+const ollamaClient = require('../services/aiInterview/ollamaClient');
 const { describeLocalStt } = require('../services/aiInterview/localStt');
 const avatarService = require('../services/avatar/AvatarService');
 
@@ -32,6 +33,33 @@ const deps = {
   ai: svc.createAIInterviewService(),
   mintTranscription: mintTranscriptionClientSecret,
   avatar: avatarService,
+  // Ollama (local brain) loads Gemma on its first request, which can take longer than a whole turn on a laptop: load it while the
+  // avatar and microphone connect. Fire-and-forget; never used with the OpenAI brain.
+  warmUpBrain: (cfg) => (cfg.provider === 'ollama' ? ollamaClient.warmUp(cfg) : null),
+};
+
+/** Start loading the local model in the background (no effect for the OpenAI brain). Only ever logged, never awaited. */
+const warmUpBrain = (cfg, id) => {
+  let p;
+  try { p = deps.warmUpBrain(cfg); } catch { return; }
+  if (p && typeof p.then === 'function') {
+    p.then((r) => { if (r) log('brain_warm_up', { id, provider: cfg.provider, ok: !!r.ok, ms: r.ms, code: r.code }); }).catch(() => { /* never fatal */ });
+  }
+};
+
+/**
+ * Development-only diagnostics attached to an error response, so the interview page can show the REAL reason (e.g. Ollama
+ * ECONNREFUSED / MODEL_NOT_FOUND, an OpenAI error code) instead of a generic message. Never in production or tests, and anything
+ * that looks like a key is masked.
+ */
+const devDebug = (fields) => {
+  if (String(process.env.NODE_ENV || '').toLowerCase() !== 'development') return {};
+  const clean = {};
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    clean[k] = String(v).replace(/\b(sk|ek|rk)[-_][A-Za-z0-9_*.-]{6,}/g, '$1-***').slice(0, 300);
+  });
+  return { debug: clean };
 };
 
 /**
@@ -64,10 +92,11 @@ const handler = (fn) => async (req, res) => {
         code: err.code === 'NOT_CONFIGURED' ? 'NOT_CONFIGURED' : (isAvatar ? 'AVATAR_UNAVAILABLE' : 'AI_UNAVAILABLE'),
         message: isAvatar ? 'The avatar could not be connected right now. Please try again.' : 'The AI interviewer is having trouble. Please try again.',
         retryable: err.code !== 'NOT_CONFIGURED',
+        ...devDebug({ provider: err.provider, providerCode: err.code, providerStatus: err.status, detail: err.detail }),
       });
     }
     console.error('[ai-interview] unexpected error:', err);
-    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.', code: 'SERVER_ERROR' });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.', code: 'SERVER_ERROR', ...devDebug({ detail: err && err.message }) });
   }
 };
 
@@ -288,6 +317,14 @@ const start = handler(async (req, res) => {
     throw new ApiError(409, 'Your AI Interview for this exam has already been completed.', 'ALREADY_COMPLETED', { interviewId: String(s._id) });
   }
   if (s && ACTIVE.includes(s.status)) {
+    // Not started yet (no clock, no question): a previous page load could not connect (microphone, speech-to-text, avatar, a closed
+    // tab). Nothing was spent on the interview itself, so its connection slots are freed - otherwise a few failed attempts before the
+    // first question would lock the student out with CONNECTION_LIMIT for good. (Every route is rate limited per student.)
+    if (!s.startedAt && s.usage && (s.usage.realtimeSessions || s.usage.avatarSessions)) {
+      s = (await cas(s._id, { status: { $in: ['created', 'initializing'] }, startedAt: null }, { 'usage.realtimeSessions': 0, 'usage.avatarSessions': 0 })) || s;
+      log('connection_slots_reset', { id: String(s._id) });
+    }
+    warmUpBrain(cfg, String(s._id));
     return res.json({ success: true, resumed: true, interview: publicSession(s, exam), config: publicView(cfg) });
   }
   if (s) {
@@ -305,6 +342,7 @@ const start = handler(async (req, res) => {
     }, { $inc: { restarts: 1 } });
     s = reset || await AIInterview.findOne({ _id: s._id }).lean();
     log('interview_restarted', { id: String(s._id), restarts: s.restarts });
+    warmUpBrain(cfg, String(s._id));
     return res.json({ success: true, resumed: false, interview: publicSession(s, exam), config: publicView(cfg) });
   }
 
@@ -328,6 +366,7 @@ const start = handler(async (req, res) => {
     return res.json({ success: true, resumed: true, interview: publicSession(s, exam), config: publicView(cfg) });
   }
   log('interview_created', { id: String(s._id), standard: s.standard, totalQuestions: s.totalQuestions });
+  warmUpBrain(cfg, String(s._id));
   res.status(201).json({ success: true, resumed: false, interview: publicSession(s, exam), config: publicView(cfg) });
 });
 
@@ -342,41 +381,67 @@ const getInterview = handler(async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// POST /api/ai-interviews/:id/realtime-session
-// Short-lived credentials / addresses for the two browser connections (live transcription + avatar). Never a permanent key.
+// POST /api/ai-interviews/:id/realtime-session   { parts?: ['stt' | 'avatar'] }   (default: both)
+// Short-lived credentials / addresses for the two INDEPENDENT browser connections: live transcription (the student's microphone) and
+// the avatar (the interviewer's face + voice). Each can be renewed on its own: an avatar session that reached its time cap is
+// replaced without touching speech-to-text, and a dropped speech-to-text connection without touching the avatar. Never a permanent key.
 // ═══════════════════════════════════════════════════════════════════════
+const PARTS = ['stt', 'avatar'];
 const realtimeSession = handler(async (req, res) => {
   const cfg = getConfig();
   assertEnabled(cfg);
+  const raw = req.body && req.body.parts;
+  let parts = PARTS;
+  if (raw !== undefined) {
+    if (!Array.isArray(raw) || !raw.length || raw.length > PARTS.length || raw.some((p) => !PARTS.includes(p))) {
+      throw new ApiError(400, 'Invalid request.', 'INVALID_REQUEST');
+    }
+    parts = PARTS.filter((p) => raw.includes(p));
+  }
+  const wantStt = parts.includes('stt');
+  const wantAvatar = parts.includes('avatar');
+
   let s = await loadOwned(req);
   s = await expireIfNeeded(s);
   if (!ACTIVE.includes(s.status)) throw new ApiError(409, 'This interview is not active.', 'NOT_ACTIVE');
   await resolveEntitlement(req.user, String(s.exam)); // the purchase must still be valid
   assertConfigured(cfg);
 
-  // reserve one of the limited token mints (atomic) so reconnect loops cannot burn provider credit
-  const reserved = await cas(s._id, { status: { $in: ACTIVE }, 'usage.realtimeSessions': { $lt: cfg.maxRealtimeSessions } }, {},
-    { $inc: { 'usage.realtimeSessions': 1, 'usage.avatarSessions': 1 } });
-  if (!reserved) throw new ApiError(429, 'Too many connection attempts for this interview.', 'CONNECTION_LIMIT');
+  // reserve the limited token mints (atomic) so reconnect loops cannot burn provider credit; each part has its own budget
+  const filter = { status: { $in: ACTIVE } };
+  const inc = {};
+  if (wantStt) { filter['usage.realtimeSessions'] = { $lt: cfg.maxRealtimeSessions }; inc['usage.realtimeSessions'] = 1; }
+  if (wantAvatar) { filter['usage.avatarSessions'] = { $lt: cfg.maxAvatarSessions }; inc['usage.avatarSessions'] = 1; }
+  const reserved = await cas(s._id, filter, {}, { $inc: inc });
+  if (!reserved) {
+    log('connection_limit', { id: String(s._id), parts });
+    throw new ApiError(429, 'Too many connection attempts for this interview.', 'CONNECTION_LIMIT');
+  }
 
-  let stt; let avatar;
+  let stt = null; let avatar = null;
   try {
     [stt, avatar] = await Promise.all([
-      issueStt(cfg),
-      deps.avatar.startAvatarSession(cfg, { maxDurationSeconds: remainingSeconds(s) ?? s.maxDurationSeconds }),
+      wantStt ? issueStt(cfg) : null,
+      wantAvatar ? deps.avatar.startAvatarSession(cfg, { maxDurationSeconds: remainingSeconds(s) ?? s.maxDurationSeconds }) : null,
     ]);
   } catch (err) {
-    await cas(s._id, {}, {}, { $inc: { 'usage.realtimeSessions': -1, 'usage.avatarSessions': -1, 'usage.connectFailures': 1 } }); // give the reservation back; remember it was a provider fault, not the student's
+    // give the reservation back; remember it was a provider fault, not the student's
+    const back = {};
+    Object.keys(inc).forEach((k) => { back[k] = -1; });
+    await cas(s._id, {}, {}, { $inc: { ...back, 'usage.connectFailures': 1 } });
     throw err;
   }
   if (s.status === 'created') await cas(s._id, { status: 'created' }, { status: 'initializing' });
-  log('realtime_session_issued', { id: String(s._id), n: reserved.usage.realtimeSessions });
+  log('realtime_session_issued', {
+    id: String(s._id), parts, stt: stt ? stt.provider : undefined,
+    sttMints: reserved.usage.realtimeSessions, avatarMints: reserved.usage.avatarSessions,
+  });
 
   res.set('Cache-Control', 'no-store');
   res.json({
     success: true,
-    stt,
-    avatar: { provider: avatar.provider, sessionToken: avatar.sessionToken },
+    ...(stt ? { stt } : {}),
+    ...(avatar ? { avatar: { provider: avatar.provider, sessionToken: avatar.sessionToken } } : {}),
     config: publicView(cfg),
   });
 });
@@ -639,7 +704,12 @@ const EVENT_COUNTERS = {
   mic_denied: 'usage.micFailures',
   mic_unavailable: 'usage.micFailures',
   stt_error: 'usage.transcriptionFailures',
+  // the browser could not open a connection with the credentials it was given (e.g. the OpenAI WebRTC call or the avatar room)
+  stt_connect_failed: 'usage.connectFailures',
+  avatar_connect_failed: 'usage.connectFailures',
+  stt_disconnected: 'usage.transcriptionFailures',
   avatar_connected: null, stt_connected: null, reconnect_attempt: null, unsupported_browser: null,
+  avatar_reconnected: null, stt_reconnected: null,
 };
 
 const clientEvent = handler(async (req, res) => {

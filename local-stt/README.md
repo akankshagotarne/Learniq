@@ -101,7 +101,8 @@ WebSocket on `ws://127.0.0.1:8765`.
 | server → client | text `{"type":"ready","model":"base.en","device":"cpu","sampleRate":16000}` |
 | client → server | binary: signed 16-bit little-endian PCM, mono, 16 kHz (the page sends 40 ms chunks, only while the interviewer is listening) |
 | client → server | text `{"type":"listening","on":true\|false}` — every change starts the next turn from a clean slate and drops results still being computed |
-| server → client | text `speech_started`, `partial` (`text`), `speech_stopped`, `final` (`text`), `transcription_failed`, `error` (`code`) |
+| client → server | text `{"type":"commit"}` — the student pressed **I'm done answering**: the current turn ends now (no waiting for the pause) |
+| server → client | text `speech_started`, `partial` (`text`), `speech_stopped`, `final` (`text`), `transcription_failed`, `error` (`code`), `commit_empty` (a commit while nobody was speaking) |
 
 ## Tests
 

@@ -9,9 +9,10 @@ import { AgentEventsEnum, LiveAvatarSession, SessionDisconnectReason, SessionEve
  *  - The avatar is only a face + voice for text OUR interviewer (OpenAI, on our server) decided to say: we only ever call `repeat()`
  *    (= the LLM-free `avatar.speak_text`), never `message()` (which would make LiveAvatar's own LLM answer).
  *  - Microphone: the SDK's default is a LIVE voice chat (it opens the microphone and publishes it to the LiveAvatar room). We do not want
- *    that, so the session is created with `voiceChat: { defaultMuted: true }`: the SDK still creates its (second) local audio track, but
- *    it is muted from the start and is never unmuted, so no microphone audio reaches LiveAvatar. The student's speech is captured
- *    separately by `useOpenAITranscription` and goes only to OpenAI (live transcription).
+ *    that, so the session is created with `voiceChat: { defaultMuted: true }` AND the SDK's voice chat is never started at all
+ *    (see `keepMicrophoneAway`): LiveAvatar never opens a second capture of the student's microphone, never publishes an audio track
+ *    and cannot change the microphone's processing. The student's speech is captured ONLY by the transcription hook
+ *    (`useOpenAITranscription`) and goes only to OpenAI (live transcription). The avatar is output only: video + voice.
  */
 export type AvatarState = 'idle' | 'connecting' | 'ready' | 'speaking' | 'disconnected' | 'error';
 
@@ -21,6 +22,30 @@ export interface AvatarHandlers {
   /** The avatar connection dropped without us asking (network, provider, time limit). */
   onDisconnected?: (reason: string) => void;
 }
+
+/**
+ * The avatar is output-only here: replace the SDK's voice-chat start (called once the room connects) with a no-op, so LiveAvatar never
+ * calls getUserMedia. Only affects this session object. Returns whether the guard could be installed (logged in debug mode).
+ */
+const keepMicrophoneAway = (session: LiveAvatarSession): boolean => {
+  try {
+    const vc: any = (session as any).voiceChat;
+    if (!vc || typeof vc.start !== 'function') return false;
+    vc.start = async () => { /* the avatar never listens: no microphone capture, no published audio track */ };
+    return true;
+  } catch { return false; }
+};
+
+/** A precise, log-safe avatar error code (the page shows it in development; the student sees a friendly message). */
+const avatarError = (code: string, cause?: unknown): Error => {
+  const c: any = cause;
+  // LiveAvatar's own reason (SessionApiError: message + HTTP status + error code), or the LiveKit / browser error message
+  const detail = c && typeof c === 'object'
+    ? { message: typeof c.message === 'string' ? c.message.slice(0, 200) : undefined, status: typeof c.status === 'number' ? c.status : undefined, providerCode: c.errorCode != null ? String(c.errorCode).slice(0, 40) : undefined }
+    : undefined;
+  if (detail) console.warn(`[LearnIQ avatar] ${code}`, detail);
+  return Object.assign(new Error(code), { code, part: 'avatar', cause: detail });
+};
 
 /** Upper bound for one utterance if the provider never reports the end of speech. */
 const speakFallbackMs = (text: string) => Math.min(60000, 5000 + (text.split(/\s+/).filter(Boolean).length / 2.2) * 1000);
@@ -75,9 +100,10 @@ export const useLiveAvatar = (handlers: AvatarHandlers = {}) => {
     // voiceChat.defaultMuted: the SDK's default would publish the live microphone to LiveAvatar (see the header comment)
     const session = new LiveAvatarSession(sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
     sessionRef.current = session;
+    keepMicrophoneAway(session);
 
     const ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('avatar_stream_timeout')), 25000);
+      const timer = setTimeout(() => reject(avatarError('avatar_stream_timeout')), 25000);
       session.once(SessionEvent.SESSION_STREAM_READY, () => {
         clearTimeout(timer);
         const el = videoRef.current;
@@ -89,7 +115,7 @@ export const useLiveAvatar = (handlers: AvatarHandlers = {}) => {
         }
         resolve();
       });
-      session.once(SessionEvent.SESSION_DISCONNECTED, () => { clearTimeout(timer); reject(new Error('avatar_disconnected_early')); });
+      session.once(SessionEvent.SESSION_DISCONNECTED, (reason: SessionDisconnectReason) => { clearTimeout(timer); reject(avatarError(`avatar_disconnected_early_${String(reason || 'unknown').toLowerCase()}`)); });
     });
 
     session.on(SessionEvent.SESSION_DISCONNECTED, (reason: SessionDisconnectReason) => {
@@ -112,14 +138,14 @@ export const useLiveAvatar = (handlers: AvatarHandlers = {}) => {
     });
 
     try {
-      await session.start();
+      try { await session.start(); } catch (err) { throw avatarError('avatar_start_failed', err); }
       await ready;
       if (!connectedAtRef.current) connectedAtRef.current = Date.now();
       setState('ready');
-    } catch (err) {
+    } catch (err: any) {
       setState('error');
       await teardown();
-      throw err;
+      throw err && err.part === 'avatar' ? err : avatarError('avatar_start_failed', err);
     }
   }, [markDisconnected, settleSpeech, teardown]);
 

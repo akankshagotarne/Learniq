@@ -48,8 +48,8 @@ const AdminCourses: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Admin</p>
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">All Courses</h1>
@@ -100,7 +100,7 @@ const AdminCourses: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-32 rounded-card" />)}
             </div>
           ) : filtered.length === 0 ? (
@@ -109,7 +109,7 @@ const AdminCourses: React.FC = () => {
               <p className="text-text-secondary">No courses match your filters.</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filtered.map(course => (
                 <div key={course._id} className="card-soft p-5">
                   <div className="flex items-center gap-2 flex-wrap mb-2">

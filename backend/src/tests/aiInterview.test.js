@@ -108,6 +108,8 @@ deps.avatar = {
     return { provider: 'heygen-liveavatar', sessionToken: 'sess_test_token_456', sessionId: 'sid-SHOULD-NOT-LEAK' };
   },
 };
+// the Ollama warm-up is a real local network call: counted here instead (asserted in the warm-up tests below)
+deps.warmUpBrain = (cfg) => { probe.warmUps = (probe.warmUps || 0) + (cfg.provider === 'ollama' ? 1 : 0); return null; };
 
 // ── http plumbing ─────────────────────────────────────────────────────────────────────────────
 let server; let BASE;
@@ -1373,9 +1375,9 @@ test('provider selection: only the exact value "ollama" selects Ollama; unset / 
 
 test('Ollama configuration: defaults, overrides, clamping; the avatar and public view are unaffected by the provider', () => {
   const c = getConfig(OLLAMA_ENV);
-  assert.deepEqual(c.ollama, { baseUrl: 'http://localhost:11434', model: 'gemma3:4b', requestTimeoutMs: 60000 });
-  const o = getConfig({ ...OLLAMA_ENV, OLLAMA_BASE_URL: 'http://127.0.0.1:11500///', OLLAMA_MODEL: 'llama3.2:3b', OLLAMA_REQUEST_TIMEOUT_MS: '90000' }).ollama;
-  assert.deepEqual(o, { baseUrl: 'http://127.0.0.1:11500', model: 'llama3.2:3b', requestTimeoutMs: 90000 });
+  assert.deepEqual(c.ollama, { baseUrl: 'http://localhost:11434', model: 'gemma3:4b', requestTimeoutMs: 60000, keepAlive: '30m' });
+  const o = getConfig({ ...OLLAMA_ENV, OLLAMA_BASE_URL: 'http://127.0.0.1:11500///', OLLAMA_MODEL: 'llama3.2:3b', OLLAMA_REQUEST_TIMEOUT_MS: '90000', OLLAMA_KEEP_ALIVE: '1h' }).ollama;
+  assert.deepEqual(o, { baseUrl: 'http://127.0.0.1:11500', model: 'llama3.2:3b', requestTimeoutMs: 90000, keepAlive: '1h' });
   assert.equal(getConfig({ OLLAMA_REQUEST_TIMEOUT_MS: '5' }).ollama.requestTimeoutMs, 3000);
   assert.equal(getConfig({ OLLAMA_REQUEST_TIMEOUT_MS: 'abc' }).ollama.requestTimeoutMs, 60000);
   const env = { ...SECRETS, LIVEAVATAR_SANDBOX: 'true' };
@@ -1814,4 +1816,143 @@ test('Ollama brain + OpenAI speech-to-text without OPENAI_API_KEY: start is refu
   });
   assert.equal(fake.AIInterview.docs.filter((d) => String(d.student) === String(u.user._id)).length, 0, 'no interview was created');
   assert.deepEqual({ stt: probe.stt, avatar: probe.avatar }, before);
+});
+
+// ═══════════════════════════ 17. INDEPENDENT RECONNECTS, CONNECTION SLOTS, OLLAMA WARM-UP, DEV DIAGNOSTICS ═══════════════════════════
+test('realtime-session parts: the avatar can be renewed ALONE (speech-to-text is not re-minted) and speech-to-text ALONE', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  const before = { stt: probe.stt, avatar: probe.avatar };
+  const both = await api('POST', `/${id}/realtime-session`, { token: u.token });
+  assert.equal(both.status, 200, both.text);
+  assert.ok(both.body.stt && both.body.avatar, 'default = both connections');
+  const av = await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['avatar'] } });
+  assert.equal(av.status, 200, av.text);
+  assert.equal(av.body.stt, undefined, 'no transcription secret when only the avatar is renewed');
+  assert.equal(av.body.avatar.sessionToken, 'sess_test_token_456');
+  const st = await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['stt'] } });
+  assert.equal(st.status, 200, st.text);
+  assert.equal(st.body.avatar, undefined, 'no avatar session when only speech-to-text is renewed');
+  assert.equal(st.body.stt.clientSecret, 'ek_test_ephemeral_123');
+  assert.deepEqual({ stt: probe.stt - before.stt, avatar: probe.avatar - before.avatar }, { stt: 2, avatar: 2 });
+  assert.equal(stored(id).usage.realtimeSessions, 2);
+  assert.equal(stored(id).usage.avatarSessions, 2);
+  for (const parts of [[], ['video'], 'avatar', ['stt', 'stt', 'avatar'], [1]]) {
+    const r = await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts } });
+    assert.equal(r.status, 400, JSON.stringify(parts));
+    assert.equal(r.body.code, 'INVALID_REQUEST');
+  }
+});
+
+test('realtime-session parts: each connection has its own budget (avatar renewals for a capped LiveAvatar plan do not use up speech-to-text)', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  const cfg = getConfig();
+  for (let i = 0; i < cfg.maxAvatarSessions; i += 1) {
+    assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['avatar'] } })).status, 200, `avatar ${i}`);
+  }
+  const over = await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['avatar'] } });
+  assert.equal(over.status, 429);
+  assert.equal(over.body.code, 'CONNECTION_LIMIT');
+  assert.equal(stored(id).usage.avatarSessions, cfg.maxAvatarSessions, 'a refused renewal reserves nothing');
+  assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['stt'] } })).status, 200, 'speech-to-text still has its own budget');
+  const bothOver = await api('POST', `/${id}/realtime-session`, { token: u.token });
+  assert.equal(bothOver.status, 429, 'asking for both fails when either budget is used up');
+  assert.equal(stored(id).usage.realtimeSessions, 1, 'and nothing is reserved for the other part');
+});
+
+test('realtime-session parts: a failing avatar renewal gives back only the avatar reservation', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token })).status, 200);
+  probe.failAvatar = true;
+  const r = await api('POST', `/${id}/realtime-session`, { token: u.token, body: { parts: ['avatar'] } });
+  probe.failAvatar = false;
+  assert.equal(r.status, 502);
+  assert.equal(r.body.code, 'AVATAR_UNAVAILABLE');
+  assert.equal(stored(id).usage.avatarSessions, 1);
+  assert.equal(stored(id).usage.realtimeSessions, 1);
+  assert.equal(stored(id).usage.connectFailures, 1);
+});
+
+test('a student whose connections kept failing BEFORE the first question is never locked out: start frees the slots (not after the clock started)', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  for (let i = 0; i < 4; i += 1) assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token })).status, 200);
+  assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token })).body.code, 'CONNECTION_LIMIT');
+  const again = await startIv(u);
+  assert.equal(again.status, 200);
+  assert.equal(again.body.resumed, true);
+  assert.equal(again.body.interview.id, id, 'the same interview (no second interview, nothing consumed)');
+  assert.equal(stored(id).usage.realtimeSessions, 0);
+  assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token })).status, 200, 'can connect again');
+  // once the clock runs, start no longer resets anything (the budget then protects provider credit)
+  assert.equal((await api('POST', `/${id}/begin`, { token: u.token })).status, 200);
+  const used = stored(id).usage.realtimeSessions;
+  await startIv(u);
+  assert.equal(stored(id).usage.realtimeSessions, used);
+});
+
+test('Ollama warm-up: requested on start only with the Ollama brain', async () => {
+  const before = probe.warmUps || 0;
+  const u = await paidStudent();
+  await withEnv({ AI_INTERVIEW_PROVIDER: 'ollama' }, async () => { assert.ok([200, 201].includes((await startIv(u)).status)); });
+  assert.equal((probe.warmUps || 0) - before, 1);
+  const w = await paidStudent();
+  await startIv(w);
+  assert.equal((probe.warmUps || 0) - before, 1, 'never with the OpenAI brain');
+});
+
+test('Ollama client: keep_alive keeps Gemma loaded; warmUp loads the model with an empty prompt and never throws', async () => {
+  const cfg = getConfig({ ...OLLAMA_ENV, OLLAMA_KEEP_ALIVE: '45m' });
+  const calls = await withFetch(() => ollamaReply({ question: 'What is two plus two?' }), async () => {
+    await ollamaClient.structuredCompletion(cfg, ARGS);
+  });
+  assert.equal(calls[0].body.keep_alive, '45m');
+  const warm = await withFetch(() => jsonResponse(200, { done: true }), async () => {
+    const r = await ollamaClient.warmUp(cfg);
+    assert.equal(r.ok, true);
+  });
+  assert.equal(warm[0].url, 'http://localhost:11434/api/generate');
+  assert.deepEqual({ model: warm[0].body.model, prompt: warm[0].body.prompt, keep_alive: warm[0].body.keep_alive }, { model: 'gemma3:4b', prompt: '', keep_alive: '45m' });
+  await withFetch(() => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); }, async () => {
+    const r = await ollamaClient.warmUp(cfg);
+    assert.deepEqual({ ok: r.ok, code: r.code }, { ok: false, code: 'ECONNREFUSED' });
+  });
+  await withFetch(() => jsonResponse(404, { error: 'model "gemma3:4b" not found' }), async () => {
+    assert.equal((await ollamaClient.warmUp(cfg)).code, 'MODEL_NOT_FOUND');
+  });
+});
+
+test('provider failures carry a masked debug reason ONLY when NODE_ENV=development (never in test / production)', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  probe.failStt = true;
+  const plain = await api('POST', `/${id}/realtime-session`, { token: u.token });
+  assert.equal(plain.body.debug, undefined);
+  await withEnv({ NODE_ENV: 'development' }, async () => {
+    const dev = await api('POST', `/${id}/realtime-session`, { token: u.token });
+    assert.equal(dev.status, 502);
+    assert.deepEqual(dev.body.debug, { provider: 'openai', providerCode: 'NETWORK' });
+  });
+  await withEnv({ NODE_ENV: 'production' }, async () => {
+    assert.equal((await api('POST', `/${id}/realtime-session`, { token: u.token })).body.debug, undefined);
+  });
+  probe.failStt = false;
+  // a key-looking string in a provider message is masked
+  const prev = deps.mintTranscription;
+  deps.mintTranscription = async () => { throw new ProviderError('openai', 'x', { status: 401, code: 'invalid_api_key', detail: 'Incorrect API key provided: sk-proj-abcdef123456XYZ.' }); };
+  try {
+    await withEnv({ NODE_ENV: 'development' }, async () => {
+      const r = await api('POST', `/${id}/realtime-session`, { token: u.token });
+      assert.equal(r.body.debug.providerCode, 'invalid_api_key');
+      assert.ok(!r.text.includes('abcdef123456XYZ'), r.text);
+      assert.match(r.body.debug.detail, /sk-\*\*\*/);
+    });
+  } finally { deps.mintTranscription = prev; }
+});
+
+test('connection events from the browser: connect failures count as technical (attempt never consumed by them), reconnects are logged', async () => {
+  const u = await paidStudent(); const id = (await startIv(u)).body.interview.id;
+  for (const type of ['stt_connect_failed', 'avatar_connect_failed', 'stt_disconnected', 'avatar_reconnected', 'stt_reconnected']) {
+    const r = await api('POST', `/${id}/events`, { token: u.token, body: { type } });
+    assert.equal(r.status, 200, type);
+  }
+  assert.equal(stored(id).usage.connectFailures, 2);
+  assert.equal(stored(id).usage.transcriptionFailures, 1);
 });

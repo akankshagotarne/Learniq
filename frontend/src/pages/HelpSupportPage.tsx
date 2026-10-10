@@ -166,7 +166,7 @@ const HelpSupportPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -188,9 +188,9 @@ const HelpSupportPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid md:grid-cols-[320px_1fr] gap-5 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-5 items-start">
             {/* Ticket list */}
-            <div className={`${mobileShowDetail ? 'hidden md:block' : 'block'} card-soft p-2 rounded-card border border-border-subtle max-h-[75vh] overflow-y-auto`}>
+            <div className={`${mobileShowDetail ? 'hidden lg:block' : 'block'} card-soft p-2 rounded-card border border-border-subtle max-h-[75vh] overflow-y-auto`}>
               {loadingList ? (
                 <div className="p-8 text-center text-text-muted text-sm flex items-center justify-center gap-2">
                   <Loader className="w-4 h-4 animate-spin" /> Loading...
@@ -223,10 +223,10 @@ const HelpSupportPage: React.FC = () => {
             </div>
 
             {/* Detail / New ticket form */}
-            <div className={`${mobileShowDetail ? 'block' : 'hidden md:block'} card-soft rounded-card border border-border-subtle flex flex-col h-[75vh]`}>
+            <div className={`${mobileShowDetail ? 'block' : 'hidden lg:block'} card-soft rounded-card border border-border-subtle flex flex-col h-[75vh]`}>
               {showNewForm ? (
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                  <button onClick={() => setShowNewForm(false)} className="md:hidden flex items-center gap-1.5 text-text-muted text-xs mb-1">
+                  <button onClick={() => setShowNewForm(false)} className="lg:hidden flex items-center gap-1.5 min-h-[36px] text-text-muted text-xs mb-1">
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to tickets
                   </button>
                   <h2 className="font-heading font-bold text-text-primary text-lg">Raise a New Ticket</h2>
@@ -296,7 +296,7 @@ const HelpSupportPage: React.FC = () => {
                 <>
                   {/* Thread header */}
                   <div className="p-4 border-b border-border-subtle flex-shrink-0">
-                    <button onClick={() => { setSelectedId(null); setSelectedTicket(null); }} className="md:hidden flex items-center gap-1.5 text-text-muted text-xs mb-2">
+                    <button onClick={() => { setSelectedId(null); setSelectedTicket(null); }} className="lg:hidden flex items-center gap-1.5 min-h-[36px] text-text-muted text-xs mb-2">
                       <ArrowLeft className="w-3.5 h-3.5" /> Back to tickets
                     </button>
                     <div className="flex items-start justify-between gap-2">
@@ -313,7 +313,7 @@ const HelpSupportPage: React.FC = () => {
                       const isAdmin = m.senderRole === 'admin';
                       return (
                         <div key={m._id || i} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${isMine ? 'bg-brand-primary text-white' : isAdmin ? 'bg-[#EDE9FE] text-text-primary' : 'bg-surface-alt text-text-primary'}`}>
+                          <div className={`max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2.5 ${isMine ? 'bg-brand-primary text-white' : isAdmin ? 'bg-[#EDE9FE] text-text-primary' : 'bg-surface-alt text-text-primary'}`}>
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className={`text-[11px] font-semibold ${isMine ? 'text-white/90' : 'text-text-secondary'}`}>
                                 {isMine ? 'You' : m.senderName}{isAdmin && !isMine ? ' · Admin' : ''}

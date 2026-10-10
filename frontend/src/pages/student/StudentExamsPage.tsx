@@ -124,11 +124,11 @@ const StudentExamsPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 sm:mb-8">
+            <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="p-2 rounded-xl bg-[#6C63F2]/10 text-[#6C63F2] dark:bg-[#6C63F2]/20">
                   <ClipboardList className="w-5 h-5" />
@@ -153,46 +153,46 @@ const StudentExamsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="card-soft p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#6C63F2]/10 text-[#6C63F2] flex items-center justify-center font-bold">
+          {/* Stats Bar — 2 × 2 on phones (icon above the number), 4 in a row on large screens */}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <div className="card-soft p-3 sm:p-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-[#6C63F2]/10 text-[#6C63F2] flex items-center justify-center font-bold">
                 <ClipboardList className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-xs text-text-muted">Available Exams</p>
+              <div className="min-w-0">
+                <p className="text-xs text-text-secondary leading-tight">Available Exams</p>
                 <p className="text-xl font-heading font-bold text-text-primary">
                   {availableCount}
                 </p>
               </div>
             </div>
 
-            <div className="card-soft p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#4ADE9A]/15 text-[#4ADE9A] flex items-center justify-center font-bold">
+            <div className="card-soft p-3 sm:p-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-[#4ADE9A]/15 text-[#4ADE9A] flex items-center justify-center font-bold">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-xs text-text-muted">Completed</p>
+              <div className="min-w-0">
+                <p className="text-xs text-text-secondary leading-tight">Completed</p>
                 <p className="text-xl font-heading font-bold text-text-primary">{completedCount}</p>
               </div>
             </div>
 
-            <div className="card-soft p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B] flex items-center justify-center font-bold">
+            <div className="card-soft p-3 sm:p-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B] flex items-center justify-center font-bold">
                 <Award className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-xs text-text-muted">Average Score</p>
+              <div className="min-w-0">
+                <p className="text-xs text-text-secondary leading-tight">Average Score</p>
                 <p className="text-xl font-heading font-bold text-text-primary">{avgScore}%</p>
               </div>
             </div>
 
-            <div className="card-soft p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#5AC8FA]/15 text-[#5AC8FA] flex items-center justify-center font-bold">
+            <div className="card-soft p-3 sm:p-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-[#5AC8FA]/15 text-[#5AC8FA] flex items-center justify-center font-bold">
                 <Clock className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-xs text-text-muted">Upcoming</p>
+              <div className="min-w-0">
+                <p className="text-xs text-text-secondary leading-tight">Upcoming</p>
                 <p className="text-xl font-heading font-bold text-text-primary">
                   {upcomingCount}
                 </p>
@@ -200,86 +200,84 @@ const StudentExamsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Controls: Search, Subject filter, and Status Tabs */}
-          <div className="space-y-4 mb-6">
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-              {/* Status Tabs */}
-              <div className="flex bg-surface-alt p-1 rounded-xl border border-border-subtle self-start">
-                <button
-                  onClick={() => setActiveTab('available')}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    activeTab === 'available'
-                      ? 'bg-brand-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  Available ({availableCount})
-                </button>
-                <button
-                  onClick={() => setActiveTab('upcoming')}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    activeTab === 'upcoming'
-                      ? 'bg-brand-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  Upcoming ({upcomingCount})
-                </button>
-                <button
-                  onClick={() => setActiveTab('completed')}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    activeTab === 'completed'
-                      ? 'bg-brand-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  Completed ({completedCount})
-                </button>
+          {/* Controls: status tabs, search and subject filter */}
+          <div className="space-y-3 sm:space-y-4 mb-6">
+            <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+              {/* Status tabs: three equal segments on phones (the count drops under the label if space runs out) */}
+              <div role="tablist" aria-label="Exam status" className="grid grid-cols-3 sm:inline-flex w-full sm:w-auto sm:self-start bg-surface-alt p-1 rounded-xl border border-border-subtle gap-1">
+                {([
+                  ['available', 'Available', availableCount],
+                  ['upcoming', 'Upcoming', upcomingCount],
+                  ['completed', 'Completed', completedCount],
+                ] as const).map(([key, label, count]) => {
+                  const active = activeTab === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setActiveTab(key)}
+                      className={`min-w-0 min-h-[44px] px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold leading-tight transition-all flex flex-wrap items-center justify-center gap-x-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${
+                        active ? 'bg-brand-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-surface'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      <span className={active ? 'text-white/90' : 'text-text-muted'}>({count})</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Search bar */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+              {/* Search */}
+              <div className="relative w-full lg:w-64 lg:flex-shrink-0">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" aria-hidden="true" />
                 <input
-                  type="text"
+                  type="search"
+                  inputMode="search"
+                  aria-label="Search exams by title or chapter"
                   placeholder="Search exam or chapter..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-surface border border-border-subtle rounded-xl text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-primary transition-all"
+                  className="w-full min-h-[44px] pl-9 pr-4 py-2 bg-surface border border-border-subtle rounded-xl text-sm sm:text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
                 />
               </div>
             </div>
 
-            {/* Subject Filters */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-              <span className="text-xs font-semibold text-text-muted flex items-center gap-1 mr-1">
-                <Filter className="w-3.5 h-3.5" /> Subject:
+            {/* Subject filter: one row that scrolls sideways on its own when the chips do not fit */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold text-text-muted flex items-center gap-1 flex-shrink-0">
+                <Filter className="w-3.5 h-3.5" aria-hidden="true" /> Subject:
               </span>
-              {subjects.map(subj => (
-                <button
-                  key={subj}
-                  onClick={() => setSelectedSubject(subj)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                    selectedSubject === subj
-                      ? 'bg-brand-primary/15 text-brand-primary font-semibold border border-brand-primary/30'
-                      : 'bg-surface border border-border-subtle text-text-secondary hover:bg-surface-alt'
-                  }`}
-                >
-                  {subj}
-                </button>
-              ))}
+              <div role="group" aria-label="Filter exams by subject" className="scroll-row scroll-row-fade gap-2 min-w-0 flex-1 py-0.5">
+                {subjects.map(subj => (
+                  <button
+                    key={subj}
+                    type="button"
+                    aria-pressed={selectedSubject === subj}
+                    onClick={() => setSelectedSubject(subj)}
+                    className={`flex-shrink-0 min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${
+                      selectedSubject === subj
+                        ? 'bg-brand-primary/15 text-brand-primary font-semibold border border-brand-primary/30'
+                        : 'bg-surface border border-border-subtle text-text-secondary hover:bg-surface-alt'
+                    }`}
+                  >
+                    {subj}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Exams List */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4 sm:gap-5">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="card-soft h-56 rounded-2xl animate-pulse bg-surface-alt" />
               ))}
             </div>
           ) : visibleRegular.length === 0 && filteredOlympiad.length === 0 ? (
-            <div className="card-soft p-12 text-center max-w-md mx-auto my-8">
+            <div className="card-soft p-8 sm:p-12 text-center max-w-md mx-auto my-6 sm:my-8">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-[#6C63F2]/10 text-[#6C63F2] flex items-center justify-center mb-4">
                 <ClipboardList className="w-7 h-7" />
               </div>
@@ -287,13 +285,23 @@ const StudentExamsPage: React.FC = () => {
                 No exams found
               </h3>
               <p className="text-xs text-text-secondary mb-4">
-                {activeTab === 'available'
+                {searchQuery.trim() || selectedSubject !== 'All'
+                  ? 'No exams match your search or subject filter.'
+                  : activeTab === 'available'
                   ? 'There are no active exams available for your standard right now. Check back soon!'
                   : activeTab === 'upcoming'
                   ? 'No scheduled exams found. Teachers will post upcoming dates here.'
                   : 'You have not completed any exams yet. Start by taking an available exam above!'}
               </p>
-              {activeTab !== 'available' && (
+              {searchQuery.trim() || selectedSubject !== 'All' ? (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(''); setSelectedSubject('All'); }}
+                  className="btn-secondary text-xs py-2 px-4 inline-flex items-center gap-2 min-h-[44px]"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear search and filters
+                </button>
+              ) : activeTab !== 'available' && (
                 <button
                   onClick={() => setActiveTab('available')}
                   className="btn-primary text-xs py-2 px-4 inline-flex items-center gap-2"
@@ -303,7 +311,7 @@ const StudentExamsPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4 sm:gap-5">
               {filteredOlympiad.map(o => (
                 <OlympiadExamCard
                   key={o._id}
@@ -321,11 +329,11 @@ const StudentExamsPage: React.FC = () => {
                 return (
                   <div
                     key={exam._id}
-                    className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-border-subtle rounded-2xl relative group bg-surface"
+                    className="card-soft min-w-0 p-4 sm:p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-border-subtle rounded-2xl relative group bg-surface"
                   >
                     <div>
                       {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                         <span className={`${getSubjectBadgeClass(exam.subject)} text-[11px] font-semibold px-2.5 py-0.5 rounded-full`}>
                           {exam.subject}
                         </span>
@@ -346,13 +354,13 @@ const StudentExamsPage: React.FC = () => {
                       </div>
 
                       {/* Title & Chapter */}
-                      <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2">
+                      <h3 className="font-heading font-bold text-base leading-snug text-text-primary group-hover:text-brand-primary transition-colors break-words">
                         {exam.title}
                       </h3>
 
                       {exam.chapter && (
-                        <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1">
-                          <BookOpen className="w-3 h-3" /> Chapter: {exam.chapter}
+                        <p className="text-xs text-text-muted mt-1 flex items-start gap-1">
+                          <BookOpen className="w-3 h-3 mt-0.5 flex-shrink-0" /> <span className="min-w-0">Chapter: {exam.chapter}</span>
                         </p>
                       )}
 
@@ -363,22 +371,22 @@ const StudentExamsPage: React.FC = () => {
                       )}
 
                       {/* Details & Specs */}
-                      <div className="grid grid-cols-2 gap-2 my-4 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 my-4 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
-                          <span>{exam.durationMinutes} mins</span>
+                          <span className="min-w-0">{exam.durationMinutes} mins</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
-                          <span>{exam.questionCount || exam.questions?.length || 0} Questions</span>
+                          <span className="min-w-0">{exam.questionCount || exam.questions?.length || 0} Questions</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <Award className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
-                          <span>{exam.totalMarks} Marks</span>
+                          <span className="min-w-0">{exam.totalMarks} Marks</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <AlertCircle className={`w-3.5 h-3.5 ${exam.negativeMarking ? 'text-[#E1447A]' : 'text-text-muted'} flex-shrink-0`} />
-                          <span>
+                          <span className="min-w-0">
                             {exam.negativeMarking ? `-${exam.negativeMarkValue} wrong` : 'No negative'}
                           </span>
                         </div>
@@ -386,9 +394,9 @@ const StudentExamsPage: React.FC = () => {
 
                       {/* Schedule info if set */}
                       {exam.scheduledStart && (
-                        <div className="text-[11px] text-text-muted mb-3 flex items-center gap-1.5">
-                          <Calendar className="w-3 h-3 text-brand-primary" />
-                          <span>
+                        <div className="text-[11px] text-text-muted mb-3 flex items-start gap-1.5">
+                          <Calendar className="w-3 h-3 mt-0.5 text-brand-primary flex-shrink-0" />
+                          <span className="min-w-0">
                             Starts: {new Date(exam.scheduledStart).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                           </span>
                         </div>
@@ -397,23 +405,23 @@ const StudentExamsPage: React.FC = () => {
 
                     {/* Bottom teacher & Action Button */}
                     <div className="pt-3 border-t border-border-subtle">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
                           <img
                             src={
                               teacherObj?.avatar ||
                               `https://ui-avatars.com/api/?name=${encodeURIComponent(teacherObj?.name || 'Teacher')}&background=6C63F2&color=fff&size=32`
                             }
                             alt={teacherObj?.name || 'Teacher'}
-                            className="w-6 h-6 rounded-full object-cover"
+                            className="w-6 h-6 rounded-full object-cover flex-shrink-0"
                           />
-                          <span className="text-[11px] font-medium text-text-secondary truncate max-w-[120px]">
+                          <span className="text-[11px] font-medium text-text-secondary truncate">
                             {teacherObj?.name || 'Teacher'}
                           </span>
                         </div>
 
                         {exam.attemptLimit > 0 && (
-                          <span className="text-[10px] text-text-muted font-medium">
+                          <span className="text-[10px] text-text-muted font-medium flex-shrink-0">
                             {exam.myAttemptCount || 0}/{exam.attemptLimit} attempt
                           </span>
                         )}
@@ -422,14 +430,14 @@ const StudentExamsPage: React.FC = () => {
                       {isUpcoming ? (
                         <button
                           disabled
-                          className="w-full py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-xs font-semibold cursor-not-allowed text-center"
+                          className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center"
                         >
                           Exam Not Started Yet
                         </button>
                       ) : exam.canAttempt ? (
                         <Link
                           to={`/student/exams/${exam._id}`}
-                          className="btn-primary w-full py-2.5 px-4 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-2 shadow-sm"
+                          className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 shadow-sm"
                         >
                           {isCompleted ? (
                             <>
@@ -445,7 +453,7 @@ const StudentExamsPage: React.FC = () => {
                       ) : (
                         <Link
                           to={`/student/exams/${exam._id}`}
-                          className="w-full py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
+                          className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
                         >
                           <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> View Review & Scores
                         </Link>
