@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users, GraduationCap, Award, Flame } from 'lucide-react';
+import { Search, Users, GraduationCap, Award, Flame, Trash2 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { User } from '../../types';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '../../components/admin/ProfileParts';
+import { adminProfilesApi } from '../../services/adminProfiles';
+import { olympiadErrorMessage } from '../../services/olympiad';
 
 const AdminStudents: React.FC = () => {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -47,6 +51,23 @@ const AdminStudents: React.FC = () => {
       toast.success(student.isActive ? 'Student deactivated.' : 'Student activated.');
     } catch {
       toast.error('Failed to update student.');
+    }
+  };
+
+  const deleteStudent = async () => {
+    const student = deleting;
+    if (!student) return;
+    setDeleteBusy(true);
+    try {
+      const r = await adminProfilesApi.deleteStudent(student._id);
+      setDeleting(null);
+      toast.success(r.message || 'Student deleted.');
+      if (students.length === 1 && page > 1) setPage(p => p - 1); // last row on this page: show the previous page
+      else void fetchStudents();
+    } catch (err: any) {
+      toast.error(olympiadErrorMessage(err, 'Failed to delete student.'));
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -137,16 +158,26 @@ const AdminStudents: React.FC = () => {
                         {student.points || 0} pts • {student.streak || 0}-day streak • Joined {new Date(student.createdAt).toLocaleDateString('en-IN')}
                       </p>
                     </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); if (student.isActive) setConfirming(student); else void toggleActive(student); }}
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                        student.isActive
-                          ? 'bg-[#FFE4EC] text-[#E1447A] border-[#FFE4EC] hover:bg-[#FFE4EC]/80'
-                          : 'bg-[#DCFCE7] text-[#16A34A] border-[#DCFCE7] hover:bg-[#DCFCE7]/80'
-                      }`}
-                    >
-                      {student.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+                      <button
+                        onClick={e => { e.stopPropagation(); if (student.isActive) setConfirming(student); else void toggleActive(student); }}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          student.isActive
+                            ? 'bg-[#FFE4EC] text-[#E1447A] border-[#FFE4EC] hover:bg-[#FFE4EC]/80'
+                            : 'bg-[#DCFCE7] text-[#16A34A] border-[#DCFCE7] hover:bg-[#DCFCE7]/80'
+                        }`}
+                      >
+                        {student.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setDeleting(student); }}
+                        onKeyDown={e => e.stopPropagation()}
+                        aria-label={`Delete ${student.name}`}
+                        className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all inline-flex items-center gap-1 bg-surface text-[#E1447A] border-[#F9C6D7] hover:bg-[#FFE4EC]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -181,6 +212,13 @@ const AdminStudents: React.FC = () => {
         message={<>{confirming?.name} will not be able to use LearnIQ until you activate the account again. Their data and payments are kept.</>}
         onConfirm={() => { const s = confirming; setConfirming(null); if (s) void toggleActive(s); }}
         onCancel={() => setConfirming(null)}
+      />
+      <ConfirmDialog
+        open={deleting !== null} tone="danger" busy={deleteBusy} title="Delete this student permanently?" confirmLabel="Delete student"
+        message={<><b className="text-text-primary">{deleting?.name}</b> ({deleting?.email}) and all of their activity — results, certificates, AI interviews and notifications — will be removed. This cannot be undone.</>}
+        note="Payment records are kept for accounting and will show the student's name. To pause an account instead, use Deactivate."
+        onConfirm={() => void deleteStudent()}
+        onCancel={() => { if (!deleteBusy) setDeleting(null); }}
       />
     </div>
   );

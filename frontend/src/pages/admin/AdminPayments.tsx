@@ -19,7 +19,7 @@ const statusStyle: Record<string, string> = {
 };
 
 const itemTitle = (p: Payment) =>
-  p.course?.title || p.lecture?.title || (p.exam ? `${p.exam.title} — Std ${p.exam.standard}` : 'Untitled item');
+  p.course?.title || p.lecture?.title || p.itemTitle || (p.exam ? `${p.exam.title} — Std ${p.exam.standard}` : 'Untitled item');
 
 const AdminPayments: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);

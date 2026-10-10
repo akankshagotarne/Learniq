@@ -20,6 +20,8 @@ router.patch('/support/tickets/:id/status', ...adminAuth, supportCtrl.updateTick
 // Users
 router.get('/users', ...adminAuth, userCtrl.getAllUsers);
 router.put('/users/:id', ...adminAuth, profileCtrl.requireObjectId, userCtrl.updateUserAdmin);
+// Permanently delete a STUDENT (teachers/admins are refused). Payment records are kept for accounting.
+router.delete('/users/:id', ...adminAuth, profileCtrl.requireObjectId, userCtrl.deleteStudentAdmin);
 
 // Profile pages (read-only, allow-listed fields) and the "send password reset" action — never a password
 router.get('/students/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getStudentProfile);

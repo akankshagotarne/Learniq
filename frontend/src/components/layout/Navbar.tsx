@@ -4,6 +4,7 @@ import { Bell, Search, Menu, X, ChevronDown, LogOut, User, Settings, BookOpen, H
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
 import ThemeToggle from '../ui/ThemeToggle';
+import { COURSES_ENABLED } from '../../constants/features';
 import api from '../../services/api';
 import { Notification } from '../../types';
 
@@ -49,7 +50,7 @@ const Navbar: React.FC = () => {
     { label: 'Live Classes', href: '/live-sessions', icon: null },
     { label: 'About', href: '/about', icon: null },
     { label: 'Contact', href: '/contact', icon: null },
-  ];
+  ].filter(link => COURSES_ENABLED || link.href !== '/courses');
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -77,8 +78,8 @@ const Navbar: React.FC = () => {
 
           {/* Right Side */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Search */}
-            <form onSubmit={handleSearch} className="hidden md:flex items-center">
+            {/* Search (it searches courses, so it is hidden while courses are switched off) */}
+            {COURSES_ENABLED && <form onSubmit={handleSearch} className="hidden md:flex items-center">
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A3C0]" />
                 <input
@@ -90,7 +91,7 @@ const Navbar: React.FC = () => {
                     focus:outline-none focus:bg-white dark:focus:bg-[#1B1C2E] focus:border-[#6C63F2] focus:ring-2 focus:ring-[#6C63F2]/20 w-44 focus:w-60 transition-all"
                 />
               </div>
-            </form>
+            </form>}
 
             {/* Theme Toggle Button */}
             <ThemeToggle />
@@ -214,7 +215,7 @@ const Navbar: React.FC = () => {
                 {link.label}
               </Link>
             ))}
-            <div className="pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">
+            {COURSES_ENABLED && <div className="pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">
               <form onSubmit={handleSearch} className="flex gap-2">
                 <input
                   type="text"
@@ -225,7 +226,7 @@ const Navbar: React.FC = () => {
                 />
                 <button type="submit" className="btn-primary py-2 px-3"><Search className="w-4 h-4" /></button>
               </form>
-            </div>
+            </div>}
 
             {!user && (
               <div className="flex items-center gap-2 pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">

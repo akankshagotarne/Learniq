@@ -9,19 +9,22 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
 import ThemeToggle from '../ui/ThemeToggle';
+import { COURSES_ENABLED } from '../../constants/features';
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.FC<any>;
   badge?: string;
+  /** course screens — hidden while COURSES_ENABLED is false */
+  courses?: boolean;
 }
 
 const studentNav: NavItem[] = [
   { label: 'Dashboard', href: '/student', icon: Home },
-  { label: 'My Courses', href: '/student/my-courses', icon: GraduationCap },
+  { label: 'My Courses', href: '/student/my-courses', icon: GraduationCap, courses: true },
   { label: 'My Standard', href: '/student/standard', icon: Layers },
-  { label: 'Courses', href: '/courses', icon: BookOpen },
+  { label: 'Courses', href: '/courses', icon: BookOpen, courses: true },
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
@@ -31,7 +34,7 @@ const studentNav: NavItem[] = [
 
 const teacherNav: NavItem[] = [
   { label: 'Dashboard', href: '/teacher', icon: Home },
-  { label: 'My Courses', href: '/teacher/courses', icon: BookOpen },
+  { label: 'My Courses', href: '/teacher/courses', icon: BookOpen, courses: true },
   { label: 'Live Sessions', href: '/teacher/live', icon: Radio },
   { label: 'Students', href: '/teacher/students', icon: Users },
   { label: 'Student Questions', href: '/teacher/doubts', icon: MessageCircle },
@@ -43,7 +46,7 @@ const adminNav: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: Home },
   { label: 'Students', href: '/admin/students', icon: Users },
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
-  { label: 'Courses', href: '/admin/courses', icon: BookOpen },
+  { label: 'Courses', href: '/admin/courses', icon: BookOpen, courses: true },
   { label: 'Live Sessions', href: '/admin/live', icon: Radio },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy },
@@ -59,7 +62,8 @@ const Sidebar: React.FC = () => {
 
   if (!user) return null;
 
-  const navItems = user.role === 'student' ? studentNav : user.role === 'teacher' ? teacherNav : adminNav;
+  const navItems = (user.role === 'student' ? studentNav : user.role === 'teacher' ? teacherNav : adminNav)
+    .filter(item => COURSES_ENABLED || !item.courses);
   const closeMobile = () => setMobileOpen(false);
 
   return (

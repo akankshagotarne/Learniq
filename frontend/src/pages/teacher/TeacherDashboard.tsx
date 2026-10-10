@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Users, HelpCircle, Radio, BarChart2, Plus, ChevronRight, Star, TrendingUp } from 'lucide-react';
+import { BookOpen, Users, HelpCircle, Radio, BarChart2, Plus, ChevronRight, Star, TrendingUp, ClipboardList } from 'lucide-react';
+import { COURSES_ENABLED } from '../../constants/features';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -16,7 +17,7 @@ const TeacherDashboard: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      api.get('/teacher/courses'),
+      COURSES_ENABLED ? api.get('/teacher/courses') : Promise.resolve({ data: { courses: [] } }),
       api.get('/teacher/live-sessions'),
       api.get('/teacher/students'),
       api.get('/teacher/quizzes'),
@@ -37,7 +38,7 @@ const TeacherDashboard: React.FC = () => {
     { label: 'Students Enrolled', value: stats.students, icon: Users, iconBg: 'bg-[#DCFCE7] text-[#16A34A]', href: '/teacher/students' },
     { label: 'Quizzes Created', value: stats.quizzes, icon: HelpCircle, iconBg: 'bg-[#FEF3C7] text-[#D97706]', href: '/teacher/quizzes' },
     { label: 'Assignments', value: stats.assignments, icon: BarChart2, iconBg: 'bg-[#FFE4EC] text-[#E1447A]', href: '/teacher/assignments' },
-  ];
+  ].filter(card => COURSES_ENABLED || card.href !== '/teacher/courses');
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -52,9 +53,9 @@ const TeacherDashboard: React.FC = () => {
               <p className="text-text-secondary text-sm mt-1">Hello, {user?.name?.split(' ')[0]}! Here's your teaching overview.</p>
             </div>
             <div className="flex gap-3">
-              <Link to="/teacher/courses" className="btn-primary text-sm py-2 flex items-center gap-2">
+              {COURSES_ENABLED && <Link to="/teacher/courses" className="btn-primary text-sm py-2 flex items-center gap-2">
                 <Plus className="w-4 h-4" /> New Course
-              </Link>
+              </Link>}
               <Link to="/teacher/live" className="btn-outline text-sm py-2 flex items-center gap-2">
                 <Radio className="w-4 h-4 text-brand-primary" /> Start Live
               </Link>
@@ -62,7 +63,7 @@ const TeacherDashboard: React.FC = () => {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          <div className={`grid grid-cols-2 ${COURSES_ENABLED ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-5 mb-8`}>
             {statCards.map(({ label, value, icon: Icon, iconBg, href }) => (
               <Link key={label} to={href} className="card-soft p-5 hover:-translate-y-0.5 transition-all flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-3">
@@ -80,8 +81,18 @@ const TeacherDashboard: React.FC = () => {
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* My Courses */}
+            {/* My Courses (or, while courses are switched off, a shortcut to Exams) */}
             <div className="lg:col-span-2">
+              {!COURSES_ENABLED ? (
+                <Link to="/teacher/exams" className="card-soft p-6 flex items-center gap-4 group hover:-translate-y-0.5 transition-all">
+                  <span className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#EDE9FE] text-[#6C63F2] flex-shrink-0"><ClipboardList className="w-6 h-6" /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-text-primary font-heading font-semibold">Exams</span>
+                    <span className="block text-text-secondary text-sm">Create exams, publish them and see your students' results.</span>
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand-primary transition-colors" />
+                </Link>
+              ) : (<>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-text-primary font-heading font-semibold text-lg">My Courses</h2>
                 <Link to="/teacher/courses" className="text-brand-primary text-sm font-medium hover:text-brand-primary-hover">View All</Link>
@@ -119,6 +130,7 @@ const TeacherDashboard: React.FC = () => {
                   ))
                 )}
               </div>
+              </>)}
             </div>
 
             {/* Live Sessions */}

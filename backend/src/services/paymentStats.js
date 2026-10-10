@@ -153,6 +153,13 @@ async function getRevenueTrend({ months = 6, now = new Date() } = {}) {
  * (Read-only; amounts in rupees; newest first.)
  * `view: 'active'` (default) hides UNCONFIRMED and archived records; `view: 'history'` returns everything (audit history).
  */
+/** Who paid: the live user, or — after an admin deleted the student — the name/email captured at deletion time. */
+const payerOf = (p) => {
+  if (p.student) return p.student;
+  if (p.deletedStudent && p.deletedStudent.name) return { name: `${p.deletedStudent.name} (deleted)`, email: p.deletedStudent.email, deleted: true };
+  return null;
+};
+
 async function listPayments({ view = 'active' } = {}) {
   const scope = (key) => (view === 'history' ? {} : activeFilter(SOURCES.find((s) => s.key === key)));
   const [coursePayments, olympiadPayments] = await Promise.all([
@@ -173,7 +180,7 @@ async function listPayments({ view = 'active' } = {}) {
     _id: String(p._id),
     source: 'olympiad',
     type: 'olympiad',
-    student: p.student,
+    student: payerOf(p),
     exam: p.exam ? { _id: p.exam._id, title: p.exam.title, standard: p.exam.standard } : null,
     amount: p.amount,
     currency: p.currency || 'INR',
@@ -184,7 +191,7 @@ async function listPayments({ view = 'active' } = {}) {
     ...(p.archivedAt ? { archivedAt: p.archivedAt, archiveReason: p.archiveReason } : {}),
     ...(p.failureReason ? { failureReason: p.failureReason } : {}),
   }));
-  const courseRows = coursePayments.map((p) => ({ ...p, _id: String(p._id), source: 'course' }));
+  const courseRows = coursePayments.map((p) => ({ ...p, student: payerOf(p), _id: String(p._id), source: 'course' }));
   return [...courseRows, ...olympiadRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
