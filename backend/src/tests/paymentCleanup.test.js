@@ -44,6 +44,7 @@ const overrides = {
     getRazorpayInstance: () => razorpay, isRazorpayConfigured: () => true, keyModeProblem: () => null,
     getRazorpayStatus: () => ({ configured: true, mode: 'live' }), getRazorpayKeyId: () => 'rzp_live_x', isValidPaymentSignature: () => false,
   },
+  [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: { OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion, OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt },
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'index.js')]: { Payment: fake.Payment, Notification: fake.Notification, Enrollment: fake.Enrollment, Progress: counter(), Company: counter(), Badge: counter() },

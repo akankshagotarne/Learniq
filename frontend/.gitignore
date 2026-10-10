@@ -10,6 +10,7 @@ lerna-debug.log*
 # Dependencies
 node_modules
 dist
+dist-e2e
 dist-ssr
 *.local
 
@@ -33,3 +34,6 @@ dist-ssr
 /test-results/
 /playwright-report/
 /e2e-screenshots/
+
+# real-model proctoring test frames (generated locally by e2e/real-model/prepare-fixtures.mjs - never committed)
+/e2e/.fixtures/

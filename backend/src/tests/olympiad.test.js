@@ -49,6 +49,7 @@ rzp.client = {
 const fake = createFakeDb();
 const overrides = { [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client } };
 if (!USE_REAL) {
+  overrides[path.join(SRC, 'models', 'Proctoring.js')] = fake.proctoringModels;
   overrides[path.join(SRC, 'models', 'Olympiad.js')] = {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,

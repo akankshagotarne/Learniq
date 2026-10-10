@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ProctoringBadges, ProctoringReviewDialog } from '../../proctoring/ProctoringReview';
 import { useParams, Link } from 'react-router-dom';
 import {
   BarChart2, Users, Award, Clock, ChevronLeft, Search,
@@ -28,6 +29,8 @@ const ExamResultsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'students' | 'questions'>('students');
   const [searchQuery, setSearchQuery] = useState('');
+  const [reviewSession, setReviewSession] = useState<string | null>(null);
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
 
   useEffect(() => {
     fetchResults();
@@ -57,8 +60,10 @@ const ExamResultsPage: React.FC = () => {
     const student = typeof a.student === 'object' ? a.student : null;
     const name = student?.name || '';
     const email = student?.email || '';
+    if (flaggedOnly && !a.proctoring?.reviewRequired) return false;
     return name.toLowerCase().includes(searchQuery.toLowerCase()) || email.toLowerCase().includes(searchQuery.toLowerCase());
   });
+  const flaggedCount = attempts.filter(a => a.proctoring?.reviewRequired).length;
 
   // Analytics aggregates
   const totalSubmissions = attempts.length;
@@ -219,6 +224,12 @@ const ExamResultsPage: React.FC = () => {
                     className="w-full pl-9 pr-4 py-2 bg-surface-alt border border-border-subtle rounded-xl text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-primary"
                   />
                 </div>
+                {exam.proctoring?.enabled || flaggedCount > 0 ? (
+                  <label className="flex items-center gap-2 text-xs text-text-secondary flex-shrink-0 cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 accent-[#6C63F2]" checked={flaggedOnly} onChange={e => setFlaggedOnly(e.target.checked)} data-testid="flagged-only" />
+                    Needs review ({flaggedCount})
+                  </label>
+                ) : null}
               </div>
 
               {filteredAttempts.length === 0 ? (
@@ -308,8 +319,18 @@ const ExamResultsPage: React.FC = () => {
                               </div>
                             </td>
 
-                            <td className="py-3.5 px-4">
-                              {eventCount > 0 ? (
+                            <td className="py-3.5 px-4 min-w-[180px]">
+                              {att.proctoring ? (
+                                <div className="space-y-1.5">
+                                  <ProctoringBadges summary={att.proctoring} />
+                                  {att.proctoring.terminationText && att.proctoring.proctoringStatus !== 'REVIEWED' && att.submissionReason === 'PROCTORING' && (
+                                    <p className="text-[10px] text-text-muted">{att.proctoring.terminationText}</p>
+                                  )}
+                                  <button type="button" onClick={() => setReviewSession(att.proctoring!.sessionId)} className="text-[11px] font-semibold text-brand-primary hover:underline" data-testid="open-review">
+                                    {att.proctoring.reviewRequired ? 'Review events' : 'View events'}
+                                  </button>
+                                </div>
+                              ) : eventCount > 0 ? (
                                 <span className="badge-error text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
                                   <AlertTriangle className="w-3 h-3" /> {eventCount} incidents
                                 </span>
@@ -413,6 +434,13 @@ const ExamResultsPage: React.FC = () => {
             </div>
           )}
         </div>
+        {reviewSession && (
+          <ProctoringReviewDialog
+            sessionId={reviewSession}
+            onClose={() => setReviewSession(null)}
+            onReviewed={(summary) => setAttempts(prev => prev.map(a => (a.proctoring?.sessionId === summary.sessionId ? { ...a, proctoring: summary } : a)))}
+          />
+        )}
       </main>
     </div>
   );

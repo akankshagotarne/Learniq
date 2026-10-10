@@ -1,4 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import ProctoringSettings, { policyPayload } from '../../proctoring/ProctoringSettings';
+import { ProctoringBadges, ProctoringReviewDialog } from '../../proctoring/ProctoringReview';
+import { proctoringApi, errorMessage as proctoringError } from '../../proctoring/api';
+import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
 import toast from 'react-hot-toast';
 import {
   Trophy, Users, IndianRupee, CheckCircle2, XCircle, Clock, BarChart2, TrendingUp, TrendingDown, Target, RefreshCw,
@@ -42,6 +46,10 @@ const AdminOlympiad: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [reviewSession, setReviewSession] = useState<string | null>(null);
+  const [proctorDraft, setProctorDraft] = useState<ProctoringPolicy | null>(null);
+  const [proctorOpen, setProctorOpen] = useState(false);
+  const [proctorSaving, setProctorSaving] = useState(false);
 
   const loadExams = useCallback(async () => {
     setLoading(true);
@@ -180,6 +188,26 @@ const AdminOlympiad: React.FC = () => {
                   <p><span className="text-text-muted block">Duration / Fee</span><b className="text-text-primary">{exam.durationMinutes} min / {formatRupees(exam.fee)}</b></p>
                   <p className="col-span-2"><span className="text-text-muted block">Window (IST)</span><b className="text-text-primary">{formatISTRange(exam.startDate, exam.endDate)}</b></p>
                 </div>
+                <div className="mt-4 border-t border-border-subtle pt-3">
+                  <button type="button" className="text-xs font-semibold text-brand-primary" aria-expanded={proctorOpen} data-testid="olympiad-proctoring-toggle"
+                    onClick={() => { setProctorOpen(o => !o); setProctorDraft({ ...DEFAULT_PROCTORING_POLICY, ...((exam as any).proctoring || {}) }); }}>
+                    Online proctoring: {(exam as any).proctoring?.enabled ? 'On' : 'Off'} · {proctorOpen ? 'Hide settings' : 'Edit settings'}
+                  </button>
+                  {proctorOpen && proctorDraft && (
+                    <div className="mt-3 space-y-3">
+                      <ProctoringSettings value={proctorDraft} onChange={setProctorDraft} />
+                      <button type="button" disabled={proctorSaving} className="btn-primary text-xs px-4 py-2 disabled:opacity-50"
+                        onClick={async () => {
+                          setProctorSaving(true);
+                          try {
+                            const saved = await proctoringApi.updateOlympiadPolicy(exam._id, policyPayload(proctorDraft) || {});
+                            setExams(prev => prev.map(e => (e._id === exam._id ? ({ ...e, proctoring: saved } as AdminExam) : e)));
+                            toast.success('Proctoring settings saved. They apply to attempts started from now on.');
+                          } catch (err) { toast.error(proctoringError(err, 'Could not save the proctoring settings.')); } finally { setProctorSaving(false); }
+                        }}>{proctorSaving ? 'Saving…' : 'Save proctoring settings'}</button>
+                    </div>
+                  )}
+                </div>
               </div>
               )}
 
@@ -239,15 +267,16 @@ const AdminOlympiad: React.FC = () => {
                           <th className="p-3 font-semibold">C / W / U</th>
                           <th className="p-3 font-semibold">Time taken</th>
                           <th className="p-3 font-semibold">Submitted</th>
+                          <th className="p-3 font-semibold">Proctoring</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detailLoading ? (
-                          <tr><td colSpan={8} className="p-6 text-center text-text-muted">Loading…</td></tr>
+                          <tr><td colSpan={9} className="p-6 text-center text-text-muted">Loading…</td></tr>
                         ) : detailError ? (
-                          <tr><td colSpan={8} className="p-6 text-center text-[#E1447A]">Could not load results. Press Refresh to try again.</td></tr>
+                          <tr><td colSpan={9} className="p-6 text-center text-[#E1447A]">Could not load results. Press Refresh to try again.</td></tr>
                         ) : attempts.length === 0 ? (
-                          <tr><td colSpan={8} className="p-6 text-center text-text-muted">No attempts yet.</td></tr>
+                          <tr><td colSpan={9} className="p-6 text-center text-text-muted">No attempts yet.</td></tr>
                         ) : attempts.map((a, i) => (
                           <tr key={a._id} className="border-t border-border-subtle">
                             <td className="p-3 text-text-secondary">{a.status === 'COMPLETED' ? i + 1 : '—'}</td>
@@ -265,6 +294,14 @@ const AdminOlympiad: React.FC = () => {
                             <td className="p-3 text-text-secondary">{a.status === 'COMPLETED' ? `${a.correctCount} / ${a.wrongCount} / ${a.unansweredCount}` : '—'}</td>
                             <td className="p-3 text-text-secondary">{a.status === 'COMPLETED' ? formatDuration(a.timeTakenSeconds) : '—'}</td>
                             <td className="p-3 text-text-secondary">{a.submittedAt ? formatISTDateTime(a.submittedAt) : '—'}</td>
+                            <td className="p-3 min-w-[170px]">
+                              <ProctoringBadges summary={a.proctoring} />
+                              {a.proctoring && (
+                                <button type="button" onClick={() => setReviewSession(a.proctoring.sessionId)} className="text-[11px] font-semibold text-brand-primary hover:underline mt-1">
+                                  {a.proctoring.reviewRequired ? 'Review events' : 'View events'}
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -325,6 +362,13 @@ const AdminOlympiad: React.FC = () => {
             </>
           )}
         </div>
+        {reviewSession && (
+          <ProctoringReviewDialog
+            sessionId={reviewSession}
+            onClose={() => setReviewSession(null)}
+            onReviewed={(summary) => setAttempts(prev => prev.map(a => (a.proctoring?.sessionId === summary.sessionId ? { ...a, proctoring: summary } : a)))}
+          />
+        )}
       </main>
     </div>
   );

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { proctoringPolicySchema } = require('../services/proctoring/policy');
 
 /**
  * Paid Olympiad examination models.
@@ -41,6 +42,9 @@ const olympiadExamSchema = new mongoose.Schema({
   currency: { type: String, default: 'INR' },
 
   isPublished: { type: Boolean, default: true },
+
+  // Online proctoring rules (admin-configured; off until enabled) - see services/proctoring/policy.js
+  proctoring: { type: proctoringPolicySchema, default: () => ({}) },
 }, { timestamps: true });
 
 // ──────────────────────────────────────────────
@@ -139,7 +143,7 @@ const olympiadAttemptSchema = new mongoose.Schema({
   payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required: true },
 
   status: { type: String, enum: ['IN_PROGRESS', 'COMPLETED'], default: 'IN_PROGRESS' },
-  submissionType: { type: String, enum: ['MANUAL', 'TIMER', 'SYSTEM'] },
+  submissionType: { type: String, enum: ['MANUAL', 'TIMER', 'SYSTEM', 'PROCTORING'] },
 
   startedAt: { type: Date, required: true },
   deadline: { type: Date, required: true }, // server-computed: startedAt + duration

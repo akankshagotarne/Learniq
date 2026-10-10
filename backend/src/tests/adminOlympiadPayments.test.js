@@ -28,6 +28,7 @@ const counter = (n = 0) => ({ countDocuments: async () => n, find: () => ({ sort
 const rzp = { client: { orders: { create: async (o) => ({ id: `order_new_${Math.random().toString(36).slice(2, 8)}`, amount: o.amount, currency: o.currency }), fetchPayments: async () => ({ items: [] }) } } };
 const overrides = {
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client },
+  [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,

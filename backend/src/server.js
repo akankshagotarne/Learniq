@@ -33,7 +33,9 @@ const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
 const certificateRoutes = require('./routes/certificates');
 const aiInterviewRoutes = require('./routes/aiInterviews');
+const proctoringRoutes = require('./routes/proctoring');
 const { startOlympiadSweeper } = require('./controllers/olympiadController');
+const { startExamSweeper } = require('./services/examAttempts');
 const { startPaymentReconciler } = require('./services/paymentReconciler');
 
 const app = express();
@@ -71,6 +73,7 @@ app.use('/api', limiter);
 // Body parsing
 // AI Interview bodies are tiny (a transcript of at most a few hundred characters): cap them at 8kb BEFORE the global 50mb parser
 app.use('/api/ai-interviews', express.json({ limit: '8kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
+app.use('/api/proctoring', express.json({ limit: '64kb' })); // events + an answers snapshot only
 // rawBody is kept so the Razorpay webhook signature can be verified against the exact bytes received
 app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -104,6 +107,7 @@ app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/ai-interviews', aiInterviewRoutes);
+app.use('/api/proctoring', proctoringRoutes);
 app.use('/api', miscRoutes);
 
 // 404
@@ -165,6 +169,7 @@ const startServer = async () => {
     await connectDB();
     await verifyUserIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
+    startExamSweeper(); // same for teacher exams (server-owned deadline)
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
     const reconciler = startPaymentReconciler();
     console.log(reconciler.started ? '🔁 Payment reconciler: running (every 60 s, first check ~5 min after checkout)' : `⚠️  Payment reconciler NOT running: ${reconciler.reason}`);

@@ -95,6 +95,7 @@ const applyUpdate = (doc, update, { inserting = false } = {}) => {
     else if (op === '$unset') Object.keys(spec).forEach((k) => unsetPath(doc, k));
     else if (op === '$inc') Object.entries(spec).forEach(([k, n]) => setPath(doc, k, (Number(getPath(doc, k)) || 0) + n));
     else if (op === '$setOnInsert') { if (inserting) Object.entries(spec).forEach(([k, v]) => setPath(doc, k, clone(v))); }
+    else if (op === '$push') Object.entries(spec).forEach(([k, v]) => { const arr = Array.isArray(getPath(doc, k)) ? getPath(doc, k) : []; arr.push(clone(v)); setPath(doc, k, arr); });
     else throw new Error(`fakeDb: unsupported update operator ${op}`);
   }
   doc.updatedAt = new Date();
@@ -167,6 +168,20 @@ class FakeModel {
     }
     for (const h of this.hidden) if (!plus.includes(h) && !include.includes(h)) delete out[h];
     minus.forEach((m) => delete out[m]);
+    // like a Mongoose document: toObject() / save() exist but are not enumerable (never serialised)
+    const model = this;
+    Object.defineProperty(out, 'toObject', { value() { return clone({ ...this }); }, enumerable: false, writable: true, configurable: true });
+    Object.defineProperty(out, 'save', {
+      async value() {
+        const i = model.docs.findIndex((d) => eq(d._id, this._id));
+        const next = clone({ ...this });
+        next.updatedAt = new Date();
+        model.checkUnique(next);
+        if (i >= 0) model.docs[i] = { ...model.docs[i], ...next }; else model.docs.push(next);
+        return this;
+      },
+      enumerable: false, writable: true, configurable: true, // tests may still replace it with their own stub
+    });
     return out;
   }
 
@@ -379,11 +394,25 @@ const createFakeDb = () => {
   const Lecture = new FakeModel('Lecture', { registry });
   const Note = new FakeModel('Note', { registry });
   const LiveSession = new FakeModel('LiveSession', { registry });
-  const Exam = new FakeModel('Exam', { registry });
+  const Exam = new FakeModel('Exam', { registry, defaults: () => ({ isPublished: true, isActive: true, attemptLimit: 1, negativeMarking: false, negativeMarkValue: 0.25, passingMarks: 0, questions: [] }) });
+  const ExamAttempt = new FakeModel('ExamAttempt', { registry, refs: { student: 'User' }, defaults: () => ({ status: 'in-progress', answers: [], draftAnswers: {}, score: 0, totalMarks: 0, percentage: 0, timeTaken: 0, attemptNumber: 1, integrityEvents: [] }) });
   const Quiz = new FakeModel('Quiz', { registry });
   const Assignment = new FakeModel('Assignment', { registry });
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, Quiz, Assignment };
+  // online proctoring (models/Proctoring.js) - same unique indexes as the real schema
+  const ProctoringSession = new FakeModel('ProctoringSession', {
+    registry, unique: [{ fields: ['examKind', 'attempt'] }],
+    defaults: () => ({ status: 'ACTIVE', proctoringStatus: 'NOT_FLAGGED', lastCounted: {}, reviewHistory: [],
+      counts: { faceAbsence: 0, multiFace: 0, phone: 0, fullscreenExit: 0, tabSwitch: 0, windowBlur: 0, camera: 0, network: 0, copyPaste: 0 } }),
+  });
+  const ProctoringEvent = new FakeModel('ProctoringEvent', {
+    registry, unique: [{ fields: ['session', 'clientEventId'], where: (d) => typeof d.clientEventId === 'string' }],
+    defaults: () => ({ severity: 'info', source: 'client', counted: false, metadata: {} }),
+  });
+  const realProctoring = require('../../models/Proctoring');
+  const proctoringModels = { ...realProctoring, ProctoringSession, ProctoringEvent };
+
+  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 module.exports = { createFakeDb, FakeModel };

@@ -46,6 +46,7 @@ const razorpay = {
 
 const overrides = {
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => razorpay },
+  [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion, OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,
   },

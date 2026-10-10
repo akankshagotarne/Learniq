@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { proctoringPolicySchema } = require('../services/proctoring/policy');
 
 // ──────────────────────────────────────────────
 // ExamQuestion — embedded in Exam
@@ -51,6 +52,9 @@ const examSchema = new mongoose.Schema({
   scheduledStart: { type: Date, default: null },
   scheduledEnd: { type: Date, default: null },
 
+  // Online proctoring (camera / face / phone / fullscreen rules) - see services/proctoring/policy.js
+  proctoring: { type: proctoringPolicySchema, default: () => ({}) },
+
   // Status
   isPublished: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
@@ -98,7 +102,9 @@ const examAttemptSchema = new mongoose.Schema({
   draftAnswers: { type: mongoose.Schema.Types.Mixed, default: {} },
 
   startedAt: { type: Date, default: Date.now },
+  deadline: { type: Date },            // server-owned: startedAt + durationMinutes (refreshing never extends it)
   submittedAt: { type: Date },
+  submissionReason: { type: String, enum: ['MANUAL', 'TIMER', 'PROCTORING', 'SYSTEM'] },
   timeTaken: { type: Number, default: 0 }, // seconds
 
   score: { type: Number, default: 0 },
@@ -110,6 +116,7 @@ const examAttemptSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Unique index: prevent starting a second in-progress attempt
+examAttemptSchema.index({ status: 1, deadline: 1 }); // background sweeper
 examAttemptSchema.index(
   { exam: 1, student: 1, status: 1 },
   { unique: false } // We allow multiple completed attempts, just prevent double in-progress
