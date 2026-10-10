@@ -319,3 +319,25 @@ test('the page uses OpenAI Realtime whenever the backend does not say "local" (p
   assert.ok(!/VITE_[A-Z_]*STT/.test(page + types), 'the provider is never chosen by a frontend env variable');
   assert.ok(!/local-stt|useLocalTranscription|127\.0\.0\.1|8765/i.test(read('hooks/useOpenAITranscription.ts')));
 });
+
+// ── "I'm done answering" with the local service ───────────────────────────────────────────────────────────────────
+test('commit ("I\'m done"): sent only while listening AND while the service reports speech; otherwise false so the page moves on at once', opts, async () => {
+  reset();
+  const { useLocalTranscription } = loadHook();
+  const stt = useLocalTranscription(recorder().h);
+  await stt.connect(micStream(), { url: 'ws://127.0.0.1:8765' });
+  const ws = FakeWS.instances[0];
+  assert.equal(stt.commit(), false, 'not listening yet');
+  stt.setListening(true);
+  assert.equal(stt.commit(), false, 'listening, but nobody is speaking');
+  ws.emit({ type: 'speech_started' });
+  assert.equal(stt.commit(), true);
+  assert.deepEqual(ws.json().filter((m) => m.type === 'commit'), [{ type: 'commit' }]);
+  ws.emit({ type: 'speech_stopped' });
+  assert.equal(stt.commit(), false, 'the turn already ended');
+  ws.emit({ type: 'speech_started' });
+  stt.setListening(false);
+  assert.equal(stt.commit(), false, 'a new listening state starts clean');
+  stt.close();
+  assert.equal(stt.commit(), false);
+});

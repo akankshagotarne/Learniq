@@ -17,8 +17,10 @@ Protocol (WebSocket, one connection per interview page):
   server -> client  text   {"type":"ready","model":"base.en","device":"cpu","sampleRate":16000}
   client -> server  binary little-endian signed 16-bit PCM, mono, 16 kHz (any chunk size)
   client -> server  text   {"type":"listening","on":true|false}   (turn on/off: audio state is reset, in-flight results are dropped)
+  client -> server  text   {"type":"commit"}   (the student pressed "I'm done": end the current turn now instead of waiting for the pause)
   server -> client  text   {"type":"speech_started"} | {"type":"partial","text":...} | {"type":"speech_stopped"}
                            {"type":"final","text":...} | {"type":"transcription_failed"} | {"type":"error","code":...}
+                           {"type":"commit_empty"}   (answer to "commit" when nobody was speaking)
 """
 from __future__ import annotations
 
@@ -85,6 +87,20 @@ class TurnDetector:
         self._utt: List[np.ndarray] = []
         self._silence = 0
         self._voiced = 0
+
+    def flush(self) -> Optional[Event]:
+        """End the turn in progress NOW (the student pressed "I'm done"). None when nobody is speaking."""
+        if not self.in_speech:
+            return None
+        audio = np.concatenate(self._utt) if self._utt else np.zeros(0, dtype=np.float32)
+        voiced = self._voiced
+        self.in_speech = False
+        self._utt = []
+        self._preroll.clear()
+        self._onset = 0
+        self._silence = 0
+        self._voiced = 0
+        return Event("endpoint" if voiced >= self.min_voiced_frames else "discard", audio)
 
     @property
     def speech_ms(self) -> int:
@@ -323,6 +339,13 @@ class Service:
                         options["silence_ms"] = 1400
                     detector = TurnDetector(**options)
                     await self._send(ws, {"type": "ready", "model": self.model_name, "device": self.device, "sampleRate": SAMPLE_RATE})
+                elif kind == "commit" and detector is not None and listening:
+                    ev = detector.flush()
+                    if ev is not None and ev.kind == "endpoint":
+                        await self._send(ws, {"type": "speech_stopped"})
+                        track(asyncio.ensure_future(do_final(epoch, ev.audio)))
+                    else:
+                        await self._send(ws, {"type": "commit_empty"})   # nothing was being said: the page decides what to do
                 elif kind == "listening" and detector is not None:
                     listening = bool(msg.get("on"))
                     epoch += 1

@@ -107,6 +107,7 @@ export const useLocalTranscription = (handlers: TranscriptionHandlers) => {
   const streamRef = useRef<MediaStream | null>(null);
   const closedByUs = useRef(false);
   const listeningRef = useRef(false);
+  const inSpeechRef = useRef(false); // the service has reported speech_started and not yet speech_stopped
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -155,7 +156,11 @@ export const useLocalTranscription = (handlers: TranscriptionHandlers) => {
     }).catch((err) => { if (wsRef.current === ws) teardown(); throw err; });
 
     // 2. from now on: events in, connection problems out
-    ws.onmessage = (ev: MessageEvent) => { mapLocalSttMessage(ev.data, handlersRef.current); };
+    ws.onmessage = (ev: MessageEvent) => {
+      const type = mapLocalSttMessage(ev.data, handlersRef.current);
+      if (type === 'speech_started') inSpeechRef.current = true;
+      else if (type === 'speech_stopped') inSpeechRef.current = false;
+    };
     ws.onclose = () => lost('channel_closed');
     ws.onerror = () => lost('ws_error');
 
@@ -197,6 +202,7 @@ export const useLocalTranscription = (handlers: TranscriptionHandlers) => {
   /** Turn the microphone on only while the interviewer is listening; the service starts every turn from a clean slate. */
   const setListening = useCallback((on: boolean) => {
     listeningRef.current = on;
+    inSpeechRef.current = false;
     applyTrackState();
     const ws = wsRef.current;
     if (ws && ws.readyState === 1) {
@@ -213,7 +219,19 @@ export const useLocalTranscription = (handlers: TranscriptionHandlers) => {
     streamRef.current = null;
   }, [teardown]);
 
+  /**
+   * "I'm done answering": the service ends the turn now and sends its final text (instead of waiting for the pause).
+   * Returns false when nobody is speaking (nothing to end), so the page can move on at once.
+   */
+  const commit = useCallback((): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== 1 || !listeningRef.current || !inSpeechRef.current) return false;
+    try { ws.send(JSON.stringify({ type: 'commit' })); return true; } catch { return false; }
+  }, []);
+  /** No WebRTC here: the development diagnostics panel only shows the provider. */
+  const snapshot = useCallback(async (): Promise<null> => null, []);
+
   useEffect(() => close, [close]);
 
-  return { connect, setListening, close };
+  return { connect, setListening, commit, snapshot, close };
 };

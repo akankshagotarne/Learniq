@@ -56,6 +56,7 @@ const structuredCompletion = async (cfg, { schema, system, user, maxTokens = 350
         stream: false,
         format: schema, // structured output: the reply must match the same JSON schema OpenAI gets
         options: { temperature, num_predict: maxTokens },
+        keep_alive: o.keepAlive, // keep Gemma loaded between questions (a cold load on a laptop can take longer than a whole turn)
       }),
       signal: controller.signal,
     });
@@ -88,4 +89,31 @@ const structuredCompletion = async (cfg, { schema, system, user, maxTokens = 350
   return { data, usage: { promptTokens: Number(json.prompt_eval_count) || 0, completionTokens: Number(json.eval_count) || 0 } };
 };
 
-module.exports = { structuredCompletion, parseJsonObject };
+/**
+ * Load the model into memory ahead of the first question (fire-and-forget from the controller). Ollama loads a model on the first
+ * request, which on a laptop can take 10-40 s; doing it while the avatar and microphone connect keeps the greeting fast.
+ * An empty prompt only loads the model (no tokens are generated). Never throws: returns { ok, ms, code? } for the server log.
+ */
+const warmUp = async (cfg) => {
+  const started = Date.now();
+  let o;
+  try { o = assertUsable(cfg); } catch (err) { return { ok: false, ms: 0, code: err.code }; }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), o.requestTimeoutMs);
+  try {
+    const res = await fetch(`${o.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: o.model, prompt: '', keep_alive: o.keepAlive, stream: false }),
+      signal: controller.signal,
+    });
+    try { await res.json(); } catch { /* ignore */ }
+    return { ok: res.ok, ms: Date.now() - started, code: res.ok ? undefined : (res.status === 404 ? 'MODEL_NOT_FOUND' : `HTTP_${res.status}`) };
+  } catch (err) {
+    return { ok: false, ms: Date.now() - started, code: err && err.name === 'AbortError' ? 'TIMEOUT' : (err && err.cause && err.cause.code) || 'NETWORK' };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+module.exports = { structuredCompletion, parseJsonObject, warmUp };
