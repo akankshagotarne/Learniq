@@ -144,10 +144,26 @@ server.on('error', (err) => {
   }
 });
 
+// The unique indexes are what makes "one email / one phone per account" hold under concurrent sign-ups. Mongoose builds them on
+// connect; this waits for that and says LOUDLY if it failed (typically: existing duplicate data - run scripts/auditUserIdentities.js).
+const verifyUserIndexes = async () => {
+  const User = require('./models/User');
+  try {
+    await User.init();
+    const names = (await User.collection.indexes()).map((i) => i.name);
+    const missing = ['email_1', 'uniq_phoneNormalized'].filter((n) => !names.includes(n));
+    if (missing.length) throw new Error(`missing index(es): ${missing.join(', ')}`);
+    console.log('🔒 User uniqueness indexes verified: email_1, uniq_phoneNormalized');
+  } catch (err) {
+    console.error(`🚨 User uniqueness index check FAILED (${err.message}). New sign-ups are NOT protected against duplicates at the database level until this is fixed — run: node src/scripts/auditUserIdentities.js`);
+  }
+};
+
 // Connect to MongoDB first, then start listening
 const startServer = async () => {
   try {
     await connectDB();
+    await verifyUserIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
     const reconciler = startPaymentReconciler();

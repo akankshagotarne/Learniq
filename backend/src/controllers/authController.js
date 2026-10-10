@@ -5,6 +5,7 @@ const { Resend } = require('resend');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
 const { getPrimaryClientUrl } = require('../config/clientUrls');
+const identity = require('../services/identity');
 
 // Two ways to actually send the reset email, both optional so the server
 // still boots before either is configured (forgotPassword then sends nothing
@@ -84,22 +85,41 @@ const register = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Email is already registered.' });
+    // Canonical identity values (the same ones the unique indexes are built on)
+    const emailNormalized = identity.normalizeEmail(email);
+    if (!emailNormalized) {
+      return res.status(400).json({ success: false, code: 'INVALID_EMAIL', field: 'email', message: identity.MESSAGES.INVALID_EMAIL });
     }
+    const phoneInfo = identity.normalizePhone(phone);
+    if (!phoneInfo.empty && !phoneInfo.valid) {
+      return res.status(400).json({ success: false, code: 'INVALID_PHONE', field: 'phone', message: identity.MESSAGES.INVALID_PHONE });
+    }
+    const phoneNormalized = phoneInfo.valid ? phoneInfo.e164 : undefined;
+
+    // Friendly pre-check across ALL roles (one shared collection). The unique indexes below remain the final authority.
+    const conflict = identity.conflictBody(await identity.findIdentityConflicts(User, { email: emailNormalized, phoneNormalized }));
+    if (conflict) return res.status(409).json(conflict);
 
     const validRole = ['student', 'teacher'].includes(role) ? role : 'student';
     const isApproved = validRole !== 'teacher'; // teachers need admin approval
 
-    const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password,
-      role: validRole,
-      phone: phone || '',
-      isApproved,
-    });
+    let user;
+    try {
+      user = await User.create({
+        name,
+        email: emailNormalized,
+        password,
+        role: validRole,
+        phone: phoneInfo.valid ? phone.toString().trim() : '',
+        phoneNormalized,
+        isApproved,
+      });
+    } catch (createError) {
+      // Two simultaneous registrations can both pass the pre-check; MongoDB lets only one of them in.
+      const raced = identity.conflictsFromDuplicateKeyError(createError);
+      if (raced) return res.status(409).json(identity.conflictBody(raced));
+      throw createError;
+    }
 
     // Welcome notification
     await Notification.create({
@@ -133,7 +153,9 @@ const login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Same canonical form as registration (trimmed + lower-cased), so " Student@Example.com " still finds the account
+    const loginEmail = identity.normalizeEmail(email);
+    const user = loginEmail ? await User.findOne({ email: loginEmail }) : null;
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
@@ -201,7 +223,16 @@ const updateProfile = async (req, res) => {
     const { name, phone, bio, experience, qualification, subjects, standards } = req.body;
     const updateData = {};
     if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
+    if (phone) {
+      const phoneInfo = identity.normalizePhone(phone);
+      if (!phoneInfo.valid) {
+        return res.status(400).json({ success: false, code: 'INVALID_PHONE', field: 'phone', message: identity.MESSAGES.INVALID_PHONE });
+      }
+      const conflict = identity.conflictBody(await identity.findIdentityConflicts(User, { phoneNormalized: phoneInfo.e164, excludeId: req.user._id }));
+      if (conflict) return res.status(409).json(conflict);
+      updateData.phone = String(phone).trim();
+      updateData.phoneNormalized = phoneInfo.e164;
+    }
     if (bio) updateData.bio = bio;
     if (experience) updateData.experience = experience;
     if (qualification) updateData.qualification = qualification;
@@ -212,6 +243,8 @@ const updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true });
     res.json({ success: true, message: 'Profile updated!', user });
   } catch (error) {
+    const raced = identity.conflictsFromDuplicateKeyError(error);
+    if (raced) return res.status(409).json(identity.conflictBody(raced));
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
