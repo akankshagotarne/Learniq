@@ -142,7 +142,7 @@ test.describe('monitoring during the exam', () => {
     await setScene(page, 0);
     await expect(page.getByTestId('proctoring-warning-counter')).toHaveText('Warnings: 1/2', { timeout: 8000 });
     await dismiss(page);
-    await setScene(page, 1); await page.waitForTimeout(1500); await setScene(page, 0);
+    await setScene(page, 1); await page.waitForTimeout(2500); await setScene(page, 0);
     await expect(page.getByTestId('auto-submit-reason')).toContainText('Reason: Maximum face-absence warnings reached.', { timeout: 10000 });
     expect(server.snapshots.some((s) => JSON.stringify(s).includes('"q0":0'))).toBe(true); // answers went with the final event
     // 51-52: camera released and detector closed
