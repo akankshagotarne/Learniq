@@ -1,5 +1,21 @@
 const { Exam, ExamAttempt } = require('../models/Exam');
 const User = require('../models/User');
+const attempts = require('../services/examAttempts');
+const proctoring = require('../services/proctoring/service');
+const { validatePolicyInput, applyPolicyEdit, publicPolicy, resolvePolicy, PolicyValidationError } = require('../services/proctoring/policy');
+
+/** Validated proctoring settings from a create/update body, or undefined when none were sent. */
+const proctoringFromBody = (body, stored) => {
+  if (body.proctoring === undefined) return undefined;
+  const edit = validatePolicyInput(body.proctoring);
+  return applyPolicyEdit(stored, edit).policy;
+};
+const policyErrorResponse = (res, err) => res.status(400).json({ success: false, code: 'INVALID_PROCTORING_SETTINGS', message: err.message, errors: err.errors });
+const attemptErrorResponse = (res, err) => res.status(err.status).json({ success: false, code: err.code, message: err.message });
+const timing = (attempt, exam, now = new Date()) => {
+  const deadline = attempts.deadlineFor(attempt, exam);
+  return { deadline, serverNow: now.toISOString(), remainingSeconds: Math.max(0, Math.ceil((deadline.getTime() - now.getTime()) / 1000)) };
+};
 
 // ─────────────────────────────────────────────
 // TEACHER: Create exam
@@ -19,7 +35,14 @@ const createExam = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title, standard, subject, and duration are required.' });
     }
 
+    let proctoringPolicy;
+    try { proctoringPolicy = proctoringFromBody(req.body, null); } catch (e) {
+      if (e instanceof PolicyValidationError) return policyErrorResponse(res, e);
+      throw e;
+    }
+
     const exam = await Exam.create({
+      ...(proctoringPolicy ? { proctoring: proctoringPolicy } : {}),
       title, description, instructions,
       teacher: req.user._id,
       standard, subject, chapter,
@@ -62,6 +85,13 @@ const updateExam = async (req, res) => {
     allowed.forEach(key => {
       if (req.body[key] !== undefined) exam[key] = req.body[key];
     });
+    try {
+      const nextPolicy = proctoringFromBody(req.body, exam.proctoring);
+      if (nextPolicy) exam.proctoring = nextPolicy; // attempts already running keep the snapshot they started with
+    } catch (e) {
+      if (e instanceof PolicyValidationError) return policyErrorResponse(res, e);
+      throw e;
+    }
 
     await exam.save(); // triggers pre-save to recompute totalMarks
     res.json({ success: true, exam });
@@ -266,13 +296,19 @@ const getExam = async (req, res) => {
       });
     }
 
+    if (inProgressAttempt && attempts.isPastGrace(inProgressAttempt, exam)) {
+      await attempts.finalize(inProgressAttempt._id, { reason: 'TIMER' }); // server timer: refreshing never extends it
+      inProgressAttempt = null;
+    }
+
     res.json({
       success: true,
       exam: {
         ...exam.toObject(),
+        proctoring: isTeacherOrAdmin ? resolvePolicy(exam.proctoring) : publicPolicy(exam.proctoring),
         questions,
       },
-      inProgressAttempt,
+      inProgressAttempt: inProgressAttempt ? { ...inProgressAttempt.toObject(), ...timing(inProgressAttempt, exam) } : null,
     });
   } catch (err) {
     console.error('getExam error:', err);
@@ -286,12 +322,23 @@ const getExam = async (req, res) => {
 // ─────────────────────────────────────────────
 const startAttempt = async (req, res) => {
   try {
+    if (req.user.role !== 'student') return res.status(403).json({ success: false, message: 'Only students can take exams.' });
     const exam = await Exam.findById(req.params.id);
     if (!exam || !exam.isPublished) {
       return res.status(404).json({ success: false, message: 'Exam not found or not available.' });
     }
 
     const now = new Date();
+    // Resume an attempt that is still running (its deadline was fixed when it started)
+    const existingInProgress = await ExamAttempt.findOne({ exam: exam._id, student: req.user._id, status: 'in-progress' });
+    if (existingInProgress) {
+      if (attempts.isPastGrace(existingInProgress, exam, now)) {
+        await attempts.finalize(existingInProgress._id, { reason: 'TIMER', now });
+        return res.status(409).json({ success: false, code: 'TIME_UP', message: 'Time is up. Your previous attempt was submitted automatically.' });
+      }
+      return res.json({ success: true, attempt: { ...existingInProgress.toObject(), ...timing(existingInProgress, exam, now) }, resumed: true });
+    }
+
     if (exam.scheduledStart && now < exam.scheduledStart) {
       return res.status(403).json({ success: false, message: 'Exam has not started yet.' });
     }
@@ -299,23 +346,12 @@ const startAttempt = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Exam window has expired.' });
     }
 
-    // Check for existing in-progress attempt
-    const existingInProgress = await ExamAttempt.findOne({
-      exam: exam._id,
-      student: req.user._id,
-      status: 'in-progress',
-    });
-
-    if (existingInProgress) {
-      return res.json({ success: true, attempt: existingInProgress, resumed: true });
-    }
-
     // Check attempt limit
     if (exam.attemptLimit > 0) {
       const completedCount = await ExamAttempt.countDocuments({
         exam: exam._id,
         student: req.user._id,
-        status: { $in: ['submitted', 'auto-submitted'] },
+        status: { $in: attempts.FINAL_STATUSES },
       });
       if (completedCount >= exam.attemptLimit) {
         return res.status(403).json({ success: false, message: `You have reached the maximum number of attempts (${exam.attemptLimit}).` });
@@ -330,10 +366,11 @@ const startAttempt = async (req, res) => {
       status: 'in-progress',
       answers: [],
       startedAt: now,
+      deadline: new Date(now.getTime() + exam.durationMinutes * 60 * 1000),
       attemptNumber,
     });
 
-    res.status(201).json({ success: true, attempt, resumed: false });
+    res.status(201).json({ success: true, attempt: { ...attempt.toObject(), ...timing(attempt, exam, now) }, resumed: false });
   } catch (err) {
     console.error('startAttempt error:', err);
     res.status(500).json({ success: false, message: 'Server error starting attempt.' });
@@ -347,19 +384,28 @@ const startAttempt = async (req, res) => {
 const saveDraft = async (req, res) => {
   try {
     const { attemptId, draftAnswers } = req.body;
-    if (!attemptId) return res.status(400).json({ success: false, message: 'attemptId required.' });
+    if (!attemptId || !attempts.isValidId(attemptId)) return res.status(400).json({ success: false, message: 'attemptId required.' });
 
-    const attempt = await ExamAttempt.findOne({
-      _id: attemptId,
-      student: req.user._id,
-      status: 'in-progress',
-    });
+    const attempt = await ExamAttempt.findOne({ _id: attemptId, exam: req.params.id, student: req.user._id });
     if (!attempt) return res.status(404).json({ success: false, message: 'Attempt not found.' });
+    if (attempts.FINAL_STATUSES.includes(attempt.status)) {
+      return res.status(409).json({ success: false, code: 'ALREADY_COMPLETED', message: 'This exam has already been submitted. Answers can no longer be changed.' });
+    }
+    const exam = await Exam.findById(attempt.exam);
+    if (attempts.isPastGrace(attempt, exam)) {
+      await attempts.finalize(attempt._id, { reason: 'TIMER' });
+      return res.status(409).json({ success: false, code: 'TIME_UP', message: 'Time is up. Your exam was submitted automatically.' });
+    }
+    await proctoring.requireActiveSession('exam', exam, attempt);
 
-    attempt.draftAnswers = draftAnswers || {};
-    await attempt.save();
-    res.json({ success: true });
+    const clean = attempts.validateAnswerMap(exam, draftAnswers);
+    const r = await ExamAttempt.updateOne({ _id: attempt._id, status: 'in-progress' }, { $set: { draftAnswers: clean } });
+    if (r.matchedCount === 0) {
+      return res.status(409).json({ success: false, code: 'ALREADY_COMPLETED', message: 'This exam has already been submitted. Answers can no longer be changed.' });
+    }
+    res.json({ success: true, savedAt: new Date().toISOString(), ...timing(attempt, exam) });
   } catch (err) {
+    if (err && err.status && err.code) return attemptErrorResponse(res, err);
     res.status(500).json({ success: false, message: 'Server error saving draft.' });
   }
 };
@@ -370,101 +416,29 @@ const saveDraft = async (req, res) => {
 // ─────────────────────────────────────────────
 const submitAttempt = async (req, res) => {
   try {
-    const { attemptId, answers, timeTaken, autoSubmit } = req.body;
-    // answers: [{ questionId, selectedOption }]
+    const { attemptId, answers, autoSubmit } = req.body;
+    if (!attemptId || !attempts.isValidId(attemptId)) return res.status(400).json({ success: false, message: 'attemptId required.' });
 
-    const exam = await Exam.findById(req.params.id);
+    const attempt = await ExamAttempt.findOne({ _id: attemptId, exam: req.params.id, student: req.user._id });
+    if (!attempt) return res.status(404).json({ success: false, message: 'Attempt not found.' });
+    const exam = await Exam.findById(attempt.exam);
     if (!exam) return res.status(404).json({ success: false, message: 'Exam not found.' });
+    const now = new Date();
+    // the browser's timer reached zero: only believed when the SERVER clock agrees (within 5 s)
+    const timerSubmit = autoSubmit === true && now.getTime() >= attempts.deadlineFor(attempt, exam).getTime() - 5000;
 
-    const attempt = await ExamAttempt.findOne({
-      _id: attemptId,
-      student: req.user._id,
-      status: 'in-progress',
-    });
-    if (!attempt) return res.status(404).json({ success: false, message: 'Attempt not found or already submitted.' });
+    // Idempotent: a double click / retry / auto-submit after the timer just returns the stored result.
+    if (attempts.FINAL_STATUSES.includes(attempt.status)) {
+      return res.json({ success: true, alreadySubmitted: true, ...(await attempts.resultPayload(exam, attempt)) });
+    }
+    if (!attempts.isPastGrace(attempt, exam)) await proctoring.requireActiveSession('exam', exam, attempt);
 
-    // Compute score with optional negative marking
-    let score = 0;
-    const processedAnswers = [];
-    const reviewData = [];
-
-    exam.questions.forEach(q => {
-      const ans = answers?.find(a => a.questionId === q._id.toString());
-      const selectedOption = ans?.selectedOption ?? null;
-      const isAnswered = selectedOption !== null && selectedOption !== undefined;
-      const isCorrect = isAnswered && selectedOption === q.correctAnswer;
-
-      if (isCorrect) {
-        score += q.marks;
-      } else if (isAnswered && exam.negativeMarking) {
-        score -= exam.negativeMarkValue;
-      }
-
-      processedAnswers.push({
-        questionId: q._id,
-        selectedOption: isAnswered ? selectedOption : null,
-        answeredAt: ans?.answeredAt ? new Date(ans.answeredAt) : null,
-      });
-
-      reviewData.push({
-        questionId: q._id,
-        question: q.question,
-        type: q.type,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        selectedOption: isAnswered ? selectedOption : null,
-        isCorrect,
-        marks: q.marks,
-        explanation: q.explanation || null,
-      });
-    });
-
-    // Clamp score to 0 minimum
-    score = Math.max(0, parseFloat(score.toFixed(2)));
-    const totalMarks = exam.totalMarks;
-    const percentage = totalMarks > 0 ? parseFloat(((score / totalMarks) * 100).toFixed(1)) : 0;
-
-    attempt.answers = processedAnswers;
-    attempt.draftAnswers = {};
-    attempt.status = autoSubmit ? 'auto-submitted' : 'submitted';
-    attempt.submittedAt = new Date();
-    attempt.timeTaken = timeTaken || 0;
-    attempt.score = score;
-    attempt.totalMarks = totalMarks;
-    attempt.percentage = percentage;
-    await attempt.save();
-
-    // Compute rank among this exam's attempts
-    const allAttempts = await ExamAttempt.find({
-      exam: exam._id,
-      status: { $in: ['submitted', 'auto-submitted'] },
-    }).select('score percentage timeTaken student');
-
-    const sortedAttempts = allAttempts
-      .slice()
-      .sort((a, b) => b.percentage - a.percentage || a.timeTaken - b.timeTaken);
-
-    const rank = sortedAttempts.findIndex(a => a.student.toString() === req.user._id.toString()) + 1;
-    const totalAttemptees = sortedAttempts.length;
-    const percentile = totalAttemptees > 1
-      ? parseFloat((((totalAttemptees - rank) / (totalAttemptees - 1)) * 100).toFixed(1))
-      : 100;
-
-    res.json({
-      success: true,
-      result: {
-        score,
-        totalMarks,
-        percentage,
-        timeTaken: attempt.timeTaken,
-        rank,
-        totalAttemptees,
-        percentile,
-        passed: score >= exam.passingMarks,
-      },
-      review: reviewData,
-    });
+    // answers may be an array [{questionId, selectedOption}] (legacy) or a map {questionId: option}
+    const finalAnswers = Array.isArray(answers) ? attempts.answersArrayToMap(answers) : answers;
+    const { attempt: done } = await attempts.finalize(attempt._id, { reason: timerSubmit ? 'TIMER' : 'MANUAL', finalAnswers, now });
+    res.json({ success: true, ...(await attempts.resultPayload(exam, done)) });
   } catch (err) {
+    if (err && err.status && err.code) return attemptErrorResponse(res, err);
     console.error('submitAttempt error:', err);
     res.status(500).json({ success: false, message: 'Server error submitting exam.' });
   }
@@ -520,15 +494,16 @@ const getExamAttempts = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' });
     }
 
-    const attempts = await ExamAttempt.find({
+    const attemptsList = await ExamAttempt.find({
       exam: req.params.id,
       status: { $in: ['submitted', 'auto-submitted'] },
     })
       .populate('student', 'name email avatar')
       .sort({ percentage: -1, timeTaken: 1 });
 
-    // Add rank
-    const ranked = attempts.map((a, i) => ({ ...a.toObject(), rank: i + 1 }));
+    // Add rank + proctoring summary (flags, warning counts, auto-submission reason)
+    const summaries = await proctoring.summariesForAttempts('exam', attemptsList.map((a) => a._id));
+    const ranked = attemptsList.map((a, i) => ({ ...a.toObject(), rank: i + 1, proctoring: summaries.get(String(a._id)) || null }));
 
     // Per-question analytics
     const questionStats = {};
@@ -543,7 +518,7 @@ const getExamAttempts = async (req, res) => {
       };
     });
 
-    attempts.forEach(attempt => {
+    attemptsList.forEach(attempt => {
       attempt.answers.forEach(ans => {
         const stat = questionStats[ans.questionId?.toString()];
         if (!stat) return;
@@ -566,7 +541,7 @@ const getExamAttempts = async (req, res) => {
         : 0,
     }));
 
-    res.json({ success: true, attempts: ranked, questionAnalytics, exam });
+    res.json({ success: true, attempts: ranked, questionAnalytics, exam: { ...exam.toObject(), proctoring: resolvePolicy(exam.proctoring) } });
   } catch (err) {
     console.error('getExamAttempts error:', err);
     res.status(500).json({ success: false, message: 'Server error.' });

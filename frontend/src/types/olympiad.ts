@@ -132,6 +132,8 @@ export interface OlympiadExam {
   remainingSeconds: number | null;
   /** completed exams only: the certificate issued for a PASS (null for a FAIL) */
   certificate?: OlympiadCertificate | null;
+  /** online proctoring rules ({ enabled: false } when the exam is not proctored) */
+  proctoring?: Partial<import('../proctoring/types').ProctoringPolicy> & { enabled: boolean };
 }
 
 export interface OlympiadQuestion {
@@ -153,6 +155,7 @@ export interface OlympiadAttemptPayload {
   exam: {
     _id: string; title: string; standard: number; durationMinutes: number;
     totalQuestions: number; totalMarks: number; sections: OlympiadSection[];
+    proctoring?: Partial<import('../proctoring/types').ProctoringPolicy> & { enabled: boolean };
   };
   attempt: { _id: string; status: string; startedAt: string; deadline: string; serverNow: string; remainingSeconds: number };
   questions: OlympiadQuestion[];

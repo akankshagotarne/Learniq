@@ -23,6 +23,7 @@ router.post('/payments/webhook', ctrl.razorpayWebhook);
 router.get('/admin/exams', ...adminAuth, ctrl.adminListExams);
 router.post('/admin/seed', ...adminAuth, perUser(5), ctrl.adminSeedExam);
 router.get('/admin/exams/:id/attempts', ...adminAuth, ctrl.adminAttempts);
+router.put('/admin/exams/:id/proctoring', ...adminAuth, perUser(30), ctrl.adminUpdateProctoring);
 router.get('/admin/exams/:id/payments', ...adminAuth, ctrl.adminPayments);
 router.get('/admin/payments', ...adminAuth, ctrl.adminAllPayments);
 

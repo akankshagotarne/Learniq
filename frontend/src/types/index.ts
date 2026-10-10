@@ -343,6 +343,8 @@ export interface Exam {
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
+  /** Online proctoring rules (see src/proctoring/types.ts); students only see { enabled: false } when it is off */
+  proctoring?: Partial<import('../proctoring/types').ProctoringPolicy> & { enabled: boolean };
   // Computed fields from listing
   questionCount?: number;
   attemptCount?: number;
@@ -380,6 +382,11 @@ export interface ExamAttempt {
   integrityEvents?: IntegrityEvent[];
   attemptNumber: number;
   rank?: number;
+  deadline?: string;
+  remainingSeconds?: number;
+  submissionReason?: 'MANUAL' | 'TIMER' | 'PROCTORING' | 'SYSTEM';
+  /** teacher results: proctoring flags / counts for this attempt (null when the exam was not proctored) */
+  proctoring?: import('../proctoring/types').ProctoringSummary | null;
 }
 
 export interface ExamResult {
@@ -391,6 +398,8 @@ export interface ExamResult {
   totalAttemptees: number;
   percentile: number;
   passed: boolean;
+  status?: 'submitted' | 'auto-submitted';
+  submissionReason?: string | null;
 }
 
 export interface ExamQuestionReview {

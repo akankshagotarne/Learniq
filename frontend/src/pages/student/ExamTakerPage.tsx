@@ -9,6 +9,14 @@ import {
 import api from '../../services/api';
 import { Exam, ExamQuestion, ExamResult, ExamQuestionReview } from '../../types';
 import toast from 'react-hot-toast';
+import ProctoringGate, { GateResult } from '../../proctoring/ProctoringGate';
+import ProctoringMonitor from '../../proctoring/ProctoringMonitor';
+import { useProctoring } from '../../proctoring/useProctoring';
+import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
+
+const DRAFT_DEBOUNCE_MS = 1500;
+/** The submit endpoint has always accepted [{ questionId, selectedOption }] - keep that shape so old and new servers both work. */
+const toAnswerList = (map: Record<string, number | null>) => Object.entries(map).map(([questionId, selectedOption]) => ({ questionId, selectedOption }));
 
 const ExamTakerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,22 +31,39 @@ const ExamTakerPage: React.FC = () => {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number | null>>({}); // questionId -> optionIndex
-  const [startTime, setStartTime] = useState<number | null>(null);
   const [timeLeftSec, setTimeLeftSec] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [resumeAttempt, setResumeAttempt] = useState(false);
 
   // Result & Review
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [reviewQuestions, setReviewQuestions] = useState<ExamQuestionReview[]>([]);
+  const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
 
-  // Integrity violation count
+  // Integrity violation count (non-proctored exams: legacy fullscreen / tab notice)
   const [integrityViolations, setIntegrityViolations] = useState(0);
 
   // References
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const draftSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const draftDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const attemptIdRef = useRef<string | null>(null);
+  attemptIdRef.current = attemptId;
+  // Monotonic timer baseline from the SERVER's remaining time (the device clock cannot extend the exam)
+  const syncRef = useRef({ base: 0, at: 0 });
+  const finishedRef = useRef(false);
+
+  const policy: ProctoringPolicy = exam?.proctoring?.enabled ? { ...DEFAULT_PROCTORING_POLICY, ...exam.proctoring } : DEFAULT_PROCTORING_POLICY;
+  const proctored = !!exam?.proctoring?.enabled;
+
+  const setServerTime = (remainingSeconds: number) => {
+    syncRef.current = { base: remainingSeconds, at: performance.now() };
+    setTimeLeftSec(Math.max(0, Math.ceil(remainingSeconds)));
+  };
 
   // Load Exam details
   useEffect(() => {
@@ -46,8 +71,24 @@ const ExamTakerPage: React.FC = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (draftSaveTimerRef.current) clearInterval(draftSaveTimerRef.current);
+      if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
     };
   }, [id]);
+
+  const restoreAnswers = (examData: Exam, attempt: any): Record<string, number | null> => {
+    const initial: Record<string, number | null> = {};
+    examData.questions.forEach(q => { if (q._id) initial[q._id] = null; });
+    let restored: Record<string, number | null> = { ...initial };
+    try {
+      const localDraft = localStorage.getItem(`learniq_exam_draft_${id}`);
+      if (localDraft) restored = { ...restored, ...JSON.parse(localDraft) };
+    } catch { /* ignore corrupt backup */ }
+    if (attempt?.draftAnswers && Object.keys(attempt.draftAnswers).length > 0) {
+      restored = { ...restored, ...attempt.draftAnswers };
+    }
+    // keep only questions that are in this exam (the server rejects anything else)
+    return Object.fromEntries(Object.entries(restored).filter(([k]) => k in initial));
+  };
 
   const fetchExam = async () => {
     setLoading(true);
@@ -59,31 +100,16 @@ const ExamTakerPage: React.FC = () => {
       // Check if there is an in-progress attempt
       if (res.data.inProgressAttempt) {
         const attempt = res.data.inProgressAttempt;
-        setAttemptId(attempt._id);
-
-        // Restore draft answers from backend or localstorage
-        const localDraft = localStorage.getItem(`learniq_exam_draft_${id}`);
-        let restored: Record<string, number | null> = {};
-        if (localDraft) {
-          try {
-            restored = JSON.parse(localDraft);
-          } catch {}
+        if (data.proctoring?.enabled) {
+          // proctored: the camera / fullscreen checks run again before the attempt continues
+          setResumeAttempt(true);
+        } else {
+          setAttemptId(attempt._id);
+          setAnswers(restoreAnswers(data, attempt));
+          setServerTime(attempt.remainingSeconds ?? data.durationMinutes * 60);
+          setStep('taking');
+          toast('Resuming your in-progress exam attempt.', { icon: '🔄' });
         }
-        if (attempt.draftAnswers && Object.keys(attempt.draftAnswers).length > 0) {
-          restored = { ...restored, ...attempt.draftAnswers };
-        }
-        setAnswers(restored);
-
-        // Compute elapsed time from attempt.startedAt
-        const startedAtMs = new Date(attempt.startedAt).getTime();
-        const totalDurationSec = data.durationMinutes * 60;
-        const elapsedSec = Math.floor((Date.now() - startedAtMs) / 1000);
-        const remaining = Math.max(0, totalDurationSec - elapsedSec);
-
-        setStartTime(startedAtMs);
-        setTimeLeftSec(remaining);
-        setStep('taking');
-        toast('Resuming your in-progress exam attempt.', { icon: '🔄' });
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to load exam');
@@ -93,7 +119,52 @@ const ExamTakerPage: React.FC = () => {
     }
   };
 
-  // Start Exam
+  /** Show the stored result (submit is idempotent, so this also works after an automatic submission). */
+  const showFinalResult = useCallback(async (reason?: string | null) => {
+    const aid = attemptIdRef.current;
+    if (!aid) return;
+    finishedRef.current = true;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (draftSaveTimerRef.current) clearInterval(draftSaveTimerRef.current);
+    try {
+      const res = await api.post(`/exams/${id}/submit`, { attemptId: aid, answers: toAnswerList(answersRef.current) });
+      setExamResult(res.data.result);
+      setReviewQuestions(res.data.review || []);
+      if (reason) setAutoSubmitReason(reason);
+      setStep('submitted');
+      localStorage.removeItem(`learniq_exam_draft_${id}`);
+      if (document.fullscreenElement && document.exitFullscreen) { try { await document.exitFullscreen(); } catch { /* ignore */ } }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Could not load your result. Please refresh the page.');
+    }
+  }, [id]);
+
+  const proctor = useProctoring({
+    kind: 'exam',
+    examId: id || '',
+    policy,
+    getAnswersSnapshot: () => answersRef.current,
+    onTerminated: (state) => {
+      if (state.autoSubmitted) toast.error('Your examination has been submitted automatically.', { duration: 6000 });
+      void showFinalResult(state.autoSubmitted ? (state.terminationText || 'Examination rule violation.') : null);
+    },
+  });
+
+  const proctorStopRef = useRef(proctor.stop);
+  proctorStopRef.current = proctor.stop;
+
+  /** Starts (or resumes) the attempt on the server and returns its data. */
+  const startOrResume = async (examData: Exam) => {
+    const res = await api.post(`/exams/${id}/start`);
+    const attempt = res.data.attempt;
+    setAttemptId(attempt._id);
+    attemptIdRef.current = attempt._id;
+    setAnswers(res.data.resumed ? restoreAnswers(examData, attempt) : restoreAnswers(examData, null));
+    setServerTime(attempt.remainingSeconds ?? examData.durationMinutes * 60);
+    return attempt;
+  };
+
+  // Start Exam (exams without proctoring)
   const handleStartExam = async () => {
     if (!exam) return;
 
@@ -107,50 +178,44 @@ const ExamTakerPage: React.FC = () => {
     }
 
     try {
-      const res = await api.post(`/exams/${id}/start`);
-      const attempt = res.data.attempt;
-      setAttemptId(attempt._id);
-
-      const totalSec = exam.durationMinutes * 60;
-      setTimeLeftSec(totalSec);
-      setStartTime(Date.now());
+      await startOrResume(exam);
       setStep('taking');
-
-      // Initialize answers object
-      const initial: Record<string, number | null> = {};
-      exam.questions.forEach(q => {
-        if (q._id) initial[q._id] = null;
-      });
-      setAnswers(initial);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to start exam');
     }
   };
 
+  // Proctored exams: called by the pre-exam check after fullscreen was entered
+  const handleProctoredReady = async ({ precheck, stream, detector }: GateResult) => {
+    if (!exam) return;
+    let attempt;
+    try {
+      attempt = await startOrResume(exam);
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'The exam could not be started.');
+    }
+    const state = await proctor.start(attempt._id, precheck, stream, detector);
+    if (!state.terminated) setStep('taking');
+  };
+
   // Submit Exam
   const handleSubmitExam = useCallback(
     async (isAuto = false) => {
-      if (!exam || !attemptId || isSubmitting) return;
+      if (!exam || !attemptId || isSubmitting || finishedRef.current) return;
       setIsSubmitting(true);
 
       if (timerRef.current) clearInterval(timerRef.current);
       if (draftSaveTimerRef.current) clearInterval(draftSaveTimerRef.current);
 
       try {
-        const timeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
-        const formattedAnswers = Object.entries(answers).map(([questionId, selectedOption]) => ({
-          questionId,
-          selectedOption,
-          answeredAt: new Date().toISOString(),
-        }));
-
         const res = await api.post(`/exams/${id}/submit`, {
           attemptId,
-          answers: formattedAnswers,
-          timeTaken,
+          answers: toAnswerList(answers),
           autoSubmit: isAuto,
         });
 
+        finishedRef.current = true;
+        proctorStopRef.current(); // camera off, monitoring ends
         setExamResult(res.data.result);
         setReviewQuestions(res.data.review || []);
         setStep('submitted');
@@ -165,34 +230,33 @@ const ExamTakerPage: React.FC = () => {
           } catch {}
         }
 
-        if (isAuto) {
+        if (res.data.result?.status === 'auto-submitted' || isAuto) {
           toast('Time has run out! Your exam was automatically submitted.', { icon: '⏰' });
         } else {
           toast.success('Exam submitted successfully!');
         }
       } catch (err: any) {
-        toast.error(err.response?.data?.message || 'Submission error. Retrying in 2 seconds...');
+        toast.error(err.response?.data?.message || 'Submission failed. Please check your connection and press Submit again.');
       } finally {
         setIsSubmitting(false);
         setShowSubmitConfirm(false);
       }
     },
-    [exam, attemptId, isSubmitting, answers, startTime, id]
+    [exam, attemptId, isSubmitting, answers, id]
   );
 
-  // Countdown timer hook
+  // Countdown timer (display only - the server enforces the deadline)
   useEffect(() => {
     if (step !== 'taking') return;
-
+    let fired = false;
     timerRef.current = setInterval(() => {
-      setTimeLeftSec(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          handleSubmitExam(true);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const left = Math.max(0, syncRef.current.base - (performance.now() - syncRef.current.at) / 1000);
+      setTimeLeftSec(Math.ceil(left));
+      if (left <= 0 && !fired) {
+        fired = true;
+        clearInterval(timerRef.current!);
+        handleSubmitExam(true);
+      }
     }, 1000);
 
     return () => {
@@ -200,34 +264,41 @@ const ExamTakerPage: React.FC = () => {
     };
   }, [step, handleSubmitExam]);
 
-  // Autosave to backend periodically
+  const saveDraftNow = useCallback(() => {
+    const aid = attemptIdRef.current;
+    if (!aid || finishedRef.current) return;
+    api.put(`/exams/${id}/draft`, { attemptId: aid, draftAnswers: answersRef.current })
+      .then((res) => { if (typeof res.data.remainingSeconds === 'number') setServerTime(res.data.remainingSeconds); })
+      .catch((err) => {
+        const code = err?.response?.data?.code;
+        if (code === 'TIME_UP' || code === 'ALREADY_COMPLETED') void showFinalResult(null);
+      });
+  }, [id, showFinalResult]);
+
+  // Autosave to backend periodically (and shortly after every change - see handleSelectOption)
   useEffect(() => {
     if (step !== 'taking' || !attemptId) return;
-
-    draftSaveTimerRef.current = setInterval(() => {
-      api.put(`/exams/${id}/draft`, {
-        attemptId,
-        draftAnswers: answers,
-      }).catch(() => {});
-    }, 15000);
-
+    draftSaveTimerRef.current = setInterval(saveDraftNow, 15000);
     return () => {
       if (draftSaveTimerRef.current) clearInterval(draftSaveTimerRef.current);
     };
-  }, [step, attemptId, answers, id]);
+  }, [step, attemptId, saveDraftNow]);
 
-  // Save to LocalStorage immediately on change
+  // Save to LocalStorage immediately on change, and to the server shortly after
   const handleSelectOption = (questionId: string, optionIndex: number | null) => {
     setAnswers(prev => {
       const updated = { ...prev, [questionId]: optionIndex };
+      answersRef.current = updated;
       localStorage.setItem(`learniq_exam_draft_${id}`, JSON.stringify(updated));
       return updated;
     });
+    if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
+    draftDebounceRef.current = setTimeout(saveDraftNow, DRAFT_DEBOUNCE_MS);
   };
 
-  // Integrity tracking: fullscreen and tab switch
+  // Integrity tracking for exams WITHOUT proctoring (proctored exams: useProctoring handles every signal)
   useEffect(() => {
-    if (step !== 'taking' || !attemptId) return;
+    if (step !== 'taking' || !attemptId || proctored) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -271,7 +342,7 @@ const ExamTakerPage: React.FC = () => {
       document.removeEventListener('copy', handleCopyPaste);
       document.removeEventListener('paste', handleCopyPaste);
     };
-  }, [step, attemptId, id]);
+  }, [step, attemptId, id, proctored]);
 
   // Format Time
   const formatTime = (sec: number) => {
@@ -301,6 +372,21 @@ const ExamTakerPage: React.FC = () => {
   // ─────────────────────────────────────────────
   // 1. INSTRUCTIONS SCREEN
   // ─────────────────────────────────────────────
+  if (step === 'instructions' && proctored) {
+    return (
+      <ProctoringGate
+        kind="exam"
+        examId={id || ''}
+        examTitle={exam.title}
+        durationMinutes={exam.durationMinutes}
+        policy={policy}
+        resume={resumeAttempt}
+        backTo="/student/exams"
+        onReady={handleProctoredReady}
+      />
+    );
+  }
+
   if (step === 'instructions') {
     return (
       <div className="min-h-screen bg-page py-6 sm:py-10 px-3 sm:px-4 flex items-center justify-center">
@@ -418,6 +504,13 @@ const ExamTakerPage: React.FC = () => {
               <Award className="w-8 h-8" />
             </div>
 
+            {autoSubmitReason && (
+              <div role="alert" className="mb-4 text-left p-3 rounded-xl border border-[#E1447A]/40 bg-[#FFE4EC] dark:bg-[#3D1825] text-sm text-[#9F1D4F] dark:text-[#FF8FA3]" data-testid="auto-submit-reason">
+                <p className="font-bold">Your examination has been submitted automatically.</p>
+                <p>Reason: {autoSubmitReason}</p>
+                <p className="text-xs mt-1 opacity-80">Your saved answers were graded. Your teacher can review what was recorded.</p>
+              </div>
+            )}
             <span className={`badge text-xs px-3 py-1 font-bold ${examResult.passed ? 'badge-success' : 'badge-warning'}`}>
               {examResult.passed ? 'Passed Examination' : 'Attempt Completed'}
             </span>
@@ -844,6 +937,8 @@ const ExamTakerPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {proctored && <ProctoringMonitor ctl={proctor} policy={policy} />}
     </div>
   );
 };

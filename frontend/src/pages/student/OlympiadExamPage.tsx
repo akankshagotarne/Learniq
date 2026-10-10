@@ -57,7 +57,8 @@ const OlympiadExamPage: React.FC = () => {
     if (!examId || starting) return;
     setStarting(true);
     try {
-      await olympiadApi.start(examId);
+      // proctored exam: the camera / fullscreen checks run first and start the timer only when they pass
+      if (!exam?.proctoring?.enabled) await olympiadApi.start(examId);
       navigate(`/student/olympiad/${examId}/take`, { replace: true });
     } catch (err: any) {
       const code = olympiadErrorCode(err);

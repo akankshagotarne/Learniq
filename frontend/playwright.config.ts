@@ -20,7 +20,8 @@ export default defineConfig({
     trace: 'off',
   },
   webServer: {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
+    // `--mode e2e` = the normal app plus the proctoring test hook (scripted camera detector); built into its own folder
+    command: 'npx tsc --noEmit && npx vite build --mode e2e --outDir dist-e2e && npx vite preview --outDir dist-e2e --port 4173 --strictPort',
     url: 'http://localhost:4173',
     reuseExistingServer: true,
     timeout: 180_000,

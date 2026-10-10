@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import ProctoringSettings, { policyPayload } from '../../proctoring/ProctoringSettings';
+import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ClipboardList, Plus, Trash2, ArrowUp, ArrowDown, Check,
@@ -34,6 +36,7 @@ const ExamBuilderPage: React.FC = () => {
   const [attemptLimit, setAttemptLimit] = useState<number>(1);
   const [scheduledStart, setScheduledStart] = useState<string>('');
   const [scheduledEnd, setScheduledEnd] = useState<string>('');
+  const [proctoring, setProctoring] = useState<ProctoringPolicy>(DEFAULT_PROCTORING_POLICY);
 
   // Questions
   const [questions, setQuestions] = useState<ExamQuestion[]>([
@@ -75,6 +78,7 @@ const ExamBuilderPage: React.FC = () => {
       setAttemptLimit(e.attemptLimit ?? 1);
       setScheduledStart(e.scheduledStart ? e.scheduledStart.substring(0, 16) : '');
       setScheduledEnd(e.scheduledEnd ? e.scheduledEnd.substring(0, 16) : '');
+      setProctoring({ ...DEFAULT_PROCTORING_POLICY, ...(e.proctoring || {}) });
 
       if (e.questions && e.questions.length > 0) {
         setQuestions(e.questions);
@@ -194,6 +198,7 @@ const ExamBuilderPage: React.FC = () => {
       scheduledStart: scheduledStart ? new Date(scheduledStart).toISOString() : null,
       scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
       questions,
+      proctoring: policyPayload(proctoring),
     };
 
     try {
@@ -488,6 +493,12 @@ const ExamBuilderPage: React.FC = () => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* SECTION: Online proctoring */}
+          <div className="card-soft p-4 sm:p-6 rounded-2xl border border-border-subtle bg-surface space-y-3">
+            <h3 className="font-heading font-bold text-lg text-text-primary">Online proctoring</h3>
+            <ProctoringSettings value={proctoring} onChange={setProctoring} />
           </div>
 
           {/* SECTION 3: Questions Authoring */}

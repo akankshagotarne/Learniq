@@ -19,10 +19,16 @@ const assertNoSecretsInClientEnv = (env: Record<string, string>) => {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  assertNoSecretsInClientEnv(loadEnv(mode, __dirname, 'VITE_'))
+  const env = loadEnv(mode, __dirname, 'VITE_')
+  assertNoSecretsInClientEnv(env)
+  // The proctoring test hook (scripted camera detector) exists ONLY in the automated-test build (`vite build --mode e2e`).
+  if (mode !== 'e2e' && env.VITE_PROCTOR_TEST_HOOKS) {
+    throw new Error('[env] VITE_PROCTOR_TEST_HOOKS must never be set for a real build - it is enabled automatically by `vite build --mode e2e` only.')
+  }
 
   return {
     plugins: [react()],
+    define: mode === 'e2e' ? { 'import.meta.env.VITE_PROCTOR_TEST_HOOKS': JSON.stringify('true') } : {},
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

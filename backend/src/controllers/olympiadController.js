@@ -6,6 +6,8 @@ const {
 const { Notification } = require('../models/index');
 const { getRazorpayInstance } = require('../services/razorpayClient');
 const certificates = require('../services/certificateService');
+const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
+const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -192,10 +194,14 @@ const finalizeAttempt = async (attemptId, type, now = new Date()) => {
   const current = await OlympiadAttempt.findById(attemptId);
   if (!current) return null;
   const submittedAt = new Date(Math.min(now.getTime(), current.deadline.getTime()));
-  await OlympiadAttempt.findOneAndUpdate(
+  const transitioned = await OlympiadAttempt.findOneAndUpdate(
     { _id: attemptId, status: 'IN_PROGRESS' },
     { $set: { status: 'COMPLETED', submittedAt, submissionType: type } }
   );
+  // close the proctoring session (if any) with the right reason; a PROCTORING finish was closed by the engine itself
+  if (transitioned && type !== 'PROCTORING') {
+    try { await proctoringSvc().closeForAttempt('olympiad', attemptId, type === 'MANUAL' ? 'MANUAL_SUBMISSION' : 'EXAM_TIMEOUT'); } catch (e) { console.error('[proctoring] close failed:', e.message); }
+  }
   const attempt = await OlympiadAttempt.findById(attemptId);
   return ensureEvaluated(attempt);
 };
@@ -247,6 +253,7 @@ const examPublic = (exam) => ({
   fee: exam.fee,
   currency: exam.currency,
   sections: exam.sections,
+  proctoring: publicPolicy(exam.proctoring),
 });
 
 /** Work out where this student is in the pay → start → attempt → result journey. */
@@ -578,6 +585,7 @@ const buildAttemptPayload = async (exam, attempt, now = new Date()) => {
     exam: {
       _id: exam._id, title: exam.title, standard: exam.standard, durationMinutes: exam.durationMinutes,
       totalQuestions: exam.totalQuestions, totalMarks: exam.totalMarks, sections: exam.sections,
+      proctoring: publicPolicy(exam.proctoring),
     },
     attempt: {
       _id: attempt._id,
@@ -601,6 +609,16 @@ const respondAlreadyCompleted = () => {
     'You have already submitted this examination. Your result is available.',
     'ALREADY_COMPLETED'
   );
+};
+
+/** Proctored exam: answers only count once the camera / fullscreen checks were passed and a session is open. */
+const requireProctoring = async (exam, attempt) => {
+  try {
+    await proctoringSvc().requireActiveSession('olympiad', exam, attempt);
+  } catch (err) {
+    if (err && err.code === 'PROCTORING_SESSION_REQUIRED') throw new ApiError(409, err.message, err.code);
+    throw err;
+  }
 };
 
 // POST /api/olympiad/exams/:id/start
@@ -706,6 +724,7 @@ const saveAnswers = handler(async (req, res) => {
     throw new ApiError(409, 'Time is up. Your examination was submitted automatically.', 'TIME_UP');
   }
 
+  await requireProctoring(exam, attempt);
   const ok = await applyAnswers(attempt, exam, req.body && req.body.answers, now);
   if (!ok) {
     attempt = await OlympiadAttempt.findById(attempt._id);
@@ -740,6 +759,7 @@ const submitExam = handler(async (req, res) => {
     return res.json({ success: true, autoSubmitted: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
   }
 
+  await requireProctoring(exam, attempt);
   // Optional last-second sync of the answers the browser still holds.
   if (req.body && Array.isArray(req.body.answers)) {
     await applyAnswers(attempt, exam, req.body.answers, now);
@@ -885,9 +905,12 @@ const adminAttempts = handler(async (req, res) => {
     .sort({ score: -1, timeTakenSeconds: 1 })
     .limit(1000)
     .populate('student', 'name email currentStandard');
+  const proctoringByAttempt = await proctoringSvc().summariesForAttempts('olympiad', attempts.map((a) => a._id));
   res.json({
     success: true,
+    proctoring: resolvePolicy(exam.proctoring),
     attempts: attempts.map((a) => ({
+      proctoring: proctoringByAttempt.get(String(a._id)) || null,
       _id: a._id,
       student: a.student ? { name: a.student.name, email: maskEmail(a.student.email), standard: a.student.currentStandard } : null,
       status: a.status,
@@ -903,6 +926,20 @@ const adminAttempts = handler(async (req, res) => {
       timeTakenSeconds: a.timeTakenSeconds,
     })),
   });
+});
+
+// PUT /api/olympiad/admin/exams/:id/proctoring   (admin) - attempts already running keep their frozen snapshot
+const adminUpdateProctoring = handler(async (req, res) => {
+  const exam = await loadExamAdmin(req.params.id);
+  let edit;
+  try { edit = validatePolicyInput(req.body && req.body.proctoring); } catch (e) {
+    if (e instanceof PolicyValidationError) throw new ApiError(400, e.message, 'INVALID_PROCTORING_SETTINGS', { errors: e.errors });
+    throw e;
+  }
+  const { policy } = applyPolicyEdit(exam.proctoring, edit);
+  exam.proctoring = policy;
+  await exam.save();
+  res.json({ success: true, proctoring: resolvePolicy(exam.proctoring) });
 });
 
 // One admin-facing shape for an OlympiadPayment (never includes the Razorpay signature).
@@ -1029,8 +1066,10 @@ module.exports = {
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
   startExam, getAttempt, saveAnswers, submitExam,
   getResult, getReview,
-  adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam,
+  adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam, adminUpdateProctoring,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
+  // used by the proctoring adapters (services/proctoring/adapters.js) - the Olympiad rules stay in this file
+  _proctoring: { loadExam, assertEligibleStudent, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt },
   // exported for tests
   _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated },
 };

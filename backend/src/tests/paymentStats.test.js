@@ -22,6 +22,7 @@ const counter = (n = 0) => ({ countDocuments: async () => n, find: () => ({ sort
 
 // every model the admin router (and the controllers it loads) touches
 const overrides = {
+  [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,

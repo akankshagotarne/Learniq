@@ -10,6 +10,11 @@ import { useAuth } from '../../context/AuthContext';
 import { AnswerUpdate, olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadAttemptPayload, OlympiadQuestion, OlympiadResponse } from '../../types/olympiad';
 import { formatClock } from '../../utils/olympiadFormat';
+import ProctoringGate, { GateResult } from '../../proctoring/ProctoringGate';
+import ProctoringMonitor from '../../proctoring/ProctoringMonitor';
+import { useProctoring } from '../../proctoring/useProctoring';
+import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy, SessionState } from '../../proctoring/types';
+import { OlympiadExam } from '../../types/olympiad';
 
 type SaveState = 'saved' | 'saving' | 'error';
 interface Pending { update: AnswerUpdate; v: number }
@@ -51,6 +56,11 @@ const OlympiadTakerPage: React.FC = () => {
   const nextAutoRef = useRef(0);
 
   const storageKey = `learniq_oly_pending_${examId}_${user?._id || 'anon'}`;
+
+  // online proctoring (only when the exam has it enabled)
+  const [gateExam, setGateExam] = useState<OlympiadExam | null>(null);
+  const [proctorPolicy, setProctorPolicy] = useState<ProctoringPolicy | null>(null);
+  const [terminated, setTerminated] = useState<SessionState | null>(null);
 
   // ── helpers ──────────────────────────────────────────────
   const persistPending = useCallback(() => {
@@ -142,32 +152,43 @@ const OlympiadTakerPage: React.FC = () => {
   }, [persistPending, scheduleFlush]);
 
   // ── initial load ─────────────────────────────────────────
+  /** Show an attempt payload (fresh or resumed), merging answers saved locally but never confirmed by the server. */
+  const applyPayload = useCallback((payload: OlympiadAttemptPayload) => {
+    payload.questions = [...payload.questions].sort((a, b) => a.questionNumber - b.questionNumber);
+    const merged: Record<string, OlympiadResponse> = { ...payload.responses };
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const ids = new Set(payload.questions.map(q => q._id));
+        (JSON.parse(raw) as AnswerUpdate[]).forEach(u => {
+          if (!ids.has(u.questionId)) return;
+          merged[u.questionId] = { selectedOption: u.selectedOption ?? null, marked: !!u.marked };
+          pendingRef.current.set(u.questionId, { v: ++versionRef.current, update: u });
+        });
+      }
+    } catch { /* ignore corrupt backup */ }
+
+    responsesRef.current = merged;
+    setResponses(merged);
+    syncRef.current = { base: payload.attempt.remainingSeconds, at: performance.now() };
+    setRemaining(payload.attempt.remainingSeconds);
+    setData(payload);
+  }, [storageKey]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
+      const exam = await olympiadApi.getExam(examId);
+      if (exam.state === 'completed') { goToResult(); return; }
+      if (exam.proctoring?.enabled) {
+        // proctored: the pre-exam checks run first; they start / resume the attempt when everything passes
+        setProctorPolicy({ ...DEFAULT_PROCTORING_POLICY, ...exam.proctoring });
+        setGateExam(exam);
+        return;
+      }
       const payload = await olympiadApi.getAttempt(examId);
-      payload.questions = [...payload.questions].sort((a, b) => a.questionNumber - b.questionNumber);
-
-      // merge answers that were saved locally but never confirmed by the server (e.g. connection dropped)
-      const merged: Record<string, OlympiadResponse> = { ...payload.responses };
-      try {
-        const raw = localStorage.getItem(storageKey);
-        if (raw) {
-          const ids = new Set(payload.questions.map(q => q._id));
-          (JSON.parse(raw) as AnswerUpdate[]).forEach(u => {
-            if (!ids.has(u.questionId)) return;
-            merged[u.questionId] = { selectedOption: u.selectedOption ?? null, marked: !!u.marked };
-            pendingRef.current.set(u.questionId, { v: ++versionRef.current, update: u });
-          });
-        }
-      } catch { /* ignore corrupt backup */ }
-
-      responsesRef.current = merged;
-      setResponses(merged);
-      syncRef.current = { base: payload.attempt.remainingSeconds, at: performance.now() };
-      setRemaining(payload.attempt.remainingSeconds);
-      setData(payload);
+      applyPayload(payload);
       if (pendingRef.current.size > 0) { setSaveState('saving'); scheduleFlush(); }
     } catch (err: any) {
       const code = olympiadErrorCode(err);
@@ -177,7 +198,36 @@ const OlympiadTakerPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [examId, goToResult, navigate, scheduleFlush, storageKey]);
+  }, [examId, goToResult, navigate, scheduleFlush, applyPayload]);
+
+  const proctor = useProctoring({
+    kind: 'olympiad',
+    examId,
+    policy: proctorPolicy || DEFAULT_PROCTORING_POLICY,
+    getAnswersSnapshot: () => Object.entries(responsesRef.current).map(([questionId, r]) => ({ questionId, selectedOption: r.selectedOption, marked: r.marked })),
+    onTerminated: (state) => {
+      finishedRef.current = true;
+      try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      if (state.autoSubmitted) setTerminated(state);
+      else goToResult();
+    },
+  });
+
+  /** Pre-exam checks passed (fullscreen is on): start or resume the attempt, then open the monitoring session. */
+  const handleProctoredReady = async ({ precheck, stream, detector }: GateResult) => {
+    let payload: OlympiadAttemptPayload;
+    try {
+      payload = await olympiadApi.start(examId);
+    } catch (err: any) {
+      if (olympiadErrorCode(err) === 'ALREADY_COMPLETED') { goToResult(); return; }
+      throw new Error(olympiadErrorMessage(err, 'Unable to start the examination.'));
+    }
+    applyPayload(payload);
+    const state = await proctor.start(payload.attempt._id, precheck, stream, detector);
+    if (!state.terminated) setGateExam(null);
+    if (pendingRef.current.size > 0) { setSaveState('saving'); scheduleFlush(); }
+  };
 
   useEffect(() => { void load(); }, [load]);
 
@@ -291,6 +341,35 @@ const OlympiadTakerPage: React.FC = () => {
     : 'bg-surface-alt text-text-primary border-border-subtle';
 
   // ── screens ──────────────────────────────────────────────
+  if (terminated) {
+    return (
+      <div className="min-h-screen bg-page flex items-center justify-center p-6">
+        <div role="alertdialog" aria-modal="true" aria-labelledby="term-title" className="card-soft p-8 text-center max-w-md border border-[#E1447A]/40" data-testid="olympiad-terminated">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-[#E1447A]/10 text-[#E1447A] flex items-center justify-center mb-4"><AlertTriangle className="w-7 h-7" /></div>
+          <h2 id="term-title" className="font-heading font-bold text-lg text-text-primary mb-1">Your examination has been submitted automatically.</h2>
+          <p className="text-sm text-text-secondary">Reason: {terminated.terminationText || 'Examination rule violation.'}</p>
+          <p className="text-xs text-text-muted mt-2">Your saved answers were evaluated. The recorded events will be reviewed.</p>
+          <button onClick={goToResult} className="btn-primary text-sm py-2.5 px-5 mt-5">View result</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gateExam && proctorPolicy && !loading) {
+    return (
+      <ProctoringGate
+        kind="olympiad"
+        examId={examId}
+        examTitle={gateExam.title}
+        durationMinutes={gateExam.durationMinutes}
+        policy={proctorPolicy}
+        resume={gateExam.state === 'in_progress'}
+        backTo={`/student/olympiad/${examId}`}
+        onReady={handleProctoredReady}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-page flex items-center justify-center">
@@ -616,6 +695,8 @@ const OlympiadTakerPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {proctorPolicy && <ProctoringMonitor ctl={proctor} policy={proctorPolicy} />}
     </div>
   );
 };
