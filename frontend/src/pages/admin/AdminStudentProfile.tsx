@@ -96,8 +96,8 @@ const AdminStudentProfilePage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 min-w-0 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
           <BackButton label="Back to students" onClick={back} />
 
           {loading ? <ProfileSkeleton /> : error || !profile || !u || !a ? (
@@ -114,7 +114,7 @@ const AdminStudentProfilePage: React.FC = () => {
                       {u.currentStandard != null && <Badge>Std {u.currentStandard}</Badge>}
                       <Badge tone={u.isActive ? 'green' : 'pink'}>{u.isActive ? 'Active' : 'Deactivated'}</Badge>
                     </div>
-                    <p className="text-text-secondary text-sm mt-1 flex items-center gap-1.5 flex-wrap"><Mail className="w-3.5 h-3.5" />{u.email}
+                    <p className="text-text-secondary text-sm mt-1 flex items-center gap-1.5 flex-wrap"><Mail className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{u.email}</span>
                       {u.phone && <><span className="text-text-muted">•</span><Phone className="w-3.5 h-3.5" />{u.phone}</>}
                     </p>
                     <p className="text-text-muted text-xs mt-1">Joined {formatISTDate(u.createdAt)}{u.lastLogin ? ` • Last login ${formatISTDateTime(u.lastLogin)}` : ''}</p>
@@ -175,7 +175,7 @@ const AdminStudentProfilePage: React.FC = () => {
                     <Stat label="Best Olympiad score" value={a.olympiadBestPercentage == null ? '—' : `${a.olympiadBestPercentage}%`} icon={<Trophy className="w-4 h-4" />} tone="green" />
                     <Stat label="Total paid" value={formatRupees(profile.payments.summary.totalPaid)} icon={<IndianRupee className="w-4 h-4" />} tone="green" />
                   </div>
-                  <div className="grid md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Section title="Personal information">
                       <dl>
                         <InfoRow label="Full name">{u.name}</InfoRow>

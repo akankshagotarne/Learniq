@@ -63,8 +63,8 @@ const AdminTeachers: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Admin</p>
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Manage Teachers</h1>

@@ -76,8 +76,8 @@ const TeacherLiveSessions: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Live Sessions</h1>
@@ -91,7 +91,7 @@ const TeacherLiveSessions: React.FC = () => {
           {/* Create Modal */}
           {showCreate && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-surface border border-border-subtle rounded-2xl shadow-xl p-6 w-full max-w-md animate-slide-up">
+              <div role="dialog" aria-modal="true" aria-label="Create live session" className="bg-surface border border-border-subtle rounded-2xl shadow-xl p-5 sm:p-6 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto animate-slide-up">
                 <h2 className="text-text-primary font-bold text-xl mb-5 font-heading">Create Live Session</h2>
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
@@ -147,11 +147,11 @@ const TeacherLiveSessions: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {sessions.map(session => (
-                <div key={session._id} className="card-soft p-5">
+                <div key={session._id} className="card-soft p-4 sm:p-5">
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <h3 className="text-text-primary font-semibold text-base font-heading">{session.title}</h3>
+                        <h3 className="text-text-primary font-semibold text-base font-heading break-words min-w-0">{session.title}</h3>
                         {session.status === 'live' ? (
                           <span className="badge-live">LIVE</span>
                         ) : session.status === 'scheduled' ? (
@@ -161,7 +161,7 @@ const TeacherLiveSessions: React.FC = () => {
                         )}
                       </div>
                       <p className="text-text-secondary text-sm mb-3">{session.description}</p>
-                      <div className="flex flex-wrap gap-4 text-xs text-text-muted">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-text-muted">
                         <span className="font-medium text-text-secondary">{session.subject} • Std {session.standard}</span>
                         {session.scheduledAt && <span><Clock className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{new Date(session.scheduledAt).toLocaleString('en-IN')}</span>}
                         <span><Users className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{(session as any).totalParticipants || 0} participants</span>
@@ -173,14 +173,14 @@ const TeacherLiveSessions: React.FC = () => {
                         <span className="text-brand-primary text-xs font-mono truncate font-medium">
                           {session.joinUrl || `${window.location.origin}/live/${session.sessionCode}`}
                         </span>
-                        <button onClick={() => copyLink(session)}
-                          className="flex-shrink-0 text-text-muted hover:text-text-primary transition-colors p-1">
+                        <button onClick={() => copyLink(session)} aria-label="Copy join link"
+                          className="flex-shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary transition-colors">
                           <Copy className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex md:flex-col gap-2 flex-shrink-0">
+                    <div className="flex flex-wrap md:flex-col gap-2 md:flex-shrink-0">
                       {session.status === 'scheduled' && (
                         <button onClick={() => handleStart(session._id)}
                           className="btn-primary text-sm py-2 px-4 flex items-center gap-1.5">

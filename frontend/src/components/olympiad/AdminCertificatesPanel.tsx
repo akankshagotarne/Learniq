@@ -224,7 +224,7 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
 
       {revoking && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Revoke certificate">
-          <div className="card-soft rounded-2xl p-6 w-full max-w-md">
+          <div className="card-soft rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h3 className="font-heading font-bold text-lg text-text-primary">Revoke certificate?</h3>
             <p className="text-sm text-text-secondary mt-1">
               <span className="font-mono font-semibold">{revoking.certificateNumber}</span> ({revoking.studentName}) will show <b>Certificate Revoked</b> when its QR code is scanned, and the student can no longer download it. The record is kept, and you can reinstate it later.

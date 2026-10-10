@@ -63,8 +63,8 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Admin Dashboard</h1>
             <p className="text-text-secondary text-sm mt-1">Platform overview and management</p>
@@ -93,20 +93,21 @@ const AdminDashboard: React.FC = () => {
               </h3>
               <div className="space-y-2">
                 {pendingTeachers.map(teacher => (
-                  <div key={teacher._id} className="flex items-center gap-3 p-3 bg-surface rounded-xl border border-border-subtle">
+                  <div key={teacher._id} className="flex flex-wrap items-center gap-3 p-3 bg-surface rounded-xl border border-border-subtle">
                     <img src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name)}&background=6C63F2&color=fff&size=40`}
-                      alt={teacher.name} className="w-9 h-9 rounded-full object-cover" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-text-primary text-sm font-semibold font-heading">{teacher.name}</p>
-                      <p className="text-text-secondary text-xs">{teacher.email}</p>
+                      alt={teacher.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                    {/* the name keeps at least 10rem; on a narrow phone the buttons move to their own line */}
+                    <div className="flex-1 min-w-[10rem]">
+                      <p className="text-text-primary text-sm font-semibold font-heading break-words">{teacher.name}</p>
+                      <p className="text-text-secondary text-xs [overflow-wrap:anywhere]">{teacher.email}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full sm:w-auto justify-end">
                       <button onClick={() => approveTeacher(teacher._id, true)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#DCFCE7] text-[#16A34A] border border-[#DCFCE7] rounded-lg text-xs font-medium hover:bg-[#DCFCE7]/80 transition-all">
+                        className="flex items-center gap-1 px-3 py-1.5 min-h-[36px] bg-[#DCFCE7] text-[#16A34A] border border-[#DCFCE7] rounded-lg text-xs font-medium hover:bg-[#DCFCE7]/80 transition-all">
                         <UserCheck className="w-3.5 h-3.5" /> Approve
                       </button>
                       <button onClick={() => approveTeacher(teacher._id, false)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#FFE4EC] text-[#E1447A] border border-[#FFE4EC] rounded-lg text-xs font-medium hover:bg-[#FFE4EC]/80 transition-all">
+                        className="flex items-center gap-1 px-3 py-1.5 min-h-[36px] bg-[#FFE4EC] text-[#E1447A] border border-[#FFE4EC] rounded-lg text-xs font-medium hover:bg-[#FFE4EC]/80 transition-all">
                         <UserX className="w-3.5 h-3.5" /> Reject
                       </button>
                     </div>
@@ -117,7 +118,7 @@ const AdminDashboard: React.FC = () => {
           )}
 
           {/* Charts */}
-          <div className="grid lg:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Students by Standard */}
             <div className="card-soft p-5">
               <h3 className="text-text-primary font-semibold mb-4 font-heading">Students by Standard Group</h3>
@@ -147,7 +148,7 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Subject Distribution */}
             <div className="card-soft p-5">
               <h3 className="text-text-primary font-semibold mb-4 font-heading">Popular Subjects</h3>

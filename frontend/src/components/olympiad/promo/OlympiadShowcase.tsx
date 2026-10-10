@@ -397,7 +397,7 @@ const OlympiadShowcase: React.FC = () => {
       ref={sectionRef}
       id="olympiad-2026"
       aria-labelledby="olympiad-2026-heading"
-      className="oly-top"
+      className="oly-top clip-x"
       style={vars({ '--oly-accent': artwork.accent })}
       onFocus={e => { if ((e.target as HTMLElement).matches?.(':focus-visible')) setKeyboardFocus(true); }}
       onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setKeyboardFocus(false); }}

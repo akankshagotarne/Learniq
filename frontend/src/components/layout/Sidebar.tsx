@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
@@ -59,6 +59,36 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Page content is offset by the sidebar width (lg:ml-[var(--sidebar-w)]), so it follows the collapsed state
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-w', collapsed ? '4rem' : '16rem');
+  }, [collapsed]);
+
+  // Mobile drawer: Escape closes it, the page behind does not scroll, focus moves into it and back to the menu button
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeBtnRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKey);
+      menuBtnRef.current?.focus();
+    };
+  }, [mobileOpen]);
+
+  // The drawer is for small screens only: close it if the window grows past the lg breakpoint
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => { if (mq.matches) setMobileOpen(false); };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   if (!user) return null;
 
@@ -69,12 +99,15 @@ const Sidebar: React.FC = () => {
   return (
     <>
       {/* Mobile top bar - only shown below md, gives access to the drawer */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 dark:bg-[#1B1C2E]/95 backdrop-blur-xl border-b border-[#E7E7F2] dark:border-[#2E2F4A] z-40 flex items-center justify-between px-4">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 dark:bg-[#1B1C2E]/95 backdrop-blur-xl border-b border-[#E7E7F2] dark:border-[#2E2F4A] z-40 flex items-center justify-between px-4">
         <LogoLink size="sm" />
         <button
+          ref={menuBtnRef}
           onClick={() => setMobileOpen(true)}
-          className="p-2 text-[#6B6E8C] dark:text-[#A6A8C4] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+          className="w-11 h-11 -mr-2 inline-flex items-center justify-center text-[#6B6E8C] dark:text-[#A6A8C4] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
           aria-label="Open menu"
+          aria-expanded={mobileOpen}
+          aria-controls="app-sidebar"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -83,29 +116,35 @@ const Sidebar: React.FC = () => {
       {/* Backdrop behind the mobile drawer */}
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black/40 z-40"
+          className="lg:hidden fixed inset-0 bg-black/40 z-40"
           onClick={closeMobile}
         />
       )}
 
-      <aside className={`fixed left-0 top-0 h-full bg-white dark:bg-[#1B1C2E] border-r border-[#E7E7F2] dark:border-[#2E2F4A] z-50 flex flex-col shadow-[0_4px_20px_rgba(34,36,58,0.04)]
-        transition-transform duration-300 transform
-        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
-        w-64 ${collapsed ? 'md:w-16' : 'md:w-64'}`}>
+      {/* When the drawer is closed on a phone it is also `invisible`, so its links are not reachable by keyboard / screen reader */}
+      <aside
+        id="app-sidebar"
+        aria-label="Main navigation"
+        className={`fixed left-0 top-0 h-full max-w-[85vw] bg-white dark:bg-[#1B1C2E] border-r border-[#E7E7F2] dark:border-[#2E2F4A] z-50 flex flex-col shadow-[0_4px_20px_rgba(34,36,58,0.04)]
+        duration-300 transform
+        ${mobileOpen ? 'translate-x-0 visible transition-transform' : '-translate-x-full invisible transition-[transform,visibility]'} lg:translate-x-0 lg:visible
+        w-64 ${collapsed ? 'lg:w-16' : 'lg:w-64'}`}
+      >
         {/* Top Header / Logo */}
-        <div className={`flex items-center h-16 px-4 border-b border-[#E7E7F2] dark:border-[#2E2F4A] justify-between ${collapsed ? 'md:justify-center' : ''}`}>
-          { !(collapsed) && <span className="hidden md:block"><LogoLink size="sm" /></span>}
-          <span className="md:hidden font-heading font-bold text-[#22243A] dark:text-[#F4F4FA]">Menu</span>
+        <div className={`flex items-center h-16 px-4 border-b border-[#E7E7F2] dark:border-[#2E2F4A] justify-between ${collapsed ? 'lg:justify-center' : ''}`}>
+          { !(collapsed) && <span className="hidden lg:block"><LogoLink size="sm" /></span>}
+          <span className="lg:hidden font-heading font-bold text-[#22243A] dark:text-[#F4F4FA]">Menu</span>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden md:inline-flex p-1.5 text-[#A0A3C0] hover:text-[#22243A] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+            className="hidden lg:inline-flex p-1.5 text-[#A0A3C0] hover:text-[#22243A] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
             aria-label="Toggle sidebar collapse"
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
           <button
+            ref={closeBtnRef}
             onClick={closeMobile}
-            className="md:hidden p-1.5 text-[#A0A3C0] hover:text-[#22243A] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+            className="lg:hidden w-10 h-10 -mr-2 inline-flex items-center justify-center text-[#A0A3C0] hover:text-[#22243A] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-colors"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -146,10 +185,10 @@ const Sidebar: React.FC = () => {
                 to={item.href}
                 title={collapsed ? item.label : undefined}
                 onClick={closeMobile}
-                className={`sidebar-item ${isActive ? 'active' : ''} ${collapsed ? 'md:justify-center md:px-2' : ''}`}
+                className={`sidebar-item ${isActive ? 'active' : ''} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                <span className={collapsed ? 'md:hidden' : ''}>{item.label}</span>
+                <span className={collapsed ? 'lg:hidden' : ''}>{item.label}</span>
               </Link>
             );
           })}
@@ -167,10 +206,10 @@ const Sidebar: React.FC = () => {
           <button
             onClick={() => { closeMobile(); logout(); }}
             title={collapsed ? 'Logout' : undefined}
-            className={`sidebar-item w-full text-[#E1447A] hover:bg-[#FFE4EC] dark:hover:bg-[#E1447A]/10 transition-all font-medium ${collapsed ? 'md:justify-center md:px-2' : ''}`}
+            className={`sidebar-item w-full text-[#E1447A] hover:bg-[#FFE4EC] dark:hover:bg-[#E1447A]/10 transition-all font-medium ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            <span className={collapsed ? 'md:hidden' : ''}>Logout</span>
+            <span className={collapsed ? 'lg:hidden' : ''}>Logout</span>
           </button>
         </div>
       </aside>

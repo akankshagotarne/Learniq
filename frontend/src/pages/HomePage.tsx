@@ -81,7 +81,7 @@ const HomePage: React.FC = () => {
         </div>
 
         <div className="page-container relative z-10 pt-6 pb-12">
-          <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
             {/* Left Col */}
             <div className="lg:col-span-7 animate-slide-up space-y-6">
               {/* Pill Tag */}
@@ -258,7 +258,7 @@ const HomePage: React.FC = () => {
               </Link>
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {courses.map(course => (
                 <Link
                   key={course._id}
@@ -321,7 +321,7 @@ const HomePage: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map(({ icon: Icon, title, desc, bg }) => (
               <div
                 key={title}
@@ -348,7 +348,7 @@ const HomePage: React.FC = () => {
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map(({ name, std, text, avatar }) => (
               <div
                 key={name}

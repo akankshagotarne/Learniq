@@ -169,7 +169,7 @@ const CoursesPage: React.FC = () => {
               </div>
 
               {loading ? (
-                <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="card-soft overflow-hidden animate-pulse">
                       <div className="bg-surface-alt aspect-video" />
@@ -196,7 +196,7 @@ const CoursesPage: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                   {courses.map(course => (
                     <Link key={course._id} to={`/courses/${course._id}`} className="course-card group">
                       <div className="relative overflow-hidden rounded-t-[15px]">

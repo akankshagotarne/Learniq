@@ -275,7 +275,7 @@ const PaymentPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="grid lg:grid-cols-12 gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left: Payment Method Selection */}
             <div className="lg:col-span-7 space-y-6">
               {/* Payment Methods Tabs */}

@@ -69,8 +69,42 @@
     background-color: var(--bg-page);
     color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
+    /* No `overflow-x: hidden` here on purpose: it used to hide (and clip) content that was wider than the phone.
+       Layouts are now built to fit; decorative bleed is clipped by its own section (see .clip-x). */
+    overflow-wrap: break-word; /* long e-mails, ids and URLs wrap instead of pushing the page wider */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Form controls have a built-in minimum width (an <input> is ~20 characters wide, a <select> as wide as its longest
+     option). Inside a flex row that minimum would push the row past the screen edge, so let them shrink. */
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* iOS Safari zooms the whole page when a form field with text smaller than 16px gets focus. */
+  @media (max-width: 639px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+    select,
+    textarea {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+
+  /* Respect the operating-system "reduce motion" setting. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -103,6 +137,70 @@
 }
 
 @layer components {
+  /* The standard LearnIQ card. Used on almost every page; it was referenced but never defined, so cards had no
+     surface, border or radius. Utilities on the element (rounded-2xl, bg-surface, a coloured border…) still win. */
+  .card-soft {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    box-shadow: var(--shadow-soft);
+    min-width: 0; /* a card inside a grid/flex row may shrink to the screen instead of forcing it wider */
+  }
+
+  /* Status chips used by exam cards (were referenced but never defined) */
+  .badge-success {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    font-weight: 600;
+    background-color: #DCFCE7;
+    color: #15803D;
+  }
+
+  .dark .badge-success {
+    background-color: rgba(74, 222, 154, 0.18);
+    color: #5CE6A8;
+  }
+
+  .badge-warning {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    font-weight: 600;
+    background-color: #FEF3C7;
+    color: #B45309;
+  }
+
+  .dark .badge-warning {
+    background-color: rgba(255, 194, 75, 0.18);
+    color: #FFCA5E;
+  }
+
+  /* A row that scrolls sideways on its own (tabs, filter chips) — the page itself never scrolls sideways */
+  .scroll-row {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Fades the right edge so a cut-off chip reads as "scroll for more" (the end padding lets the last chip clear the fade) */
+  .scroll-row-fade {
+    padding-right: 1.5rem;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  }
+
+  /* Clip decorative shapes that are meant to bleed past a section's edge, without clipping the page */
+  .clip-x {
+    overflow-x: clip;
+  }
+
   /* Soft friendly card */
   .glass-card {
     background: var(--bg-surface);

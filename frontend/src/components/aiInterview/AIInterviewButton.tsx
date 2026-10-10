@@ -43,7 +43,8 @@ const useInterviewStatus = (examId: string, skip: boolean) => {
   return { status, loading, refresh };
 };
 
-const rowClass = 'mt-2 w-full py-2.5 px-4 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-2';
+// Same size as the Start Exam button above it: full card width, 44px tall touch target, text wraps instead of clipping
+const rowClass = 'mt-2 w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs leading-snug font-bold text-center flex items-center justify-center gap-2';
 
 const AIInterviewButton: React.FC<Props> = ({ examId, examState }) => {
   const navigate = useNavigate();
@@ -68,17 +69,17 @@ const AIInterviewButton: React.FC<Props> = ({ examId, examState }) => {
   if (notPurchased) {
     return (
       <div className={`${rowClass} bg-surface-alt border border-border-subtle text-text-muted font-semibold cursor-not-allowed`} data-testid="ai-interview-locked" role="note">
-        <Lock className="w-3.5 h-3.5" aria-hidden="true" /> <span>🔒 Purchase exam to unlock AI Interview</span>
+        <Lock className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> <span className="min-w-0">🔒 Purchase exam to unlock AI Interview</span>
       </div>
     );
   }
-  if (loading) return <div className="mt-2 h-9 rounded-xl skeleton" aria-hidden="true" data-testid="ai-interview-loading" />;
+  if (loading) return <div className="mt-2 h-11 rounded-xl skeleton" aria-hidden="true" data-testid="ai-interview-loading" />;
   if (!status || !status.enabled) return null;
 
   if (!status.entitled) {
     return (
       <div className={`${rowClass} bg-surface-alt border border-border-subtle text-text-muted font-semibold cursor-not-allowed`} data-testid="ai-interview-locked" role="note">
-        <Lock className="w-3.5 h-3.5" aria-hidden="true" /> <span>🔒 Purchase exam to unlock AI Interview</span>
+        <Lock className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> <span className="min-w-0">🔒 Purchase exam to unlock AI Interview</span>
       </div>
     );
   }
@@ -87,11 +88,11 @@ const AIInterviewButton: React.FC<Props> = ({ examId, examState }) => {
     return (
       <div className="mt-2 space-y-2" data-testid="ai-interview-completed">
         <div className={`${rowClass} mt-0 bg-[#4ADE9A]/10 border border-[#4ADE9A]/30 text-text-primary`} role="status">
-          <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" aria-hidden="true" /> <span>✓ AI Interview Completed{typeof status.percentage === 'number' ? ` · ${status.percentage}%` : ''}</span>
+          <CheckCircle className="w-4 h-4 flex-shrink-0 text-[#4ADE9A]" aria-hidden="true" /> <span className="min-w-0">✓ AI Interview Completed{typeof status.percentage === 'number' ? ` · ${status.percentage}%` : ''}</span>
         </div>
         <Link
           to={`/student/ai-interview/${examId}/result`}
-          className="w-full py-2 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
+          className="w-full min-h-[44px] py-2 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
         >
           View Result
         </Link>

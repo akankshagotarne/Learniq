@@ -181,7 +181,7 @@ const LecturePlayerPage: React.FC = () => {
         <Navbar />
         <div className="pt-24 page-container py-12">
           <div className="card-soft h-96 rounded-2xl mb-8 animate-pulse bg-surface-alt" />
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 card-soft h-64 rounded-2xl animate-pulse bg-surface-alt" />
             <div className="card-soft h-64 rounded-2xl animate-pulse bg-surface-alt" />
           </div>
@@ -235,7 +235,7 @@ const LecturePlayerPage: React.FC = () => {
         </div>
 
         {/* Main Grid: Video + Playlist */}
-        <div className="flex-1 grid lg:grid-cols-12 gap-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0">
           {/* Left / Center: Video and Tabs */}
           <div className="lg:col-span-8 xl:col-span-9 flex flex-col bg-page border-r border-border-subtle">
             {/* Video Container - Focused player viewport */}
@@ -442,7 +442,7 @@ const LecturePlayerPage: React.FC = () => {
                     <h3 className="font-heading text-sm font-semibold text-text-primary flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-brand-primary" /> What you will learn
                     </h3>
-                    <ul className="grid sm:grid-cols-2 gap-2.5 text-xs text-text-secondary">
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-text-secondary">
                       <li className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-accent-mint" /> Step-by-step conceptual derivation
                       </li>

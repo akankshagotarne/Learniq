@@ -16,7 +16,7 @@ const END_REASON_TEXT: Record<string, string> = {
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex min-h-screen bg-page transition-colors">
     <Sidebar />
-    <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0">
+    <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0">
       <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
         <Link to="/student/exams" className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-brand-primary mb-5">
           <ArrowLeft className="w-4 h-4" /> Back to Exams
@@ -120,7 +120,7 @@ const AIInterviewResultPage: React.FC = () => {
           </section>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 mb-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-6">
           <section className="card-soft p-5 rounded-2xl bg-surface border border-border-subtle" aria-label="Strengths">
             <h2 className="font-heading font-bold text-sm text-text-primary mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-[#16A34A]" aria-hidden="true" /> Strengths</h2>
             {result.strengths.length > 0
