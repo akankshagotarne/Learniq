@@ -24,7 +24,7 @@ const StudentCertificatesPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0">
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
           <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">My Results</p>
           <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary flex items-center gap-2">
@@ -46,7 +46,7 @@ const StudentCertificatesPage: React.FC = () => {
               {withCertificate.length === 0 ? (
                 <div className="card-soft p-6 text-sm text-text-secondary mb-8">No certificate yet — a certificate is issued for a score of 60% or more.</div>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-4 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                   {withCertificate.map(e => (
                     <div key={e._id} className="card-soft rounded-2xl p-5 border border-[#FFC24B]/40" data-testid="certificate-card">
                       <div className="flex items-center justify-between gap-2 mb-2">

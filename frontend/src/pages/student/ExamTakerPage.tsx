@@ -303,8 +303,8 @@ const ExamTakerPage: React.FC = () => {
   // ─────────────────────────────────────────────
   if (step === 'instructions') {
     return (
-      <div className="min-h-screen bg-page py-10 px-4 flex items-center justify-center">
-        <div className="max-w-2xl w-full card-soft p-6 sm:p-8 rounded-2xl shadow-xl border border-border-subtle">
+      <div className="min-h-screen bg-page py-6 sm:py-10 px-3 sm:px-4 flex items-center justify-center">
+        <div className="max-w-2xl w-full card-soft p-5 sm:p-8 rounded-2xl shadow-xl border border-border-subtle">
           <Link
             to="/student/exams"
             className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary mb-6 transition-colors"
@@ -312,15 +312,15 @@ const ExamTakerPage: React.FC = () => {
             <ChevronLeft className="w-4 h-4" /> Back to Exams
           </Link>
 
-          <div className="flex items-center gap-3 mb-4">
-            <span className="p-2.5 rounded-2xl bg-[#6C63F2]/15 text-brand-primary">
+          <div className="flex flex-col items-start gap-3 mb-4 sm:flex-row sm:items-center">
+            <span className="p-2.5 rounded-2xl bg-[#6C63F2]/15 text-brand-primary flex-shrink-0">
               <BookOpen className="w-6 h-6" />
             </span>
-            <div>
+            <div className="min-w-0">
               <span className="badge-primary text-[10px] py-0 px-2 uppercase tracking-wide">
                 Standard {exam.standard} • {exam.subject}
               </span>
-              <h1 className="font-heading font-bold text-2xl text-text-primary mt-0.5">
+              <h1 className="font-heading font-bold text-xl sm:text-2xl leading-snug text-text-primary mt-1 break-words">
                 {exam.title}
               </h1>
             </div>
@@ -408,10 +408,10 @@ const ExamTakerPage: React.FC = () => {
   // ─────────────────────────────────────────────
   if (step === 'submitted' && examResult) {
     return (
-      <div className="min-h-screen bg-page py-10 px-4">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="min-h-screen bg-page py-6 sm:py-10 px-3 sm:px-4">
+        <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
           {/* Header Scorecard Card */}
-          <div className="card-soft p-6 sm:p-8 rounded-2xl shadow-xl border border-border-subtle text-center relative overflow-hidden bg-surface">
+          <div className="card-soft p-5 sm:p-8 rounded-2xl shadow-xl border border-border-subtle text-center relative overflow-hidden bg-surface">
             <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-brand-primary via-[#5AC8FA] to-[#4ADE9A]" />
 
             <div className="w-16 h-16 mx-auto rounded-3xl bg-[#4ADE9A]/15 text-[#4ADE9A] flex items-center justify-center mb-3">
@@ -464,7 +464,7 @@ const ExamTakerPage: React.FC = () => {
           </div>
 
           {/* Detailed Question Review */}
-          <div className="card-soft p-6 sm:p-8 rounded-2xl border border-border-subtle bg-surface space-y-6">
+          <div className="card-soft p-5 sm:p-8 rounded-2xl border border-border-subtle bg-surface space-y-6">
             <div className="border-b border-border-subtle pb-4">
               <h2 className="font-heading font-bold text-xl text-text-primary">
                 Detailed Question Review
@@ -584,13 +584,13 @@ const ExamTakerPage: React.FC = () => {
       className="min-h-screen bg-page flex flex-col select-none transition-colors"
     >
       {/* Top Bar: Title, Timer, Submitting, Answer count */}
-      <header className="h-16 border-b border-border-subtle bg-surface sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="w-9 h-9 rounded-xl bg-[#6C63F2]/10 text-brand-primary flex items-center justify-center font-bold">
+      <header className="h-16 border-b border-border-subtle bg-surface sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3 shadow-sm">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <span className="hidden sm:flex w-9 h-9 flex-shrink-0 rounded-xl bg-[#6C63F2]/10 text-brand-primary items-center justify-center font-bold">
             Q
           </span>
-          <div>
-            <h2 className="font-heading font-bold text-sm sm:text-base text-text-primary line-clamp-1 max-w-[200px] sm:max-w-md">
+          <div className="min-w-0">
+            <h2 className="font-heading font-bold text-sm sm:text-base text-text-primary truncate sm:max-w-md">
               {exam.title}
             </h2>
             <p className="text-[10px] text-text-muted">
@@ -599,10 +599,11 @@ const ExamTakerPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Countdown Clock */}
           <div
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border font-mono font-bold text-sm ${
+            aria-label="Time remaining"
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl border font-mono font-bold text-sm tabular-nums ${
               isTimeCritical
                 ? 'bg-[#E1447A]/15 border-[#E1447A] text-[#E1447A] animate-pulse'
                 : 'bg-surface-alt border-border-subtle text-text-primary'
@@ -615,7 +616,7 @@ const ExamTakerPage: React.FC = () => {
           {/* Submit Exam Button */}
           <button
             onClick={() => setShowSubmitConfirm(true)}
-            className="btn-primary text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 font-bold shadow-sm"
+            className="btn-primary text-xs min-h-[40px] py-2 px-3 sm:px-4 rounded-xl flex items-center gap-1.5 font-bold shadow-sm"
           >
             <Send className="w-3.5 h-3.5" /> Submit
           </button>
@@ -627,11 +628,11 @@ const ExamTakerPage: React.FC = () => {
         {/* Left / Center 3 Columns: Current Question */}
         <div className="lg:col-span-3 space-y-4">
           {currentQ ? (
-            <div className="card-soft p-6 sm:p-8 rounded-2xl border border-border-subtle bg-surface flex flex-col justify-between min-h-[460px] shadow-sm">
+            <div className="card-soft p-4 sm:p-8 rounded-2xl border border-border-subtle bg-surface flex flex-col justify-between sm:min-h-[460px] shadow-sm">
               <div>
                 {/* Question metadata header */}
-                <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-4 mb-6">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-4 mb-5 sm:mb-6">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="px-3 py-1 rounded-xl bg-brand-primary/10 text-brand-primary text-xs font-bold">
                       Question {currentQIndex + 1} of {questions.length}
                     </span>
@@ -643,7 +644,7 @@ const ExamTakerPage: React.FC = () => {
                   {currentAnswer !== null && currentAnswer !== undefined ? (
                     <button
                       onClick={() => handleSelectOption(currentQId, null)}
-                      className="text-[11px] text-text-muted hover:text-[#E1447A] transition-colors"
+                      className="min-h-[36px] px-2 -mr-2 text-[11px] text-text-muted hover:text-[#E1447A] transition-colors"
                     >
                       Clear Selection
                     </button>
@@ -651,7 +652,7 @@ const ExamTakerPage: React.FC = () => {
                 </div>
 
                 {/* Question prompt */}
-                <p className="font-heading font-medium text-base sm:text-lg text-text-primary leading-relaxed mb-6">
+                <p className="font-heading font-medium text-base sm:text-lg text-text-primary leading-relaxed mb-5 sm:mb-6 whitespace-pre-wrap break-words">
                   {currentQ.question}
                 </p>
 
@@ -664,15 +665,15 @@ const ExamTakerPage: React.FC = () => {
                       <button
                         key={optIndex}
                         onClick={() => handleSelectOption(currentQId, optIndex)}
-                        className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between text-sm transition-all ${
+                        className={`w-full p-3.5 sm:p-4 rounded-2xl border text-left flex items-center justify-between gap-2 text-sm transition-all ${
                           isSelected
                             ? 'border-brand-primary bg-brand-primary/10 text-text-primary shadow-sm ring-1 ring-brand-primary'
                             : 'border-border-subtle bg-surface hover:bg-surface-alt text-text-primary'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <span
-                            className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs transition-colors ${
+                            className={`w-7 h-7 flex-shrink-0 rounded-xl flex items-center justify-center font-bold text-xs transition-colors ${
                               isSelected
                                 ? 'bg-brand-primary text-white'
                                 : 'bg-surface-alt text-text-secondary border border-border-subtle'
@@ -680,11 +681,11 @@ const ExamTakerPage: React.FC = () => {
                           >
                             {String.fromCharCode(65 + optIndex)}
                           </span>
-                          <span className="font-medium">{opt}</span>
+                          <span className="font-medium min-w-0 break-words">{opt}</span>
                         </div>
 
                         {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-brand-primary text-white flex items-center justify-center">
+                          <div className="w-5 h-5 flex-shrink-0 rounded-full bg-brand-primary text-white flex items-center justify-center">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         )}
@@ -695,11 +696,11 @@ const ExamTakerPage: React.FC = () => {
               </div>
 
               {/* Bottom Nav: Previous / Next */}
-              <div className="flex items-center justify-between border-t border-border-subtle pt-6 mt-8">
+              <div className="flex items-center justify-between gap-2 border-t border-border-subtle pt-5 sm:pt-6 mt-6 sm:mt-8">
                 <button
                   onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
                   disabled={currentQIndex === 0}
-                  className="btn-secondary text-xs py-2.5 px-4 rounded-xl flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="btn-secondary text-xs min-h-[44px] py-2.5 px-4 rounded-xl flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <ArrowLeft className="w-4 h-4" /> Previous
                 </button>
@@ -707,14 +708,14 @@ const ExamTakerPage: React.FC = () => {
                 {currentQIndex < questions.length - 1 ? (
                   <button
                     onClick={() => setCurrentQIndex(prev => Math.min(questions.length - 1, prev + 1))}
-                    className="btn-primary text-xs py-2.5 px-5 rounded-xl flex items-center gap-1.5 font-bold"
+                    className="btn-primary text-xs min-h-[44px] py-2.5 px-5 rounded-xl flex items-center gap-1.5 font-bold"
                   >
                     Next <ArrowRight className="w-4 h-4" />
                   </button>
                 ) : (
                   <button
                     onClick={() => setShowSubmitConfirm(true)}
-                    className="btn-primary text-xs py-2.5 px-5 rounded-xl flex items-center gap-1.5 font-bold shadow-md shadow-brand-primary/20"
+                    className="btn-primary text-xs min-h-[44px] py-2.5 px-5 rounded-xl flex items-center gap-1.5 font-bold shadow-md shadow-brand-primary/20"
                   >
                     <Send className="w-4 h-4" /> Review & Submit
                   </button>
@@ -732,7 +733,7 @@ const ExamTakerPage: React.FC = () => {
             </h3>
 
             {/* Status Legend */}
-            <div className="flex items-center gap-4 text-[11px] text-text-muted mb-4 pb-3 border-b border-border-subtle">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted mb-4 pb-3 border-b border-border-subtle">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-brand-primary" /> Answered
               </div>
@@ -786,7 +787,7 @@ const ExamTakerPage: React.FC = () => {
       {/* Submit Confirmation Modal */}
       {showSubmitConfirm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="card-soft p-6 max-w-md w-full rounded-2xl border border-border-subtle bg-surface shadow-2xl animate-in fade-in zoom-in-95">
+          <div role="dialog" aria-modal="true" className="card-soft p-5 sm:p-6 max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-border-subtle bg-surface shadow-2xl animate-in fade-in zoom-in-95">
             <h3 className="font-heading font-bold text-lg text-text-primary mb-2">
               Submit Your Examination?
             </h3>
@@ -816,18 +817,18 @@ const ExamTakerPage: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
               <button
                 onClick={() => setShowSubmitConfirm(false)}
                 disabled={isSubmitting}
-                className="btn-secondary text-xs py-2 px-4 rounded-xl"
+                className="btn-secondary text-xs min-h-[44px] py-2 px-4 rounded-xl"
               >
                 Return to Exam
               </button>
               <button
                 onClick={() => handleSubmitExam(false)}
                 disabled={isSubmitting}
-                className="btn-primary text-xs py-2 px-5 rounded-xl font-bold flex items-center gap-1.5"
+                className="btn-primary text-xs min-h-[44px] py-2 px-5 rounded-xl font-bold flex items-center justify-center gap-1.5"
               >
                 {isSubmitting ? (
                   <>

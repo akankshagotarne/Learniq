@@ -255,8 +255,8 @@ const TeacherCourses: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>

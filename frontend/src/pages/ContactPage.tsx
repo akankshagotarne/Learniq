@@ -80,7 +80,7 @@ const ContactPage: React.FC = () => {
 
         {/* Contact Info Cards */}
         <div className="page-container max-w-6xl mb-16">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
                 icon: Phone,
@@ -131,7 +131,7 @@ const ContactPage: React.FC = () => {
         </div>
 
         {/* Form and FAQ Split */}
-        <div className="page-container max-w-6xl grid lg:grid-cols-12 gap-10">
+        <div className="page-container max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Left: Interactive Form */}
           <div className="lg:col-span-6">
             <div className="card-soft p-8 rounded-card border border-border-subtle shadow-soft">
@@ -153,7 +153,7 @@ const ContactPage: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-text-secondary block mb-1.5">Email Address</label>
                     <input
@@ -178,7 +178,7 @@ const ContactPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-text-secondary block mb-1.5">Standard / Grade</label>
                     <select

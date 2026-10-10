@@ -28,15 +28,15 @@ const MyCoursesPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page transition-colors">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary mb-1">My Courses</h1>
             <p className="text-text-secondary text-sm">Courses you've purchased or enrolled in — pick up right where you left off.</p>
           </div>
 
           {loading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="card-soft h-80 rounded-2xl animate-pulse bg-surface-alt" />
               ))}
@@ -53,7 +53,7 @@ const MyCoursesPage: React.FC = () => {
               <Link to="/courses" className="btn-primary text-xs px-4 py-2 inline-block">Browse Courses</Link>
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {enrollments.map(enr => {
                 const course = enr.course;
                 if (!course) return null;

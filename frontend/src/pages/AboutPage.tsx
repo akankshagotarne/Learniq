@@ -162,7 +162,7 @@ const AboutPage: React.FC = () => {
 
         {/* Mission & Vision */}
         <div className="page-container pb-16">
-          <div className="grid md:grid-cols-3 gap-6 mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
             <div className="card-soft p-6 text-center">
               <div className="w-12 h-12 bg-brand-primary/10 text-brand-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xs">
                 <Target className="w-6 h-6" />
@@ -210,7 +210,7 @@ const AboutPage: React.FC = () => {
             </div>
 
             <div className="card-soft p-6 sm:p-8 lg:p-10 max-w-4xl mx-auto rounded-3xl border border-border-subtle shadow-soft hover:shadow-soft-hover transition-all">
-              <div className="grid md:grid-cols-12 gap-8 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
                 {/* Founder Photo Column */}
                 <div className="md:col-span-5 flex flex-col items-center text-center">
                   <div className="relative group">
@@ -387,7 +387,7 @@ const AboutPage: React.FC = () => {
           {/* Contact */}
           <div className="card-soft p-8">
             <h2 className="font-heading font-bold text-2xl text-text-primary mb-6 text-center">Get In Touch</h2>
-            <div className="grid md:grid-cols-3 gap-6 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
               <a href={`mailto:${c.email}`} className="flex flex-col items-center gap-2 p-5 bg-surface-alt border border-border-subtle rounded-xl hover:bg-surface transition-all">
                 <div className="w-10 h-10 bg-brand-primary/10 rounded-xl flex items-center justify-center text-brand-primary">
                   <Mail className="w-5 h-5" />

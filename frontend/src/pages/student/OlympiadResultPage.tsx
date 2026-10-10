@@ -22,7 +22,7 @@ const statusMeta = {
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex min-h-screen bg-page transition-colors">
     <Sidebar />
-    <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0">
+    <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0">
       <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
         <Link to="/student/exams" className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-brand-primary mb-5">
           <ArrowLeft className="w-4 h-4" /> Back to Exams
@@ -268,7 +268,7 @@ const OlympiadResultPage: React.FC = () => {
                     })}
                   </div>
 
-                  <div className="mt-3 grid sm:grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <p className="text-text-secondary">
                       <span className="font-semibold text-text-primary">Your answer: </span>
                       {item.selectedOption === null ? 'Not attempted' : `${LETTERS[item.selectedOption]}. ${item.options[item.selectedOption]}`}

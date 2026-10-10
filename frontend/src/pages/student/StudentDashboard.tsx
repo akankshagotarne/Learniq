@@ -47,11 +47,11 @@ const StudentDashboard: React.FC = () => {
     return (
       <div className="flex min-h-screen bg-[#F8F8FC] dark:bg-[#12121F]">
         <Sidebar />
-        <div className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 p-6 lg:p-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 p-6 lg:p-8">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-8">
             {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-28 rounded-2xl" />)}
           </div>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-64 rounded-2xl" />)}
           </div>
         </div>
@@ -94,8 +94,8 @@ const StudentDashboard: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-[#F8F8FC] dark:bg-[#12121F]">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
@@ -116,16 +116,17 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           {/* Section 6.2 Top Stat Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-8">
             {statCards.map(({ label, value, icon: Icon, iconBg }) => (
               <div
                 key={label}
-                className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-5 shadow-[0_4px_20px_rgba(34,36,58,0.06)] hover:shadow-[0_8px_28px_rgba(34,36,58,0.10)] transition-all duration-200"
+                className="min-w-0 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(34,36,58,0.06)] hover:shadow-[0_8px_28px_rgba(34,36,58,0.10)] transition-all duration-200"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[#6B6E8C] dark:text-[#A6A8C4] text-xs font-medium mb-1">{label}</p>
-                    <p className="text-2xl sm:text-3xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">{value}</p>
+                {/* phones: icon above the number so neither has to squeeze */}
+                <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[#6B6E8C] dark:text-[#A6A8C4] text-xs font-medium leading-tight mb-1">{label}</p>
+                    <p className="text-2xl sm:text-3xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA] whitespace-nowrap">{value}</p>
                   </div>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
                     <Icon className="w-5 h-5" />
@@ -135,14 +136,14 @@ const StudentDashboard: React.FC = () => {
             ))}
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8">
             {/* Left 2 Cols: Courses (or, while courses are switched off, the student's exams & results) */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="xl:col-span-2 space-y-6">
               {!COURSES_ENABLED ? (
                 <div className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-6 sm:p-8 shadow-[0_4px_20px_rgba(34,36,58,0.06)]">
                   <h2 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">Your Olympiad & exams</h2>
                   <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] mt-1">Take your exams, then check your results and certificates.</p>
-                  <div className="grid sm:grid-cols-2 gap-4 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
                     <Link to="/student/exams" className="group flex items-center gap-4 rounded-2xl border border-[#E7E7F2] dark:border-[#2E2F4A] bg-[#F8F8FC] dark:bg-[#242540] p-5 hover:border-[#6C63F2]/40 hover:bg-white dark:hover:bg-[#1B1C2E] transition-all">
                       <span className="w-11 h-11 rounded-xl flex items-center justify-center bg-[#EDE9FE] text-[#6C63F2] flex-shrink-0"><ClipboardList className="w-5 h-5" /></span>
                       <span className="flex-1 min-w-0">
@@ -182,7 +183,7 @@ const StudentDashboard: React.FC = () => {
                   <Link to="/student/standard" className="btn-primary mt-4 inline-block text-xs">Choose another standard</Link>
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   {courses.slice(0, 4).map(course => (
                     <Link
                       key={course._id}
@@ -301,7 +302,7 @@ const StudentDashboard: React.FC = () => {
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1.5 text-xl ${b.bg}`}>
                         {b.emoji}
                       </div>
-                      <p className="text-[11px] font-semibold text-[#22243A] dark:text-[#F4F4FA] truncate">{b.name}</p>
+                      <p className="text-[11px] font-semibold leading-tight text-[#22243A] dark:text-[#F4F4FA] line-clamp-2 break-words">{b.name}</p>
                     </div>
                   ))}
                 </div>

@@ -181,6 +181,14 @@ const OlympiadTakerPage: React.FC = () => {
 
   useEffect(() => { void load(); }, [load]);
 
+  // The palette drawer (phones / tablets) closes with Escape like any dialog
+  useEffect(() => {
+    if (!showPalette) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowPalette(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showPalette]);
+
   // ── submit ───────────────────────────────────────────────
   const submit = useCallback(async (auto = false) => {
     if (submittingRef.current || finishedRef.current) return;
@@ -331,7 +339,7 @@ const OlympiadTakerPage: React.FC = () => {
         type="button"
         onClick={() => { setCurrent(item.idx); setShowPalette(false); }}
         aria-label={`Question ${item.idx + 1}${isAnswered ? ', answered' : ', not answered'}${isMarked ? ', marked for review' : ''}`}
-        className={`relative h-9 w-9 rounded-lg border text-xs font-bold transition-all ${tone} ${isCurrent ? 'ring-2 ring-offset-1 ring-[#6C63F2]' : ''}`}
+        className={`relative h-10 w-10 sm:h-9 sm:w-9 rounded-lg border text-xs font-bold transition-all ${tone} ${isCurrent ? 'ring-2 ring-offset-1 ring-[#6C63F2]' : ''}`}
       >
         {item.q.questionNumber}
         {isMarked && isAnswered && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#4ADE9A] border border-white" />}
@@ -393,8 +401,9 @@ const OlympiadTakerPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowPalette(true)}
-            className="lg:hidden p-2 rounded-xl border border-border-subtle bg-surface-alt text-text-primary"
+            className="lg:hidden w-11 h-11 inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-alt text-text-primary"
             aria-label="Open question palette"
+            aria-expanded={showPalette}
           >
             <LayoutGrid className="w-4 h-4" />
           </button>
@@ -404,8 +413,8 @@ const OlympiadTakerPage: React.FC = () => {
       <div className="flex-1 w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 p-3 sm:p-6">
         {/* Question card */}
         <section className="card-soft rounded-2xl p-4 sm:p-6 flex flex-col">
-          <div className="flex items-center justify-between gap-2 mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-start justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#6C63F2]/10 text-[#6C63F2]">
                 Question {current + 1} of {questions.length}
               </span>
@@ -419,7 +428,7 @@ const OlympiadTakerPage: React.FC = () => {
             {q.questionText}
           </p>
           {q.image && (
-            <img src={q.image} alt={`Diagram for question ${q.questionNumber}`} className="mt-4 max-h-72 rounded-xl border border-border-subtle object-contain self-start" />
+            <img src={q.image} alt={`Diagram for question ${q.questionNumber}`} className="mt-4 max-w-full max-h-72 rounded-xl border border-border-subtle object-contain self-start" />
           )}
 
           <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Answer options">
@@ -443,27 +452,28 @@ const OlympiadTakerPage: React.FC = () => {
                   }`}>
                     {LETTERS[i]}
                   </span>
-                  <span className="text-sm text-text-primary leading-relaxed pt-0.5 break-words">{opt}</span>
+                  <span className="min-w-0 text-sm text-text-primary leading-relaxed pt-0.5 break-words">{opt}</span>
                 </button>
               );
             })}
           </div>
 
           {/* Actions */}
-          <div className="mt-6 pt-4 border-t border-border-subtle flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-6 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => updateResponse(q, { selectedOption: null })}
                 disabled={resp.selectedOption === null || resp.selectedOption === undefined}
-                className="flex items-center gap-1.5 py-2 px-3 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 min-h-[44px] py-2 px-3 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Eraser className="w-3.5 h-3.5" /> Clear Answer
               </button>
               <button
                 type="button"
                 onClick={() => updateResponse(q, { marked: !resp.marked })}
-                className={`flex items-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-semibold ${
+                aria-pressed={resp.marked}
+                className={`flex items-center justify-center gap-1.5 min-h-[44px] py-2 px-3 rounded-xl border text-xs font-semibold ${
                   resp.marked
                     ? 'border-[#FFC24B] bg-[#FFC24B]/15 text-[#B7791F] dark:text-[#FFC24B]'
                     : 'border-border-subtle bg-surface-alt text-text-primary'
@@ -472,12 +482,12 @@ const OlympiadTakerPage: React.FC = () => {
                 <Bookmark className="w-3.5 h-3.5" /> {resp.marked ? 'Unmark Review' : 'Mark for Review'}
               </button>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex">
               <button
                 type="button"
                 onClick={() => setCurrent(c => Math.max(0, c - 1))}
                 disabled={current === 0}
-                className="flex items-center gap-1 py-2 px-4 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1 min-h-[44px] py-2 px-4 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" /> Previous
               </button>
@@ -485,7 +495,7 @@ const OlympiadTakerPage: React.FC = () => {
                 type="button"
                 onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
                 disabled={current === questions.length - 1}
-                className="btn-primary flex items-center gap-1 py-2 px-4 rounded-xl text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                className="btn-primary flex items-center justify-center gap-1 min-h-[44px] py-2 px-4 rounded-xl text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ChevronRight className="w-4 h-4" />
               </button>
@@ -495,7 +505,7 @@ const OlympiadTakerPage: React.FC = () => {
           <button
             type="button"
             onClick={() => { setSubmitError(null); setShowSubmit(true); }}
-            className="sm:hidden mt-4 btn-primary flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold"
+            className="sm:hidden mt-3 btn-primary flex items-center justify-center gap-1.5 min-h-[48px] py-2.5 rounded-xl text-sm font-bold"
           >
             <Send className="w-3.5 h-3.5" /> Submit Examination
           </button>
@@ -516,10 +526,14 @@ const OlympiadTakerPage: React.FC = () => {
       {/* Palette (mobile / tablet drawer) */}
       {showPalette && (
         <div className="lg:hidden fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={() => setShowPalette(false)}>
-          <div className="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div
+            role="dialog" aria-modal="true" aria-label="Question palette"
+            className="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[85dvh] overflow-y-auto overscroll-contain"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-heading font-bold text-sm text-text-primary">Question Palette</h2>
-              <button onClick={() => setShowPalette(false)} className="p-1.5 rounded-lg hover:bg-surface-alt text-text-secondary" aria-label="Close palette">
+              <button onClick={() => setShowPalette(false)} className="w-10 h-10 -mr-2 inline-flex items-center justify-center rounded-lg hover:bg-surface-alt text-text-secondary" aria-label="Close palette">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -534,7 +548,7 @@ const OlympiadTakerPage: React.FC = () => {
       {/* Submit confirmation */}
       {showSubmit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl border border-border-subtle" role="dialog" aria-modal="true" aria-labelledby="oly-submit-title">
+          <div className="bg-surface rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl border border-border-subtle" role="dialog" aria-modal="true" aria-labelledby="oly-submit-title">
             <div className="w-12 h-12 rounded-2xl bg-[#6C63F2]/10 text-[#6C63F2] flex items-center justify-center mb-3">
               <Send className="w-6 h-6" />
             </div>
@@ -575,7 +589,7 @@ const OlympiadTakerPage: React.FC = () => {
                 type="button"
                 onClick={() => setShowSubmit(false)}
                 disabled={submitting || timeUp}
-                className="flex-1 py-2.5 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-50"
+                className="flex-1 min-h-[44px] py-2.5 rounded-xl border border-border-subtle bg-surface-alt text-xs font-semibold text-text-primary disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -583,7 +597,7 @@ const OlympiadTakerPage: React.FC = () => {
                 type="button"
                 onClick={() => void submit(false)}
                 disabled={submitting}
-                className="btn-primary flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-70"
+                className="btn-primary flex-1 min-h-[44px] py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-70"
               >
                 {submitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Submitting…</> : <><CheckCircle2 className="w-3.5 h-3.5" /> Submit Examination</>}
               </button>

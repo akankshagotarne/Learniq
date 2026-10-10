@@ -20,9 +20,20 @@ const Navbar: React.FC = () => {
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Escape closes whichever menu is open (mobile menu, notifications, account)
+  useEffect(() => {
+    if (!isMobileOpen && !showNotifs && !isProfileOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setIsMobileOpen(false); setShowNotifs(false); setIsProfileOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isMobileOpen, showNotifs, isProfileOpen]);
 
   useEffect(() => {
     if (user) {
@@ -60,8 +71,9 @@ const Navbar: React.FC = () => {
     }`}>
       <div className="page-container">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <LogoLink size="md" />
+          {/* Logo (the compact size on phones leaves room for the account buttons) */}
+          <span className="sm:hidden"><LogoLink size="sm" /></span>
+          <span className="hidden sm:block"><LogoLink size="md" /></span>
 
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-1">
@@ -77,7 +89,7 @@ const Navbar: React.FC = () => {
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 min-w-0">
             {/* Search (it searches courses, so it is hidden while courses are switched off) */}
             {COURSES_ENABLED && <form onSubmit={handleSearch} className="hidden md:flex items-center">
               <div className="relative">
@@ -93,8 +105,8 @@ const Navbar: React.FC = () => {
               </div>
             </form>}
 
-            {/* Theme Toggle Button */}
-            <ThemeToggle />
+            {/* Theme Toggle Button (inside the menu on phones) */}
+            <div className="hidden sm:block"><ThemeToggle /></div>
 
             {user ? (
               <>
@@ -102,8 +114,9 @@ const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => { setShowNotifs(!showNotifs); setIsProfileOpen(false); }}
-                    className="relative p-2 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
-                    aria-label="Notifications"
+                    className="relative w-10 h-10 inline-flex items-center justify-center text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+                    aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                    aria-expanded={showNotifs}
                   >
                     <Bell className="w-5 h-5" />
                     {unreadCount > 0 && (
@@ -114,7 +127,7 @@ const Navbar: React.FC = () => {
                   </button>
 
                   {showNotifs && (
-                    <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
+                    <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-80 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
                       <div className="px-4 py-2 border-b border-[#E7E7F2] dark:border-[#2E2F4A] flex items-center justify-between">
                         <p className="text-sm font-semibold text-[#22243A] dark:text-[#F4F4FA]">Notifications</p>
                         {unreadCount > 0 && <span className="badge-primary text-[10px]">{unreadCount} new</span>}
@@ -140,7 +153,9 @@ const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => { setIsProfileOpen(!isProfileOpen); setShowNotifs(false); }}
-                    className="flex items-center gap-2 p-1.5 hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+                    className="flex items-center gap-2 p-1.5 min-h-[44px] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all"
+                    aria-label="Account menu"
+                    aria-expanded={isProfileOpen}
                   >
                     <img
                       src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6C63F2&color=fff&size=40`}
@@ -151,9 +166,9 @@ const Navbar: React.FC = () => {
                   </button>
 
                   {isProfileOpen && (
-                    <div className="absolute right-0 top-12 w-56 bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
+                    <div className="absolute right-0 top-12 w-56 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl py-2 shadow-xl animate-slide-down z-50">
                       <div className="px-4 py-3 border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
-                        <p className="text-sm font-semibold text-[#22243A] dark:text-[#F4F4FA]">{user.name}</p>
+                        <p className="text-sm font-semibold text-[#22243A] dark:text-[#F4F4FA] break-words">{user.name}</p>
                         <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] capitalize">{user.role}</p>
                       </div>
                       <Link
@@ -194,8 +209,12 @@ const Navbar: React.FC = () => {
 
             {/* Mobile menu button */}
             <button
-              className="lg:hidden p-2 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] rounded-xl transition-all"
+              type="button"
+              className="lg:hidden w-10 h-10 inline-flex items-center justify-center text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] rounded-xl transition-all"
               onClick={() => setIsMobileOpen(!isMobileOpen)}
+              aria-label={isMobileOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileOpen}
+              aria-controls="public-mobile-menu"
             >
               {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -204,17 +223,21 @@ const Navbar: React.FC = () => {
 
         {/* Mobile Menu */}
         {isMobileOpen && (
-          <div className="lg:hidden bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl mx-0 mt-2 mb-4 p-4 shadow-xl animate-slide-down">
+          <div id="public-mobile-menu" className="lg:hidden max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl mx-0 mt-2 mb-4 p-4 shadow-xl animate-slide-down">
             {navLinks.map(link => (
               <Link
                 key={link.label}
                 to={link.href}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all text-sm font-medium"
+                className="flex items-center gap-2.5 px-4 py-2.5 min-h-[44px] text-[#6B6E8C] hover:text-[#22243A] dark:text-[#A6A8C4] dark:hover:text-[#F4F4FA] hover:bg-[#F1F1FA] dark:hover:bg-[#242540] rounded-xl transition-all text-sm font-medium"
                 onClick={() => setIsMobileOpen(false)}
               >
                 {link.label}
               </Link>
             ))}
+            <div className="sm:hidden flex items-center justify-between px-4 py-2 mt-1 border-t border-[#E7E7F2] dark:border-[#2E2F4A] pt-3">
+              <span className="text-sm font-medium text-[#6B6E8C] dark:text-[#A6A8C4]">Theme</span>
+              <ThemeToggle showLabel />
+            </div>
             {COURSES_ENABLED && <div className="pt-3 border-t border-[#E7E7F2] dark:border-[#2E2F4A] mt-2">
               <form onSubmit={handleSearch} className="flex gap-2">
                 <input

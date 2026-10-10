@@ -35,8 +35,8 @@ const TeacherStudents: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-page">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-64 pt-14 md:pt-0 transition-all duration-300">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">My Students</h1>
             <p className="text-text-secondary text-sm mt-1">Students enrolled in your courses</p>
@@ -57,7 +57,7 @@ const TeacherStudents: React.FC = () => {
             <span className="text-text-secondary text-sm font-medium">{filtered.length} students</span>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Student List */}
             <div className={`${selectedStudent ? 'lg:col-span-1' : 'lg:col-span-3'}`}>
               {loading ? (

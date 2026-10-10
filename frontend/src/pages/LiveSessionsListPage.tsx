@@ -56,7 +56,7 @@ const LiveSessionsListPage: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="grid md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {[...Array(4)].map((_, i) => <div key={i} className="card-soft h-40 rounded-2xl animate-pulse bg-surface-alt" />)}
             </div>
           ) : sessions.length === 0 ? (
@@ -68,7 +68,7 @@ const LiveSessionsListPage: React.FC = () => {
               <p className="text-text-secondary text-sm">Check back soon or explore our recorded video courses.</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {sessions.map(session => (
                 <div key={session._id} className="card-soft p-6 hover:-translate-y-1 transition-all">
                   <div className="flex items-start justify-between gap-4 mb-3">
