@@ -11,6 +11,7 @@ import { Exam, ExamQuestion, ExamResult, ExamQuestionReview } from '../../types'
 import toast from 'react-hot-toast';
 import ProctoringGate, { GateResult } from '../../proctoring/ProctoringGate';
 import ProctoringMonitor from '../../proctoring/ProctoringMonitor';
+import ProctoringPanel from '../../proctoring/ProctoringPanel';
 import { useProctoring } from '../../proctoring/useProctoring';
 import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
 
@@ -745,7 +746,7 @@ const ExamTakerPage: React.FC = () => {
                 </div>
 
                 {/* Question prompt */}
-                <p className="font-heading font-medium text-base sm:text-lg text-text-primary leading-relaxed mb-5 sm:mb-6 whitespace-pre-wrap break-words">
+                <p className="font-heading font-medium text-base sm:text-lg text-text-primary leading-relaxed mb-5 sm:mb-6 whitespace-pre-wrap break-words" data-testid="question-text">
                   {currentQ.question}
                 </p>
 
@@ -757,6 +758,7 @@ const ExamTakerPage: React.FC = () => {
                     return (
                       <button
                         key={optIndex}
+                        data-testid="exam-option"
                         onClick={() => handleSelectOption(currentQId, optIndex)}
                         className={`w-full p-3.5 sm:p-4 rounded-2xl border text-left flex items-center justify-between gap-2 text-sm transition-all ${
                           isSelected
@@ -818,9 +820,11 @@ const ExamTakerPage: React.FC = () => {
           ) : null}
         </div>
 
-        {/* Right 1 Column: Question Grid Palette */}
-        <div className="space-y-4">
-          <div className="card-soft p-5 rounded-2xl border border-border-subtle bg-surface">
+        {/* Right 1 Column: Question Navigator, then the camera panel BELOW it in its own space (never on top of it).
+            Below lg this wrapper is `display: contents`, so the camera panel can move above the question (order-first)
+            while the navigator stays after it - a CSS-only switch, the <video> is never remounted. */}
+        <div className="contents lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto min-w-0" data-testid="exam-sidebar">
+          <div className="card-soft p-5 rounded-2xl border border-border-subtle bg-surface lg:flex lg:flex-col lg:min-h-[10rem] lg:flex-shrink min-w-0" data-testid="question-navigator">
             <h3 className="font-heading font-bold text-sm text-text-primary mb-3">
               Question Navigator
             </h3>
@@ -836,7 +840,7 @@ const ExamTakerPage: React.FC = () => {
             </div>
 
             {/* Grid of question buttons */}
-            <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-4 gap-2 lg:min-h-0 lg:overflow-y-auto lg:-m-1 lg:p-1">
               {questions.map((q, idx) => {
                 const qId = q._id || '';
                 const isAnswered = answers[qId] !== null && answers[qId] !== undefined;
@@ -874,6 +878,7 @@ const ExamTakerPage: React.FC = () => {
               </div>
             </div>
           </div>
+          {proctored && <ProctoringPanel ctl={proctor} policy={policy} className="order-first lg:order-none flex-shrink-0" />}
         </div>
       </div>
 

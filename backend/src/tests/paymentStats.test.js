@@ -22,6 +22,7 @@ const counter = (n = 0) => ({ countDocuments: async () => n, find: () => ({ sort
 
 // every model the admin router (and the controllers it loads) touches
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
@@ -71,7 +72,7 @@ let seq = 0;
 const mkUser = async (role = 'student') => {
   seq += 1;
   const user = await fake.User.create({ name: `${role} ${seq}`, email: `u${seq}@example.com`, password: 'x', role });
-  return { user, token: jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET) };
+  return { user, token: fake.sessionToken(user) };
 };
 
 const coursePay = (student, status, amount = 79, createdAt = new Date()) => fake.Payment.create({

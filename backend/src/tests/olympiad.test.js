@@ -47,7 +47,10 @@ rzp.client = {
 };
 
 const fake = createFakeDb();
-const overrides = { [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client } };
+const overrides = {
+  [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client },
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
+};
 if (!USE_REAL) {
   overrides[path.join(SRC, 'models', 'Proctoring.js')] = fake.proctoringModels;
   overrides[path.join(SRC, 'models', 'Olympiad.js')] = {
@@ -112,7 +115,7 @@ const mkUser = async ({ role = 'student', standard = 10, name } = {}) => {
     role,
     currentStandard: role === 'student' ? standard : undefined,
   });
-  return { user, token: jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET) };
+  return { user, token: fake.sessionToken(user) };
 };
 
 const sign = (orderId, paymentId, secret = process.env.RAZORPAY_KEY_SECRET) =>
@@ -298,6 +301,21 @@ test('other standards and non-students do not see / cannot access the Olympiad',
   }
   const t = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: S.teacher.token });
   assert.equal(t.status, 403); assert.equal(t.body.code, 'NOT_STUDENT');
+});
+
+test('an "Others" student (not in Std 1-10, stored as 99) sees no Olympiad and cannot open, pay for or start one', async () => {
+  const others = await mkUser({ standard: 99 });
+  const list = await api('GET', '/exams', { token: others.token });
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.body.exams, []);
+  const d = await api('GET', `/exams/${S.exam._id}`, { token: others.token });
+  assert.equal(d.status, 403);
+  assert.equal(d.body.code, 'WRONG_STANDARD');
+  assert.match(d.body.message, /Only Standard 10 students are eligible.*set to Others/);
+  for (const [method, url] of [['POST', `/exams/${S.exam._id}/payment/order`], ['POST', `/exams/${S.exam._id}/start`]]) {
+    const r = await api(method, url, { token: others.token });
+    assert.equal(r.status, 403, url); assert.equal(r.body.code, 'WRONG_STANDARD', url);
+  }
 });
 
 test('invalid exam id → 404 (no crash)', async () => {

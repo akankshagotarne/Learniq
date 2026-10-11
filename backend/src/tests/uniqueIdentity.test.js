@@ -30,6 +30,7 @@ if (!REAL_MONGO) {
   };
   fake.User.findByIdAndUpdate = (id, data, opts) => fake.User.findOneAndUpdate({ _id: id }, { $set: data }, opts);
   const overrides = {
+    [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
     [path.join(SRC, 'models', 'User.js')]: fake.User,
     [path.join(SRC, 'models', 'index.js')]: { Notification: fake.Notification },
   };

@@ -3,11 +3,25 @@ import api from '../services/api';
 import { User } from '../types';
 import { disconnectSocket } from '../services/socket';
 
+/** 409 SESSION_CONFLICT from POST /auth/login (password verified, another device has the active session). */
+export interface SessionConflict {
+  message: string;
+  activeSession: { device: string; mobile: boolean; lastActiveAt: string; signedInAt: string };
+  /** one-time, ~2-minute server token for "Log out other device & continue" - kept in memory only, never stored */
+  takeoverToken: string;
+  takeoverExpiresAt: string;
+}
+export type LoginResult = { status: 'ok'; user: User } | { status: 'conflict'; conflict: SessionConflict };
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  /** "Log out other device & continue" */
+  takeoverSession: (takeoverToken: string) => Promise<User>;
+  /** "Cancel": the other device stays signed in; the takeover token is voided on the server */
+  cancelTakeover: (takeoverToken: string) => void;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (user: User) => void;
@@ -51,12 +65,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token, fetchMe]);
 
-  const login = async (email: string, password: string) => {
-    const res = await api.post('/auth/login', { email, password });
-    const { token: newToken, user: newUser } = res.data;
+  // the token lives where it always did (localStorage 'learniq_token'); it is tied to a server-side session
+  const completeSignIn = (newToken: string, newUser: User) => {
     localStorage.setItem('learniq_token', newToken);
     setToken(newToken);
     setUser(newUser);
+  };
+
+  const login = async (email: string, password: string): Promise<LoginResult> => {
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      completeSignIn(res.data.token, res.data.user);
+      return { status: 'ok', user: res.data.user };
+    } catch (err: any) {
+      const data = err?.response?.data;
+      if (err?.response?.status === 409 && data?.code === 'SESSION_CONFLICT' && typeof data.takeoverToken === 'string') {
+        return { status: 'conflict', conflict: { message: data.message, activeSession: data.activeSession, takeoverToken: data.takeoverToken, takeoverExpiresAt: data.takeoverExpiresAt } };
+      }
+      throw err;
+    }
+  };
+
+  const takeoverSession = async (takeoverToken: string): Promise<User> => {
+    const res = await api.post('/auth/session/takeover', { takeoverToken });
+    completeSignIn(res.data.token, res.data.user);
+    return res.data.user;
+  };
+
+  const cancelTakeover = (takeoverToken: string) => {
+    void api.post('/auth/session/takeover/cancel', { takeoverToken }).catch(() => { /* it expires on its own in ~2 minutes */ });
   };
 
   const register = async (data: RegisterData) => {
@@ -67,7 +104,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(newUser);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // end THIS session on the server (other accounts / sessions are untouched); never blocks signing out locally
+    if (localStorage.getItem('learniq_token')) {
+      try { await api.post('/auth/logout', {}, { timeout: 4000 }); } catch { /* already ended or offline */ }
+    }
     localStorage.removeItem('learniq_token');
     localStorage.removeItem('learniq_user');
     setToken(null);
@@ -75,6 +116,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     disconnectSocket();
     window.location.href = '/login';
   };
+
+  // If this session is ended elsewhere ("Log out other device & continue" on another device), notice it soon even on an
+  // idle page: a cheap check when the tab becomes visible / regains focus and every 2 minutes while visible.
+  // A 401 is handled by the api interceptor (clears the token and returns to /login with the reason).
+  useEffect(() => {
+    if (!user) return;
+    let last = 0;
+    const check = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 15_000) return;
+      last = Date.now();
+      api.get('/auth/session').catch(() => { /* 401 -> interceptor; network errors are ignored */ });
+    };
+    const id = window.setInterval(() => { last = 0; check(); }, 120_000);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => { window.clearInterval(id); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
+  }, [user]);
 
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
@@ -86,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, updateUser, updateStandard }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, takeoverSession, cancelTakeover, register, logout, updateUser, updateStandard }}>
       {children}
     </AuthContext.Provider>
   );

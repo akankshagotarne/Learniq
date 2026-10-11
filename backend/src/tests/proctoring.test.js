@@ -21,6 +21,7 @@ Object.assign(process.env, { JWT_SECRET, NODE_ENV: 'test', CLIENT_URL: 'https://
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'Exam.js')]: { Exam: fake.Exam, ExamAttempt: fake.ExamAttempt },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
@@ -49,7 +50,7 @@ test.before(async () => { await new Promise((r) => { server = http.createServer(
 test.after(async () => { await new Promise((r) => server.close(r)); Module._load = originalLoad; });
 
 const oid = () => new mongoose.Types.ObjectId();
-const token = (u) => jwt.sign({ id: String(u._id) }, JWT_SECRET);
+const token = (u) => fake.sessionToken(u);
 const DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36';
 const call = async (method, url, user, body, headers = {}) => {
   const res = await fetch(`${base}${url}`, {

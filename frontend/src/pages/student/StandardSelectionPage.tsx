@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import { getSubjectsForStandard } from '../../constants/olympiadSubjects';
+import { STANDARD_OTHERS, STUDENT_STANDARDS, isOthersStandard, standardLabel } from '../../constants/standards';
 
-const standards = Array.from({ length: 10 }, (_, i) => i + 1);
+// Std 1-10, then "Others" (stored as 99) for students who are not in Std 1-10
+const standards = STUDENT_STANDARDS;
 
 const levelLabel = (std: number) => {
+  if (std === STANDARD_OTHERS) return 'Not in Std 1–10';
   if (std <= 4) return 'Primary';
   if (std <= 7) return 'Middle School';
   return 'Secondary School';
 };
 
-const subjects = (std: number) => getSubjectsForStandard(std);
+const subjects = (std: number) => (isOthersStandard(std) ? [] : getSubjectsForStandard(std));
 
 const gradientColors = [
   'from-[#FF8FA3] to-[#FF6B8B]', 'from-[#FFC24B] to-[#F59E0B]', 'from-[#F59E0B] to-[#10B981]',
@@ -20,6 +23,7 @@ const gradientColors = [
   'from-[#8B82FF] to-[#6C63F2]', 'from-[#B69CF2] to-[#8B82FF]', 'from-[#FF8FA3] to-[#B69CF2]',
   'from-[#6C63F2] to-[#FF8FA3]',
 ];
+const gradientFor = (std: number) => (isOthersStandard(std) ? 'from-[#64748B] to-[#475569]' : gradientColors[std - 1]);
 
 const StandardSelectionPage: React.FC = () => {
   const { user, updateStandard } = useAuth();
@@ -33,7 +37,7 @@ const StandardSelectionPage: React.FC = () => {
   const handleSelect = async (std: number) => {
     try {
       await updateStandard(std);
-      toast.success(`Standard ${std} selected!`);
+      toast.success(`${standardLabel(std)} selected!`);
       navigate('/student');
     } catch {
       toast.error('Failed to update standard.');
@@ -58,7 +62,7 @@ const StandardSelectionPage: React.FC = () => {
           </h1>
           <p className="text-text-secondary text-base md:text-lg">
             {user?.currentStandard
-              ? `Currently: Standard ${user.currentStandard}. You can change anytime.`
+              ? `Currently: ${standardLabel(user.currentStandard)}. You can change anytime.`
               : 'Select your class to see personalized content.'
             }
           </p>
@@ -70,7 +74,10 @@ const StandardSelectionPage: React.FC = () => {
             return (
               <button
                 key={std}
+                type="button"
                 onClick={() => handleSelect(std)}
+                aria-pressed={isSelected}
+                data-testid={`standard-option-${isOthersStandard(std) ? 'others' : std}`}
                 className={`relative p-5 rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 group text-left ${
                   isSelected
                     ? 'border-brand-primary bg-brand-primary/5 shadow-soft'
@@ -83,12 +90,12 @@ const StandardSelectionPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className={`w-14 h-14 bg-gradient-to-br ${gradientColors[std - 1]} rounded-2xl flex items-center justify-center
-                  text-white font-heading font-black text-2xl mx-auto mb-3 group-hover:scale-105 transition-transform shadow-md`}>
-                  {std}
+                <div className={`w-14 h-14 bg-gradient-to-br ${gradientFor(std)} rounded-2xl flex items-center justify-center
+                  text-white font-heading font-black ${isOthersStandard(std) ? 'text-lg' : 'text-2xl'} mx-auto mb-3 group-hover:scale-105 transition-transform shadow-md`} aria-hidden="true">
+                  {isOthersStandard(std) ? '•••' : std}
                 </div>
 
-                <p className="text-text-primary font-heading font-semibold text-center text-sm mb-0.5">Standard {std}</p>
+                <p className="text-text-primary font-heading font-semibold text-center text-sm mb-0.5">{standardLabel(std)}</p>
                 <p className="text-text-muted text-xs text-center mb-3 font-medium">{levelLabel(std)}</p>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {subjects(std).slice(0, 2).map(s => (

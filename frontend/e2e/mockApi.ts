@@ -174,7 +174,7 @@ const coursePayments = [
 
 const paymentStats = { totalRevenue: 1, completedCount: 1, pendingCount: 1, failedCount: 1, refundedCount: 0, unconfirmedCount: 0, historyCount: 2, totalCount: 3, currency: 'INR' };
 
-const adminStudentProfile = {
+export const adminStudentProfile = {
   user: { ...students[0], avatar: null, lastActiveDate: iso(NOW), lastLogin: iso(NOW - 3600e3) },
   academic: { standard: 10, points: 120, streak: 3, coursesEnrolled: 0, coursesCompleted: 0, averageProgress: 0, olympiadRegistrations: 2, olympiadAttempts: 1, olympiadCompleted: 1, olympiadBestPercentage: 78.33 },
   courses: [],

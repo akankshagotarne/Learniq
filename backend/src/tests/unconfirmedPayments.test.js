@@ -45,6 +45,7 @@ const razorpay = {
 };
 
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => razorpay },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
@@ -85,7 +86,7 @@ let seq = 0;
 const mkUser = async (role, name, standard) => {
   seq += 1;
   const user = await fake.User.create({ name: name || `${role} ${seq}`, email: `u${seq}@example.com`, password: 'x', role, currentStandard: role === 'student' ? standard : undefined, isApproved: true });
-  return { user, token: jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET) };
+  return { user, token: fake.sessionToken(user) };
 };
 const mkExam = (standard) => fake.OlympiadExam.create({
   title: 'LearnIQ – All India Olympiad Examination 2026', slug: `oly-std-${standard}`, standard, conductedBy: 'Test', durationMinutes: 60,

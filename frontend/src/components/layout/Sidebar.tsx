@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
 import ThemeToggle from '../ui/ThemeToggle';
 import { COURSES_ENABLED } from '../../constants/features';
+import { standardShortLabel } from '../../constants/standards';
 
 interface NavItem {
   label: string;
@@ -165,7 +166,7 @@ const Sidebar: React.FC = () => {
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="badge-primary text-[10px] py-0 px-2 capitalize">{user.role}</span>
                   {user.role === 'student' && user.currentStandard && (
-                    <span className="text-[11px] text-[#6B6E8C] dark:text-[#A6A8C4] font-medium">Std {user.currentStandard}</span>
+                    <span className="text-[11px] text-[#6B6E8C] dark:text-[#A6A8C4] font-medium" data-testid="sidebar-standard">{standardShortLabel(user.currentStandard)}</span>
                   )}
                 </div>
               </div>

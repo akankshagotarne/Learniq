@@ -163,11 +163,26 @@ const verifyUserIndexes = async () => {
   }
 };
 
+// "One active login per account" is enforced by a partial unique index on AuthSession (models/AuthSession.js).
+const verifySessionIndexes = async () => {
+  const { AuthSession, SessionTakeover } = require('./models/AuthSession');
+  try {
+    await Promise.all([AuthSession.init(), SessionTakeover.init()]);
+    const names = (await AuthSession.collection.indexes()).map((i) => i.name);
+    const missing = ['uniq_sid', 'one_active_session_per_user'].filter((n) => !names.includes(n));
+    if (missing.length) throw new Error(`missing index(es): ${missing.join(', ')}`);
+    console.log('🔒 Session indexes verified: one active session per account');
+  } catch (err) {
+    console.error(`🚨 Session index check FAILED (${err.message}). Simultaneous sign-ins are NOT guaranteed to be single-session until this is fixed.`);
+  }
+};
+
 // Connect to MongoDB first, then start listening
 const startServer = async () => {
   try {
     await connectDB();
     await verifyUserIndexes();
+    await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record

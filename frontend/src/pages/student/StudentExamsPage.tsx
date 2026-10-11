@@ -13,6 +13,7 @@ import { olympiadApi } from '../../services/olympiad';
 import { OlympiadExam } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
 import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
+import { standardLabel } from '../../constants/standards';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -148,7 +149,7 @@ const StudentExamsPage: React.FC = () => {
             {user?.currentStandard && (
               <div className="self-start md:self-auto px-4 py-2 bg-surface-alt rounded-xl border border-border-subtle flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#6C63F2]" />
-                <span className="text-xs font-bold text-text-primary">Standard {user.currentStandard}</span>
+                <span className="text-xs font-bold text-text-primary">{standardLabel(user.currentStandard)}</span>
               </div>
             )}
           </div>

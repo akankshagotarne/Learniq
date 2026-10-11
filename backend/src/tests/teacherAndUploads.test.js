@@ -17,6 +17,7 @@ const mongoose = require('mongoose');
 const SRC = path.join(__dirname, '..');
 process.env.JWT_SECRET = 'unit-test-jwt-secret-that-is-long-enough-0123456789';
 const oid = () => new mongoose.Types.ObjectId();
+const sessionStore = require('./helpers/fakeDb').createSessionStore(); // sign-in sessions (one active per account)
 
 // ------------------------------------------------------------------------------------------------ fakes
 const users = new Map();
@@ -33,6 +34,7 @@ const Lecture = {
   create: async (d) => { const doc = { _id: oid(), ...d }; lecturesCreated.push(doc); return doc; },
 };
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: sessionStore.models,
   [path.join(SRC, 'models', 'User.js')]: User,
   [path.join(SRC, 'models', 'Course.js')]: Course,
   [path.join(SRC, 'models', 'Lecture.js')]: Lecture,
@@ -56,7 +58,7 @@ const addUser = (role, extra = {}) => {
   users.set(String(u._id), u);
   return u;
 };
-const tokenFor = (u) => jwt.sign({ id: String(u._id) }, process.env.JWT_SECRET, { expiresIn: '1h' });
+const tokenFor = (u) => sessionStore.sessionToken(u);
 
 // ------------------------------------------------------------------------------ 1. teacher approval
 const pendingTeacher = addUser('teacher', { isApproved: false });
@@ -111,7 +113,8 @@ test('approval is read from the database user — request body, query, headers a
   const post = await call('/teacher/lectures?isApproved=true', pendingTeacher, { method: 'POST', body: { isApproved: true, role: 'admin', user: { role: 'admin', isApproved: true } } });
   assert.equal(post.status, 403);
   // a token whose payload claims extra things is still just an id: role/approval come from the DB
-  const forged = jwt.sign({ id: String(pendingTeacher._id), role: 'admin', isApproved: true }, process.env.JWT_SECRET);
+  const { sid } = jwt.decode(tokenFor(pendingTeacher)); // a real, active session of the pending teacher
+  const forged = jwt.sign({ id: String(pendingTeacher._id), sid, role: 'admin', isApproved: true }, process.env.JWT_SECRET);
   const res = await fetch(`${BASE}/teacher/dashboard`, { headers: { Authorization: `Bearer ${forged}` } });
   assert.equal(res.status, 403);
   // and an unsigned / wrongly-signed token is not accepted at all

@@ -32,6 +32,7 @@ const S = {
 };
 
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'Course.js')]: fake.Course,
   [path.join(SRC, 'models', 'Lecture.js')]: fake.Lecture,
@@ -64,7 +65,7 @@ test.after(() => { Module._load = originalLoad; });
 
 let server; let base;
 const F = {};
-const tokenFor = (u) => jwt.sign({ id: String(u._id) }, JWT_SECRET);
+const tokenFor = (u) => fake.sessionToken(u);
 const call = async (method, url, token) => {
   const res = await fetch(`${base}${url}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {} });
   return { status: res.status, body: await res.json().catch(() => null) };

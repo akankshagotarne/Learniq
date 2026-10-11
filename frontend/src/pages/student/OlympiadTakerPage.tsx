@@ -12,6 +12,7 @@ import { OlympiadAttemptPayload, OlympiadQuestion, OlympiadResponse } from '../.
 import { formatClock } from '../../utils/olympiadFormat';
 import ProctoringGate, { GateResult } from '../../proctoring/ProctoringGate';
 import ProctoringMonitor from '../../proctoring/ProctoringMonitor';
+import ProctoringPanel from '../../proctoring/ProctoringPanel';
 import { useProctoring } from '../../proctoring/useProctoring';
 import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy, SessionState } from '../../proctoring/types';
 import { OlympiadExam } from '../../types/olympiad';
@@ -503,7 +504,7 @@ const OlympiadTakerPage: React.FC = () => {
             <span className="text-[11px] text-text-muted whitespace-nowrap">{q.marks} {q.marks === 1 ? 'mark' : 'marks'}</span>
           </div>
 
-          <p className="text-base sm:text-lg text-text-primary font-medium leading-relaxed whitespace-pre-wrap break-words">
+          <p className="text-base sm:text-lg text-text-primary font-medium leading-relaxed whitespace-pre-wrap break-words" data-testid="question-text">
             {q.questionText}
           </p>
           {q.image && (
@@ -519,6 +520,7 @@ const OlympiadTakerPage: React.FC = () => {
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  data-testid="exam-option"
                   onClick={() => updateResponse(q, { selectedOption: selected ? null : i })}
                   className={`w-full text-left flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all ${
                     selected
@@ -590,14 +592,18 @@ const OlympiadTakerPage: React.FC = () => {
           </button>
         </section>
 
-        {/* Palette (desktop) */}
-        <aside className="hidden lg:block">
-          <div className="card-soft rounded-2xl p-5 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-            <h2 className="font-heading font-bold text-sm text-text-primary mb-1">Question Palette</h2>
-            <p className="text-[11px] text-text-muted mb-4">
-              {stats.answered} answered · {stats.notAnswered} not answered · {stats.marked} marked
-            </p>
-            {palette}
+        {/* Right column. Desktop: question palette, then the camera panel BELOW it (its own space, never on top).
+            Below lg the palette is a drawer, so only the camera panel is left here and it moves above the question. */}
+        <aside className={`${proctorPolicy ? 'order-first lg:order-none' : 'hidden lg:block'} min-w-0`} data-testid="exam-sidebar">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <div className="hidden lg:flex lg:flex-col card-soft rounded-2xl p-5 min-h-[10rem] lg:flex-shrink" data-testid="question-palette">
+              <h2 className="font-heading font-bold text-sm text-text-primary mb-1">Question Palette</h2>
+              <p className="text-[11px] text-text-muted mb-4">
+                {stats.answered} answered · {stats.notAnswered} not answered · {stats.marked} marked
+              </p>
+              <div className="min-h-0 overflow-y-auto -m-1 p-1">{palette}</div>
+            </div>
+            {proctorPolicy && <ProctoringPanel ctl={proctor} policy={proctorPolicy} className="flex-shrink-0" />}
           </div>
         </aside>
       </div>

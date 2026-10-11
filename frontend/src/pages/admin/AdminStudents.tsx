@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { ConfirmDialog } from '../../components/admin/ProfileParts';
 import { adminProfilesApi } from '../../services/adminProfiles';
 import { olympiadErrorMessage } from '../../services/olympiad';
+import { NUMBERED_STANDARDS, standardLabel, standardShortLabel } from '../../constants/standards';
 
 const AdminStudents: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ const AdminStudents: React.FC = () => {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [standardFilter, setStandardFilter] = useState(''); // '' = all, '1'..'10', 'others', 'none'
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -28,12 +30,12 @@ const AdminStudents: React.FC = () => {
     }, search ? 350 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, page]);
+  }, [search, page, standardFilter]);
 
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/admin/users', { params: { role: 'student', search: search || undefined, page, limit } });
+      const res = await api.get('/admin/users', { params: { role: 'student', search: search || undefined, standard: standardFilter || undefined, page, limit } });
       setStudents(res.data.users || []);
       setTotal(res.data.total || 0);
       setTotalPages(res.data.totalPages || 1);
@@ -103,8 +105,8 @@ const AdminStudents: React.FC = () => {
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-6">
+            <div className="relative flex-1 min-w-[12rem] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
                 type="text"
@@ -114,6 +116,17 @@ const AdminStudents: React.FC = () => {
                 className="input-field pl-9"
               />
             </div>
+            <label className="sr-only" htmlFor="admin-standard-filter">Filter by standard</label>
+            <select
+              id="admin-standard-filter" value={standardFilter}
+              onChange={e => { setPage(1); setStandardFilter(e.target.value); }}
+              className="input-field w-auto max-w-[11rem] py-2" data-testid="standard-filter"
+            >
+              <option value="">All standards</option>
+              {NUMBERED_STANDARDS.map(n => <option key={n} value={String(n)}>{standardLabel(n)}</option>)}
+              <option value="others">Others</option>
+              <option value="none">Not chosen yet</option>
+            </select>
             <span className="text-text-secondary text-sm font-medium">{total} student{total !== 1 ? 's' : ''}</span>
           </div>
 
@@ -147,7 +160,7 @@ const AdminStudents: React.FC = () => {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-text-primary font-semibold text-sm font-heading">{student.name}</p>
                         {student.currentStandard != null && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#6C63F2]">Std {student.currentStandard}</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#6C63F2]" data-testid="student-standard">{standardShortLabel(student.currentStandard)}</span>
                         )}
                         {!student.isActive && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FFE4EC] text-[#E1447A]">Inactive</span>

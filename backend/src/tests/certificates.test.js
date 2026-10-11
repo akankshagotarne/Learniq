@@ -21,6 +21,7 @@ process.env.CLIENT_URL = 'https://learniq.example.com';
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => null },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
@@ -65,7 +66,7 @@ const mkUser = async ({ role = 'student', name } = {}) => {
     name: name || `Student ${userSeq}`, email: `cert${userSeq}@example.com`, password: 'x', role,
     currentStandard: role === 'student' ? 10 : undefined,
   });
-  return { user, token: jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET) };
+  return { user, token: fake.sessionToken(user) };
 };
 
 /** Full journey through the REAL exam API: paid → start → answer → submit. `correct` questions right ⇒ exactly `correct` %. */

@@ -8,6 +8,7 @@ const { getRazorpayInstance } = require('../services/razorpayClient');
 const certificates = require('../services/certificateService');
 const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
+const { STANDARD_OTHERS } = require('../constants/standards');
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -83,6 +84,10 @@ const assertEligibleStudent = (user, exam) => {
     throw new ApiError(403, 'Only students can register for this examination.', 'NOT_STUDENT');
   }
   if (user.currentStandard !== exam.standard) {
+    // "Others" students (constants/standards.js) are not in any Std 1-10 Olympiad - same 403, clearer reason
+    if (user.currentStandard === STANDARD_OTHERS) {
+      throw new ApiError(403, `Only Standard ${exam.standard} students are eligible for this examination. Your profile standard is set to Others.`, 'WRONG_STANDARD');
+    }
     throw new ApiError(403, `Only Standard ${exam.standard} students are eligible for this examination.`, 'WRONG_STANDARD');
   }
 };

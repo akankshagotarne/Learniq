@@ -13,6 +13,7 @@ import { olympiadErrorMessage } from '../../services/olympiad';
 import { AdminProfilePayment, AdminStudentProfile } from '../../types/adminProfile';
 import { formatDuration, formatISTDate, formatISTDateTime, formatRupees } from '../../utils/olympiadFormat';
 import { COURSES_ENABLED } from '../../constants/features';
+import { standardLabel, standardShortLabel } from '../../constants/standards';
 
 type TabId = 'overview' | 'courses' | 'olympiad' | 'payments';
 type Pending = 'deactivate' | 'reset' | 'delete' | null;
@@ -111,7 +112,7 @@ const AdminStudentProfilePage: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h1 className="font-heading font-bold text-2xl text-text-primary break-words">{u.name}</h1>
-                      {u.currentStandard != null && <Badge>Std {u.currentStandard}</Badge>}
+                      {u.currentStandard != null && <Badge>{standardShortLabel(u.currentStandard)}</Badge>}
                       <Badge tone={u.isActive ? 'green' : 'pink'}>{u.isActive ? 'Active' : 'Deactivated'}</Badge>
                     </div>
                     <p className="text-text-secondary text-sm mt-1 flex items-center gap-1.5 flex-wrap"><Mail className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{u.email}</span>
@@ -181,7 +182,7 @@ const AdminStudentProfilePage: React.FC = () => {
                         <InfoRow label="Full name">{u.name}</InfoRow>
                         <InfoRow label="Email">{u.email}</InfoRow>
                         <InfoRow label="Mobile number">{u.phone || '—'}</InfoRow>
-                        <InfoRow label="Standard">{u.currentStandard != null ? `Standard ${u.currentStandard}` : '—'}</InfoRow>
+                        <InfoRow label="Standard">{standardLabel(u.currentStandard, '—')}</InfoRow>
                         <InfoRow label="Date joined">{formatISTDate(u.createdAt)}</InfoRow>
                         <InfoRow label="Account status"><Badge tone={u.isActive ? 'green' : 'pink'}>{u.isActive ? 'Active' : 'Deactivated'}</Badge></InfoRow>
                       </dl>
