@@ -18,6 +18,7 @@
  */
 const path = require('path');
 const fs = require('fs');
+const { standardLabel } = require('../constants/standards');
 
 /** "order_Abc123XyZ9" → "order_…XyZ9" */
 const maskId = (v) => (typeof v === 'string' && v ? v.replace(/^([a-z]+_).*(.{4})$/i, '$1…$2') : '—');
@@ -119,7 +120,7 @@ async function main() {
     else if (p.type === 'course' && p.course) dependents = (await Enrollment.countDocuments({ student: p.student && p.student._id, course: p.course._id })) ? 'has enrollment' : '';
     const stds = p.student ? paidByStudentStd.get(String(p.student._id)) : null;
     const notes = [];
-    if (it.coll === 'OlympiadPayment' && p.student && p.exam && p.student.currentStandard !== p.exam.standard) notes.push(`student's standard is now ${p.student.currentStandard}, exam is Std ${p.exam.standard}`);
+    if (it.coll === 'OlympiadPayment' && p.student && p.exam && p.student.currentStandard !== p.exam.standard) notes.push(`student's standard is now ${standardLabel(p.student.currentStandard)}, exam is Std ${p.exam.standard}`);
     if (stds && stds.size > 1 && it.coll === 'OlympiadPayment' && it.rec.status === 'completed') notes.push(`student has completed Olympiad payments for ${stds.size} different standards`);
     if (it.coll === 'OlympiadPayment' && p.exam && p.exam.isPublished === false) notes.push('exam is UNPUBLISHED (admin exam-payments API would 404)');
     rows.push({

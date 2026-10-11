@@ -7,6 +7,7 @@ import api from '../../services/api';
 import { Course, Notification, LiveSession } from '../../types';
 import { getCourseThumbnail } from '../../utils/courseImage';
 import { COURSES_ENABLED } from '../../constants/features';
+import { isOthersStandard, standardLabel } from '../../constants/standards';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -103,7 +104,7 @@ const StudentDashboard: React.FC = () => {
                 Welcome back, <span className="gradient-text">{user?.name?.split(' ')[0]}!</span>
               </h1>
               <p className="text-[#6B6E8C] dark:text-[#A6A8C4] text-sm mt-1">
-                {user?.currentStandard ? `Standard ${user.currentStandard} • ` : ''}
+                {user?.currentStandard ? `${standardLabel(user.currentStandard)} • ` : ''}
                 {new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
             </div>
@@ -166,7 +167,7 @@ const StudentDashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">
-                    Courses for Standard {user?.currentStandard}
+                    {isOthersStandard(user?.currentStandard) ? 'Courses' : `Courses for ${standardLabel(user?.currentStandard)}`}
                   </h2>
                   <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4]">Comprehensive curriculum lessons and notes</p>
                 </div>
@@ -179,7 +180,7 @@ const StudentDashboard: React.FC = () => {
               {courses.length === 0 ? (
                 <div className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-12 text-center shadow-sm">
                   <BookOpen className="w-12 h-12 text-[#A0A3C0] mx-auto mb-3" />
-                  <p className="text-[#6B6E8C] dark:text-[#A6A8C4] text-sm">No courses available for Standard {user?.currentStandard} yet.</p>
+                  <p className="text-[#6B6E8C] dark:text-[#A6A8C4] text-sm">No courses available for {isOthersStandard(user?.currentStandard) ? 'your standard' : standardLabel(user?.currentStandard)} yet.</p>
                   <Link to="/student/standard" className="btn-primary mt-4 inline-block text-xs">Choose another standard</Link>
                 </div>
               ) : (

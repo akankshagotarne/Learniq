@@ -1,5 +1,5 @@
 /**
- * Key screens on a phone: they must fit AND keep working (filters, search, tabs, payment button, AI Interview button,
+ * Key screens on a phone: they must fit AND keep working (filters, search, tabs, payment button,
  * answering an exam, the question palette, dialogs, menus). Runs against the mocked API (mockApi.ts); the Razorpay
  * checkout is replaced by a fake that records how often it was opened — no real payment is ever made.
  */
@@ -67,33 +67,39 @@ test.describe('student exams page on a phone', () => {
     await expectNoOverflow(page);
   });
 
-  test('exam card: Pay button and the AI Interview row sit inside the card, AI row directly under it', async ({ page }) => {
-    await mockApi(page, 'student');
+  test('exam card: Pay / Start Exam sit inside the card, and the Olympiad card offers no AI Interview', async ({ page }) => {
+    const log = await mockApi(page, 'student');
     await page.goto('/student/exams');
     const payCard = page.getByTestId('olympiad-card').filter({ hasText: 'Pay ₹1' });
     const pay = payCard.getByRole('button', { name: /Pay ₹1 & Start Exam/ });
-    const locked = payCard.getByTestId('ai-interview-locked');
     await expectInside(pay, payCard);
-    await expectInside(locked, payCard);
-    const [p, l] = [await pay.boundingBox(), await locked.boundingBox()];
-    expect(l!.y).toBeGreaterThan(p!.y + p!.height - 1); // directly below
-    expect(l!.y - (p!.y + p!.height)).toBeLessThan(16);
-    expect(p!.height).toBeGreaterThanOrEqual(44); // touch target
+    expect((await pay.boundingBox())!.height).toBeGreaterThanOrEqual(44); // touch target
 
     const readyCard = page.getByTestId('olympiad-card').filter({ hasText: 'Payment Verified' });
     const start = readyCard.getByRole('link', { name: /Start Exam/ });
-    const ai = readyCard.getByTestId('ai-interview-start');
     await expectInside(start, readyCard);
-    await expectInside(ai, readyCard);
-    const [s, a] = [await start.boundingBox(), await ai.boundingBox()];
-    expect(a!.y).toBeGreaterThan(s!.y + s!.height - 1);
-    expect(await ai.textContent()).toContain('Start AI Interview');
+    await expect(start).toHaveAttribute('href', '/student/olympiad/oly-ready');
 
     // the long title wraps instead of being cut off
     const title = payCard.getByRole('heading');
     const box = await title.boundingBox();
     expect(box!.height).toBeGreaterThan(40);
     await expectInside(title, payCard);
+
+    // AI Interview is not part of the Olympiad exam flow any more: no button, no text, no status calls - in any tab
+    const cards = page.getByTestId('olympiad-card');
+    for (const tab of ['Available', 'Upcoming', 'Completed']) {
+      await page.getByRole('tab', { name: new RegExp(tab) }).click();
+      if (tab === 'Completed') {
+        const doneCard = cards.filter({ hasText: 'Completed' }).first();
+        await expect(doneCard.getByRole('link', { name: /View Result/ })).toBeVisible(); // results are still there
+      }
+      await expect(page.locator('[data-testid^="ai-interview"]')).toHaveCount(0);
+      await expect(cards.filter({ hasText: /AI Interview/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /AI Interview/i })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: /AI Interview/i })).toHaveCount(0);
+    }
+    expect(log.filter((r) => r.path.startsWith('/ai-interviews'))).toEqual([]);
   });
 
   test('Pay & Start Exam: a double tap opens the payment window once, and a verified payment opens the exam', async ({ page }) => {
@@ -119,13 +125,20 @@ test.describe('student exams page on a phone', () => {
     expect(log.filter((r) => r.path === '/olympiad/exams/oly-pay/payment/verify')).toHaveLength(1);
   });
 
-  test('Start AI Interview asks the server once and opens the interview', async ({ page }) => {
+  test('the Olympiad exam, result and instructions pages link to no AI Interview; the standalone page still works', async ({ page }) => {
     const log = await mockApi(page, 'student');
-    await page.goto('/student/exams');
-    await page.getByTestId('ai-interview-start').click();
-    await page.waitForURL('**/student/ai-interview/oly-ready');
-    expect(log.filter((r) => r.method === 'POST' && r.path === '/ai-interviews/start').length).toBeGreaterThanOrEqual(1);
+    for (const url of ['/student/olympiad/oly-ready', '/student/olympiad/oly-done/result']) {
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+      await expect(page.locator('[data-testid^="ai-interview"]')).toHaveCount(0);
+      await expect(page.getByRole('link', { name: /AI Interview/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /AI Interview/i })).toHaveCount(0);
+    }
+    expect(log.filter((r) => r.path.startsWith('/ai-interviews'))).toEqual([]);
+    // the AI Interview feature itself was NOT removed: its own route still opens it
+    await page.goto('/student/ai-interview/oly-ready');
     await expect(page.getByTestId('ai-interview-page')).toBeVisible();
+    expect(log.filter((r) => r.method === 'POST' && r.path === '/ai-interviews/start').length).toBeGreaterThanOrEqual(1);
     await expectNoOverflow(page);
   });
 });

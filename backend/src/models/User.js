@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { normalizePhone } = require('../services/identity');
+const { STUDENT_STANDARDS } = require('../constants/standards');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -18,7 +19,11 @@ const userSchema = new mongoose.Schema({
   resetPasswordExpire: { type: Date },
   lastLogin: { type: Date },
   // Student specific
-  currentStandard: { type: Number, min: 1, max: 10, default: null },
+  // 1–10 = Standard 1–10, 99 = "Others" (see constants/standards.js). null = not chosen yet.
+  currentStandard: {
+    type: Number, default: null,
+    validate: { validator: (v) => v == null || STUDENT_STANDARDS.includes(v), message: 'Standard must be 1-10 or Others.' },
+  },
   // Teacher specific
   subjects: [{ type: String }],
   standards: [{ type: Number }],

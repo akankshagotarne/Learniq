@@ -412,7 +412,43 @@ const createFakeDb = () => {
   const realProctoring = require('../../models/Proctoring');
   const proctoringModels = { ...realProctoring, ProctoringSession, ProctoringEvent };
 
-  return { registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  // sign-in sessions (models/AuthSession.js) - every authenticated test request needs one
+  const sessionStore = createSessionStore(registry);
+  const { sessionToken } = sessionStore;
+  const authSessionModels = sessionStore.models;
+
+  return { sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
-module.exports = { createFakeDb, FakeModel };
+/**
+ * In-memory models/AuthSession.js (same unique indexes: sid, ONE active session per user, takeover token hash) and
+ * `sessionToken(user)`: a JWT { id, sid } backed by an active session row - what a real sign-in produces. Several calls
+ * for the same user share that user's active session (like several tabs of one browser).
+ * Test files substitute `models/AuthSession.js` with `.models`.
+ */
+const createSessionStore = (registry = {}) => {
+  const crypto = require('crypto');
+  const jwt = require('jsonwebtoken');
+  const AuthSession = new FakeModel('AuthSession', {
+    registry,
+    unique: [{ fields: ['sid'] }, { fields: ['user'], where: (d) => d.status === 'active' }],
+    defaults: () => ({ status: 'active', device: { label: 'Unknown device', browser: null, os: null, mobile: false }, endedAt: null, endReason: null }),
+  });
+  const SessionTakeover = new FakeModel('SessionTakeover', { registry, unique: [{ fields: ['tokenHash'] }], defaults: () => ({ usedAt: null }) });
+  const sessionToken = (user, { secret = process.env.JWT_SECRET, expiresIn = '1h' } = {}) => {
+    const now = new Date();
+    let s = AuthSession.docs.find((d) => String(d.user) === String(user._id) && d.status === 'active');
+    if (!s) {
+      s = {
+        _id: new ObjectId(), user: user._id, sid: crypto.randomBytes(24).toString('base64url'), status: 'active',
+        device: { label: 'Chrome on Windows', browser: 'Chrome', os: 'Windows', mobile: false }, uaHash: null, endedAt: null, endReason: null,
+        lastActiveAt: now, expiresAt: new Date(now.getTime() + 7 * 864e5), purgeAt: new Date(now.getTime() + 37 * 864e5), createdAt: now, updatedAt: now,
+      };
+      AuthSession.docs.push(s);
+    }
+    return jwt.sign({ id: String(user._id), sid: s.sid }, secret, { expiresIn });
+  };
+  return { AuthSession, SessionTakeover, models: { AuthSession, SessionTakeover }, sessionToken };
+};
+
+module.exports = { createFakeDb, FakeModel, createSessionStore };

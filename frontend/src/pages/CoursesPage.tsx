@@ -8,6 +8,7 @@ import { Course } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getCourseThumbnail, getTeacherPhoto } from '../utils/courseImage';
 import { ALL_SUBJECTS } from '../constants/olympiadSubjects';
+import { standardShortLabel } from '../constants/standards';
 
 const SUBJECTS = ['All', ...ALL_SUBJECTS];
 const STANDARDS = ['All', ...Array.from({ length: 10 }, (_, i) => String(i + 1))];
@@ -163,7 +164,7 @@ const CoursesPage: React.FC = () => {
                 </p>
                 {user?.currentStandard && (
                   <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs font-semibold">
-                    Your Standard: Std {user.currentStandard}
+                    Your Standard: {standardShortLabel(user.currentStandard)}
                   </span>
                 )}
               </div>

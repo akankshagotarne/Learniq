@@ -1,5 +1,4 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { authenticate, sessionEvents } = require('./authSessions');
 const { LiveSession, LiveParticipant, LiveChatMessage } = require('../models/LiveSession');
 const { Quiz, QuizAttempt } = require('../models/Quiz');
 const LiveMcq = require('../models/LiveMcq');
@@ -11,15 +10,21 @@ const setupSocket = (io) => {
     try {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (token) {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-password');
+        // same check as the HTTP API: valid JWT AND the account's active server-side session
+        const { user, session } = await authenticate(token, { touch: false });
         // Teachers awaiting admin approval are not allowed to act as teachers over sockets either
         socket.user = user && user.role === 'teacher' && user.isApproved !== true ? undefined : user;
+        if (socket.user) socket.authSid = session.sid;
       }
       next();
     } catch (e) {
       next();
     }
+  });
+
+  // a session that ends (logout, signed in on another device, password reset) loses its live connections too
+  sessionEvents.on('ended', ({ sid }) => {
+    if (sid) io.in(`auth:${sid}`).disconnectSockets(true);
   });
 
   // sessionRooms[sessionCode] = {
@@ -34,6 +39,7 @@ const setupSocket = (io) => {
   const sessionRooms = {};
 
   io.on('connection', (socket) => {
+    if (socket.authSid) socket.join(`auth:${socket.authSid}`);
     console.log(`Socket connected: ${socket.id} (${socket.user?.name || 'anonymous'})`);
 
     // ==================== LIVE SESSION ====================

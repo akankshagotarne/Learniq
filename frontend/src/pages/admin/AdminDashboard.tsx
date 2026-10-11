@@ -6,6 +6,7 @@ import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import toast from 'react-hot-toast';
+import { standardShortLabel } from '../../constants/standards';
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -184,7 +185,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-text-primary text-xs font-semibold truncate font-heading">{s.name}</p>
-                      <p className="text-text-secondary text-xs">Std {s.currentStandard}</p>
+                      <p className="text-text-secondary text-xs">{standardShortLabel(s.currentStandard, 'No standard yet')}</p>
                     </div>
                     <p className="text-text-muted text-xs">{new Date(s.createdAt).toLocaleDateString('en-IN')}</p>
                   </div>

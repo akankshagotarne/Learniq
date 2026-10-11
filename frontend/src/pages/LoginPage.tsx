@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, SessionConflict } from '../context/AuthContext';
+import SessionConflictDialog, { ConflictDialogState } from '../components/auth/SessionConflictDialog';
+import { AUTH_NOTICE_KEY } from '../services/api';
+import { User } from '../types';
 import { LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
 
@@ -38,26 +41,78 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('student');
-  const { login } = useAuth();
+  const [notice, setNotice] = useState('');
+  const [conflict, setConflict] = useState<SessionConflict | null>(null); // takeover token: memory only
+  const [conflictState, setConflictState] = useState<ConflictDialogState>('idle');
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const { login, takeoverSession, cancelTakeover } = useAuth();
   const navigate = useNavigate();
+
+  // why we are back on the login page (e.g. "signed in on another device") - shown once
+  useEffect(() => {
+    try {
+      const n = sessionStorage.getItem(AUTH_NOTICE_KEY);
+      if (n) { setNotice(n); sessionStorage.removeItem(AUTH_NOTICE_KEY); }
+    } catch { /* storage blocked */ }
+  }, []);
+
+  // the role comes from the server's answer, never from the role chips above the form
+  const goHome = (u: User) => {
+    toast.success('Welcome back!');
+    navigate(u.role === 'admin' ? '/admin' : u.role === 'teacher' ? '/teacher' : '/student', { replace: true });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
+    setNotice('');
     setLoading(true);
     try {
-      const loggedInUser = await login(email, password);
-      toast.success('Welcome back!');
-      // Redirect based on actual role returned from the server
-      setTimeout(() => {
-        const stored = localStorage.getItem('learniq_token');
-        if (stored) navigate('/student');
-      }, 100);
+      const result = await login(email, password);
+      if (result.status === 'conflict') {
+        setConflictState('idle'); setConflictError(null); setConflict(result.conflict);
+        return;
+      }
+      goHome(result.user);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmTakeover = async () => {
+    if (!conflict || conflictState === 'busy') return;
+    setConflictState('busy'); setConflictError(null);
+    try {
+      const u = await takeoverSession(conflict.takeoverToken);
+      setConflict(null);
+      goHome(u);
+    } catch (err: any) {
+      const status = err?.response?.status; const data = err?.response?.data || {};
+      if (status === 401 || status === 409 || status === 400) {
+        // expired / already used / the other session changed: the password has to be confirmed again
+        setConflictState('expired');
+        setConflictError(data.message || 'This sign-in request has expired. Please sign in again.');
+      } else {
+        setConflictState('error');
+        setConflictError(err?.response ? (data.message || 'Could not log out the other device. Please try again.') : 'No connection. Check your internet and try again.');
+      }
+    }
+  };
+
+  const cancelConflict = () => {
+    if (conflict) cancelTakeover(conflict.takeoverToken);
+    setConflict(null);
+    setConflictState('idle'); setConflictError(null);
+  };
+
+  const reauthenticate = () => {
+    setConflict(null);
+    setConflictState('idle'); setConflictError(null);
+    setPassword('');
+    setError('Please enter your password again to continue.');
   };
 
   return (
@@ -105,8 +160,14 @@ const LoginPage: React.FC = () => {
         <div className="card-soft p-8 rounded-card border border-border-subtle shadow-soft">
           <h2 className="font-heading text-2xl font-bold text-text-primary mb-6">Welcome Back</h2>
 
+          {notice && !error && (
+            <div role="status" className="flex items-start gap-2 p-3 bg-[#FFF8E6] dark:bg-[#3D2C0C] border border-[#FFC24B]/60 rounded-xl mb-4" data-testid="auth-notice">
+              <AlertCircle className="w-4 h-4 text-[#B7791F] dark:text-[#FFC24B] flex-shrink-0 mt-0.5" />
+              <p className="text-[#7A4D00] dark:text-[#FFC24B] text-xs font-medium">{notice}</p>
+            </div>
+          )}
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4 animate-slide-down">
+            <div role="alert" className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4 animate-slide-down">
               <AlertCircle className="w-4 h-4 text-[#E1447A] flex-shrink-0" />
               <p className="text-[#E1447A] text-xs font-medium">{error}</p>
             </div>
@@ -173,6 +234,13 @@ const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {conflict && (
+        <SessionConflictDialog
+          conflict={conflict} state={conflictState} error={conflictError}
+          onConfirm={() => void confirmTakeover()} onCancel={cancelConflict} onReauthenticate={reauthenticate}
+        />
+      )}
     </div>
   );
 };

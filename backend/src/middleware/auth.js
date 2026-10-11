@@ -1,35 +1,29 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { authenticate } = require('../services/authSessions');
 
+const bearer = (req) => (req.headers.authorization && req.headers.authorization.startsWith('Bearer') ? req.headers.authorization.split(' ')[1] : null);
+
+/**
+ * Valid JWT + ACTIVE server-side session (services/authSessions.js). A token whose session was ended - logout,
+ * "logged in on another device", password reset, expiry/inactivity - gets 401 with a `code` the frontend uses to explain
+ * why it returned to the login page.
+ */
 const protect = async (req, res, next) => {
-  try {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
-    }
-
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Not authorized. No token provided.' });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
-
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'User not found.' });
-    }
-
-    if (!user.isActive) {
-      return res.status(401).json({ success: false, message: 'Account is deactivated.' });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    return res.status(401).json({ success: false, message: 'Not authorized. Invalid token.' });
+  const token = bearer(req) || (req.cookies && req.cookies.token) || null;
+  if (!token) {
+    return res.status(401).json({ success: false, code: 'NO_TOKEN', message: 'Not authorized. No token provided.' });
   }
+  let auth;
+  try {
+    auth = await authenticate(token);
+  } catch (error) {
+    if (error && error.status === 401) return res.status(401).json({ success: false, code: error.code, message: error.message });
+    // database trouble is not the user's fault: do not answer 401 (that would sign everybody out during a blip)
+    console.error('Auth check failed:', error && error.message);
+    return res.status(503).json({ success: false, code: 'AUTH_UNAVAILABLE', message: 'Please try again in a moment.' });
+  }
+  req.user = auth.user;
+  req.authSession = auth.session;
+  return next();
 };
 
 const authorize = (...roles) => {
@@ -54,17 +48,16 @@ const authorize = (...roles) => {
   };
 };
 
+/** Like protect, but a missing / ended session simply means "anonymous". */
 const optionalAuth = async (req, res, next) => {
-  try {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-    }
-  } catch (e) {}
+  const token = bearer(req);
+  if (token) {
+    try {
+      const { user, session } = await authenticate(token);
+      req.user = user;
+      req.authSession = session;
+    } catch (e) { /* anonymous */ }
+  }
   next();
 };
 

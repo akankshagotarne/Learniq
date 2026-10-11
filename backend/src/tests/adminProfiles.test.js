@@ -47,6 +47,7 @@ const UserModel = Object.assign(Object.create(fake.User), {
   },
 });
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'User.js')]: UserModel,
   [path.join(SRC, 'models', 'Course.js')]: fake.Course,
   [path.join(SRC, 'models', 'Lecture.js')]: fake.Lecture,
@@ -102,7 +103,7 @@ const call = async (base, method, url, { token, body } = {}) => {
 const get = (url, token) => call(mailed.base, 'GET', url, { token });
 
 const F = {}; // fixtures
-const tokenFor = (u) => jwt.sign({ id: String(u._id) }, JWT_SECRET);
+const tokenFor = (u) => fake.sessionToken(u);
 const HASH = '$2a$12$HASHSHOULDNEVERLEAKabcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
 const RESET_HASH = 'RESETTOKENHASH_should_never_leak_0123456789abcdef';
 const FULL_PAY = 'pay_SECRETPAYMENTID12345678';

@@ -31,6 +31,7 @@ delete process.env.AI_INTERVIEW_ENABLED;
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
@@ -138,7 +139,7 @@ const mkUser = async ({ role = 'student', name, standard = 7 } = {}) => {
     name: name || `Test User ${userSeq}`, email: `ai${userSeq}.${Date.now()}@example.com`, password: 'x', role,
     currentStandard: role === 'student' ? standard : undefined, isApproved: role === 'teacher' ? true : undefined,
   });
-  return { user, token: jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET) };
+  return { user, token: fake.sessionToken(user) };
 };
 
 let examSeq = 0;

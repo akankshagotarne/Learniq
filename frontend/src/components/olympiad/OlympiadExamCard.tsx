@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { OlympiadExam } from '../../types/olympiad';
 import { formatISTRange, formatRupees } from '../../utils/olympiadFormat';
-import AIInterviewButton from '../aiInterview/AIInterviewButton';
 
 interface Props {
   exam: OlympiadExam;
@@ -166,8 +165,6 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
             {state === 'upcoming' ? 'Exam Not Started Yet' : 'Registration Closed'}
           </button>
         )}
-        {/* AI Interview: the backend decides whether it is unlocked (verified purchase + not yet used) */}
-        <AIInterviewButton examId={exam._id} examState={state} />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ export interface User {
   avatar?: string;
   isActive: boolean;
   isApproved: boolean;
+  /** 1-10 = Standard 1-10, 99 = "Others" (see constants/standards.ts); display with standardLabel() */
   currentStandard?: number;
   subjects?: string[];
   standards?: number[];

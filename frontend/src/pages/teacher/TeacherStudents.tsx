@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Filter, ChevronRight, Mail, Phone, Award, BookOpen, HelpCircle } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
+import { standardLabel } from '../../constants/standards';
 
 interface StudentInfo {
   student: { _id: string; name: string; email: string; phone?: string; currentStandard?: number; avatar?: string; createdAt: string };
@@ -87,7 +88,7 @@ const TeacherStudents: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <p className="text-text-primary font-semibold text-sm font-heading">{student.name}</p>
                           <p className="text-text-secondary text-xs truncate">{student.email}</p>
-                          <p className="text-text-muted text-xs mt-0.5">Standard {student.currentStandard} • {courses.length} course{courses.length !== 1 ? 's' : ''}</p>
+                          <p className="text-text-muted text-xs mt-0.5">{standardLabel(student.currentStandard, 'No standard')} • {courses.length} course{courses.length !== 1 ? 's' : ''}</p>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted" />
                       </div>
@@ -118,7 +119,7 @@ const TeacherStudents: React.FC = () => {
                         </div>
                       )}
                       <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#EDE9FE] text-[#6C63F2]">
-                        Standard {selectedStudent.currentStandard}
+                        {standardLabel(selectedStudent.currentStandard, 'No standard')}
                       </span>
                     </div>
                   </div>

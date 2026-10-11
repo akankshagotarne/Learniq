@@ -1,3 +1,4 @@
+const { parseStudentStandard } = require('../constants/standards');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Lecture = require('../models/Lecture');
@@ -42,7 +43,8 @@ const getStudents = async (req, res) => {
     let students = Object.values(studentMap);
 
     if (standard) {
-      students = students.filter(s => s.student.currentStandard === parseInt(standard));
+      const std = parseStudentStandard(standard); // "others" works as well as 1-10
+      students = students.filter(s => std !== null && s.student.currentStandard === std);
     }
     if (search) {
       const term = search.toLowerCase();
@@ -180,9 +182,18 @@ const getAdminStats = async (req, res) => {
 // GET /api/admin/users
 const getAllUsers = async (req, res) => {
   try {
-    const { role, search, page = 1, limit = 20 } = req.query;
+    const { role, search, standard, page = 1, limit = 20 } = req.query;
     const filter = {};
     if (role) filter.role = role;
+    // ?standard=1..10 | others | none (no standard chosen yet)
+    if (standard !== undefined && standard !== '') {
+      if (String(standard).toLowerCase() === 'none') filter.currentStandard = null;
+      else {
+        const std = parseStudentStandard(standard);
+        if (std === null) return res.status(400).json({ success: false, code: 'INVALID_STANDARD', message: 'Unknown standard filter.' });
+        filter.currentStandard = std;
+      }
+    }
     if (search) filter.$or = [
       { name: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },

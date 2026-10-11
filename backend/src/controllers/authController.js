@@ -1,4 +1,3 @@
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
@@ -6,6 +5,7 @@ const User = require('../models/User');
 const { Notification } = require('../models/index');
 const { getPrimaryClientUrl } = require('../config/clientUrls');
 const identity = require('../services/identity');
+const { parseStudentStandard, standardLabel } = require('../constants/standards');
 
 // Two ways to actually send the reset email, both optional so the server
 // still boots before either is configured (forgotPassword then sends nothing
@@ -64,7 +64,21 @@ const sendResetEmail = async (user, resetUrl) => {
   return false;
 };
 
-const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
+// Every token is tied to a server-side session (services/authSessions.js): one active session per account.
+const sessions = require('../services/authSessions');
+
+/** Same rules for a password login and for "Log out other device & continue". null = allowed. */
+const signInBlockReason = (user) => {
+  if (!user.isActive) return 'Your account has been deactivated.';
+  if (user.role === 'teacher' && !user.isApproved) return 'Your teacher account is pending approval.';
+  return null;
+};
+
+const sendAuthError = (res, e, fallback) => {
+  if (e instanceof sessions.AuthError) return res.status(e.status).json({ success: false, code: e.code, message: e.message });
+  console.error(fallback, e && e.message);
+  return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+};
 
 // @desc   Register user
 // @route  POST /api/auth/register
@@ -129,7 +143,8 @@ const register = async (req, res) => {
       type: 'success',
     });
 
-    const token = generateToken(user._id);
+    // a brand-new account has no other session; startSession still goes through the one-active-session index
+    const { token } = await sessions.startSession(user, req);
 
     res.status(201).json({
       success: true,
@@ -165,18 +180,19 @@ const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    if (!user.isActive) {
-      return res.status(401).json({ success: false, message: 'Your account has been deactivated.' });
+    const blocked = signInBlockReason(user);
+    if (blocked) {
+      return res.status(401).json({ success: false, message: blocked });
     }
 
-    if (user.role === 'teacher' && !user.isApproved) {
-      return res.status(401).json({ success: false, message: 'Your teacher account is pending approval.' });
-    }
+    // Password is right. Another device with a LIVE session -> 409 + a short-lived takeover token for THIS attempt only.
+    // No token is issued and the other device is not touched unless the user confirms (POST /auth/session/takeover).
+    const outcome = await sessions.beginLogin(user, req);
+    if (outcome.conflict) return res.status(409).json(outcome.conflict);
+    const { token } = outcome;
 
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
-
-    const token = generateToken(user._id);
 
     res.json({
       success: true,
@@ -185,9 +201,51 @@ const login = async (req, res) => {
       user: user.toJSON(),
     });
   } catch (error) {
+    if (error instanceof sessions.AuthError) return sendAuthError(res, error);
     console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Server error during login.' });
   }
+};
+
+// @desc   "Log out other device & continue" - only with the takeover token from THIS browser's 409 login response
+// @route  POST /api/auth/session/takeover   { takeoverToken }
+const takeoverSession = async (req, res) => {
+  try {
+    const { token, user } = await sessions.takeover(req.body && req.body.takeoverToken, req, signInBlockReason);
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+    res.json({ success: true, message: 'Signed in. The other device has been logged out.', token, user: user.toJSON() });
+  } catch (error) {
+    sendAuthError(res, error, 'Session takeover error:');
+  }
+};
+
+// @desc   "Cancel" in the conflict dialog: voids the takeover token; the other device stays signed in
+// @route  POST /api/auth/session/takeover/cancel   { takeoverToken }
+const cancelSessionTakeover = async (req, res) => {
+  try {
+    await sessions.cancelTakeover(req.body && req.body.takeoverToken);
+    res.json({ success: true });
+  } catch (error) {
+    sendAuthError(res, error, 'Cancel takeover error:');
+  }
+};
+
+// @desc   Log out THIS session only
+// @route  POST /api/auth/logout
+const logout = async (req, res) => {
+  try {
+    await sessions.endSession(req.authSession.sid, 'logout');
+    res.json({ success: true, message: 'Logged out.' });
+  } catch (error) {
+    sendAuthError(res, error, 'Logout error:');
+  }
+};
+
+// @desc   Is this session still the active one? (cheap check the app makes on focus / every few minutes)
+// @route  GET /api/auth/session
+const getSessionStatus = async (req, res) => {
+  res.json({ success: true, session: sessions.publicSession(req.authSession) });
 };
 
 // @desc   Get current user
@@ -205,12 +263,13 @@ const getMe = async (req, res) => {
 // @route  PUT /api/auth/standard
 const updateStandard = async (req, res) => {
   try {
-    const { standard } = req.body;
-    if (!standard || standard < 1 || standard > 10) {
-      return res.status(400).json({ success: false, message: 'Standard must be between 1 and 10.' });
+    // 1–10 or "Others" (stored as 99, see constants/standards.js); anything else - 0, 11, 5.5, "abc" - is rejected
+    const standard = parseStudentStandard(req.body?.standard);
+    if (standard === null) {
+      return res.status(400).json({ success: false, code: 'INVALID_STANDARD', message: 'Please choose a standard from 1 to 10, or Others.' });
     }
-    const user = await User.findByIdAndUpdate(req.user._id, { currentStandard: standard }, { new: true });
-    res.json({ success: true, message: 'Standard updated!', user });
+    const user = await User.findByIdAndUpdate(req.user._id, { currentStandard: standard }, { new: true, runValidators: true });
+    res.json({ success: true, message: `${standardLabel(standard)} selected.`, user });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
@@ -353,11 +412,14 @@ const resetPassword = async (req, res) => {
     user.resetPasswordExpire = undefined;
     await user.save();
 
-    const token = generateToken(user._id);
+    // A new password signs the account out everywhere (any device that had the old one), then starts ONE new session here
+    await sessions.endAllSessions(user._id, 'password_reset');
+    if (signInBlockReason(user)) return res.json({ success: true, message: 'Password reset successful! Please sign in.' });
+    const { token } = await sessions.startSession(user, req);
     res.json({ success: true, message: 'Password reset successful!', token });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
 
-module.exports = { register, login, getMe, updateStandard, updateProfile, forgotPassword, resetPassword, issueResetToken, RESET_TTL_MS };
+module.exports = { register, login, takeoverSession, cancelSessionTakeover, logout, getSessionStatus, getMe, updateStandard, updateProfile, forgotPassword, resetPassword, issueResetToken, RESET_TTL_MS };

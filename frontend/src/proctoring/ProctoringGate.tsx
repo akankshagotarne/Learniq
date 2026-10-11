@@ -205,9 +205,25 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                 <span>You are on a phone or tablet. The camera cannot see the device you are holding, so phone detection is limited here. A laptop or desktop is recommended.</span>
               </p>
             )}
-            <label className="mt-5 flex items-start gap-2.5 text-sm text-text-primary cursor-pointer">
-              <input type="checkbox" className="mt-1 w-4 h-4 accent-[#6C63F2]" checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="consent" />
-              <span>I have read these rules and agree to camera monitoring{policy.fullscreenRequired ? ', fullscreen mode' : ''} and event recording for this exam.</span>
+            {/* A real, labelled checkbox: the whole row (box + text) toggles it, it never starts ticked, and the server
+                still refuses a session without consent. It is a fixed 22px (flex-shrink-0) so long text cannot squeeze it,
+                with its own border/fill colours so it stays visible in light AND dark mode (native look in forced-colours). */}
+            <label
+              htmlFor="proctoring-consent"
+              className={`mt-5 flex items-start gap-3 rounded-xl border-2 p-3 sm:p-3.5 min-h-[48px] text-sm leading-5 text-text-primary cursor-pointer select-none transition-colors ${consent ? 'border-[#6C63F2] bg-[#6C63F2]/10' : 'border-border-subtle bg-surface-alt hover:border-[#6C63F2]/60'}`}
+              data-testid="consent-label"
+            >
+              <span className="relative flex-shrink-0 w-[22px] h-[22px] -mt-px">
+                <input
+                  id="proctoring-consent" type="checkbox" required aria-required="true"
+                  className="peer absolute inset-0 m-0 w-[22px] h-[22px] min-w-[22px] appearance-none rounded-md border-2 border-[#6C63F2] dark:border-[#A5A0FF] bg-white dark:bg-[#0F1020] checked:bg-[#6C63F2] checked:border-[#6C63F2] dark:checked:bg-[#7C74FF] dark:checked:border-[#7C74FF] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6C63F2] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#1B1C2E] forced-colors:appearance-auto"
+                  checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="consent"
+                />
+                <svg viewBox="0 0 16 16" aria-hidden="true" className="pointer-events-none absolute inset-0 m-auto w-[14px] h-[14px] text-white opacity-0 peer-checked:opacity-100 forced-colors:hidden">
+                  <path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span className="min-w-0 flex-1 break-words" data-testid="consent-text">I have read these rules and agree to camera monitoring{policy.fullscreenRequired ? ', fullscreen mode' : ''} and event recording for this exam.</span>
             </label>
           </section>
 
