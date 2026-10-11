@@ -372,7 +372,9 @@ const summariesForAttempts = async (kind, attemptIds) => {
 const assertReviewer = async (user, session) => {
   if (user.role === 'admin') return;
   if (user.role === 'teacher') {
-    const { ids } = await adapterFor(session.examKind).reviewerIds(session.exam);
+    const adapter = adapterFor(session.examKind);
+    if (adapter.canReview && await adapter.canReview(user, session.exam)) return;
+    const { ids } = await adapter.reviewerIds(session.exam);
     if (ids.includes(String(user._id))) return;
   }
   throw new ProctoringError(404, 'Proctoring record not found.', 'NO_SESSION'); // 404: do not reveal that it exists
@@ -382,6 +384,13 @@ const loadForReview = async (user, sessionId) => {
   if (!mongoose.isValidObjectId(sessionId)) throw new ProctoringError(404, 'Proctoring record not found.', 'NO_SESSION');
   const s = await ProctoringSession.findById(sessionId);
   if (!s) throw new ProctoringError(404, 'Proctoring record not found.', 'NO_SESSION');
+  if (!s.exam && s.attempt) {
+    try {
+      const { OlympiadAttempt } = require('../../models/Olympiad');
+      const att = await OlympiadAttempt.findById(s.attempt).select('exam');
+      if (att && att.exam) s.exam = att.exam;
+    } catch { /* ignore */ }
+  }
   await assertReviewer(user, s);
   return s;
 };

@@ -298,6 +298,56 @@ test('TEST 5: Teacher can inspect student proctoring events and timestamps', asy
   assert.equal(reviewRes.body.session.events[0].type, 'MOBILE_PHONE_DETECTED');
 });
 
+test('TEST 5B: Teacher can review proctoring record even when exam.teacher was initially unlinked', async () => {
+  const unlinkedExam = await fake.OlympiadExam.create({
+    title: 'Std 4 Olympiad Test',
+    slug: 'std-4-test',
+    standard: 4,
+    conductedBy: 'Nikhil Sir',
+    isPublished: true,
+  });
+  const unlinkedAttempt = await fake.OlympiadAttempt.create({
+    student: studentUser._id,
+    exam: unlinkedExam._id,
+    status: 'COMPLETED',
+    score: 35,
+    totalMarks: 40,
+    timeTakenSeconds: 600,
+  });
+  const unlinkedSession = await fake.ProctoringSession.create({
+    examKind: 'olympiad',
+    exam: unlinkedExam._id,
+    attempt: unlinkedAttempt._id,
+    student: studentUser._id,
+    status: 'COMPLETED',
+    proctoringStatus: 'FLAGGED_FOR_REVIEW',
+    policy: {
+      enabled: true,
+      phoneDetection: true,
+      faceAbsence: true,
+      multipleFaces: true,
+      fullscreen: true,
+      cameraRequired: true,
+      maxFaceAbsenceWarnings: 5,
+      maxMultipleFacesWarnings: 3,
+      maxPhoneWarnings: 2,
+      maxFullscreenExitWarnings: 3,
+      maxTabSwitchWarnings: 3,
+    },
+    counts: { faceAbsence: 0, multiFace: 0, phone: 1, fullscreenExit: 0 },
+  });
+  await fake.ProctoringEvent.create({
+    session: unlinkedSession._id,
+    type: 'MOBILE_PHONE_DETECTED',
+    severity: 'warning',
+    occurredAt: new Date(),
+  });
+
+  const res = await call('GET', `/api/proctoring/review/sessions/${unlinkedSession._id}`, { token: nikhilToken });
+  assert.equal(res.status, 200, 'Nikhil Sir should be authorized to review');
+  assert.equal(res.body.session.events.length, 1);
+});
+
 test('TEST 6: Recorded inactivity information is displayed correctly for active and completed attempts', async () => {
   // Add in-progress student attempt with an idle heartbeat
   const student2 = await fake.User.create({

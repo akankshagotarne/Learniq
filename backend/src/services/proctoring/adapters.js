@@ -89,6 +89,14 @@ const examAdapter = {
     return examAttempts().finalize(attemptId, { reason: 'PROCTORING', proctoringReason: terminationReason });
   },
 
+  async canReview(user, examId) {
+    if (user.role === 'admin') return true;
+    if (user.role !== 'teacher') return false;
+    const { Exam } = examModels();
+    const exam = await Exam.findById(examId).select('teacher');
+    return !!(exam && String(exam.teacher) === String(user._id));
+  },
+
   /** Who may review this exam's proctoring records (besides admins). */
   async reviewerIds(examId) {
     const { Exam } = examModels();
@@ -158,19 +166,60 @@ const olympiadAdapter = {
     return olympiad().finalizeAttempt(attemptId, 'PROCTORING');
   },
 
+  async canReview(user, examId) {
+    if (user.role === 'admin') return true;
+    if (user.role !== 'teacher') return false;
+    const { OlympiadExam } = olympiadModels();
+    const exam = await OlympiadExam.findById(examId);
+    if (!exam) return false;
+    if (exam.teacher && String(exam.teacher) === String(user._id)) return true;
+
+    const rawName = (user.name || '').trim();
+    const rawConducted = (exam.conductedBy || '').trim();
+
+    // Check if this teacher's name matches conductedBy
+    const nameMatches = rawConducted && (
+      rawName.toLowerCase() === rawConducted.toLowerCase() ||
+      rawName.replace(/\s+(sir|ma'am|madam|teacher)$/i, '').toLowerCase() === rawConducted.replace(/\s+(sir|ma'am|madam|teacher)$/i, '').toLowerCase()
+    );
+
+    // LearnIQ default lead Olympiad teacher (Nikhil Sir) can review unlinked or conductedBy 'Nikhil Sir' exams
+    const isNikhilTeacher = /nikhil/i.test(rawName);
+    const examConductedByNikhil = /nikhil/i.test(rawConducted);
+
+    if (nameMatches || (isNikhilTeacher && (examConductedByNikhil || !exam.teacher))) {
+      if (!exam.teacher) {
+        exam.teacher = user._id;
+        await exam.save().catch(() => {});
+      }
+      return true;
+    }
+    return false;
+  },
+
   async reviewerIds(examId) {
     const { OlympiadExam } = olympiadModels();
     const exam = await OlympiadExam.findById(examId).select('title teacher conductedBy');
     const ids = [];
     if (exam && exam.teacher) {
       ids.push(String(exam.teacher));
-    } else if (exam && exam.conductedBy) {
+    }
+    if (exam && exam.conductedBy) {
       const User = require('../../models/User');
       const escaped = exam.conductedBy.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const teacher = await User.findOne({ name: { $regex: new RegExp(`^${escaped}$`, 'i') }, role: 'teacher' });
-      if (teacher) ids.push(String(teacher._id));
+      const baseName = exam.conductedBy.trim().replace(/\s+(sir|ma'am|madam|teacher)$/i, '').trim();
+      const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const teachers = await User.find({
+        role: 'teacher',
+        $or: [
+          { name: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+          ...(escapedBase ? [{ name: { $regex: new RegExp(`^${escapedBase}(\\s+.*)?$`, 'i') } }] : []),
+          ...(escaped.toLowerCase().includes('nikhil') ? [{ name: { $regex: /nikhil/i } }] : []),
+        ],
+      });
+      teachers.forEach((t) => ids.push(String(t._id)));
     }
-    return { ids, title: exam ? exam.title : '' };
+    return { ids: Array.from(new Set(ids)), title: exam ? exam.title : '' };
   },
 };
 
