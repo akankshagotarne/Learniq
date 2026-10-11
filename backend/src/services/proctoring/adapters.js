@@ -160,8 +160,8 @@ const olympiadAdapter = {
 
   async reviewerIds(examId) {
     const { OlympiadExam } = olympiadModels();
-    const exam = await OlympiadExam.findById(examId).select('title');
-    return { ids: [], title: exam ? exam.title : '' }; // Olympiad records: admins only
+    const exam = await OlympiadExam.findById(examId).select('title teacher');
+    return { ids: exam && exam.teacher ? [String(exam.teacher)] : [], title: exam ? exam.title : '' };
   },
 };
 

@@ -246,6 +246,7 @@ const examPublic = (exam) => ({
   slug: exam.slug,
   description: exam.description,
   conductedBy: exam.conductedBy,
+  teacher: exam.teacher || null,
   examType: exam.examType,
   standard: exam.standard,
   startDate: exam.startDate,
@@ -877,13 +878,114 @@ const examStats = async (exam) => {
 
 // GET /api/olympiad/admin/exams
 const adminListExams = handler(async (req, res) => {
-  const exams = await OlympiadExam.find().sort({ standard: 1 });
+  const exams = await OlympiadExam.find().sort({ standard: 1 }).populate('teacher', 'name email');
   const out = [];
   for (const exam of exams) {
     out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, window: windowState(exam), stats: await examStats(exam) });
   }
   res.json({ success: true, exams: out });
 });
+
+// GET /api/olympiad/teacher/exams  (teacher — only exams they are assigned to; admin sees all)
+const teacherListExams = handler(async (req, res) => {
+  const query = req.user.role === 'admin' ? {} : { teacher: req.user._id };
+  const exams = await OlympiadExam.find(query).sort({ standard: 1 });
+  const out = [];
+  for (const exam of exams) {
+    // Count attempts for this exam so the teacher sees student submission numbers
+    const [completedCount, inProgressCount] = await Promise.all([
+      OlympiadAttempt.countDocuments({ exam: exam._id, status: 'COMPLETED' }),
+      OlympiadAttempt.countDocuments({ exam: exam._id, status: 'IN_PROGRESS' }),
+    ]);
+    out.push({
+      ...examPublic(exam),
+      isPublished: exam.isPublished !== false,
+      window: windowState(exam),
+      proctoring: resolvePolicy(exam.proctoring),
+      completedAttempts: completedCount,
+      inProgressAttempts: inProgressCount,
+    });
+  }
+  res.json({ success: true, exams: out });
+});
+
+// GET /api/olympiad/teacher/exams/:id/attempts  (teacher — only for their own assigned exams; admin authorized)
+const teacherAttempts = handler(async (req, res) => {
+  const query = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, teacher: req.user._id };
+  const exam = await OlympiadExam.findOne(query);
+  if (!exam) throw new ApiError(403, 'Examination not found or not authorized.', 'NOT_AUTHORIZED');
+  const attempts = await OlympiadAttempt.find({ exam: exam._id })
+    .sort({ score: -1, timeTakenSeconds: 1 })
+    .limit(500)
+    .populate('student', 'name email currentStandard');
+  const proctoringByAttempt = await proctoringSvc().summariesForAttempts('olympiad', attempts.map((a) => a._id));
+  const { gradeFor } = require('../services/certificateService');
+
+  const now = Date.now();
+  res.json({
+    success: true,
+    exam: {
+      _id: exam._id,
+      title: exam.title,
+      standard: exam.standard,
+      durationMinutes: exam.durationMinutes,
+      totalMarks: exam.totalMarks,
+      proctoring: resolvePolicy(exam.proctoring),
+    },
+    attempts: attempts.map((a) => {
+      const proc = proctoringByAttempt.get(String(a._id)) || null;
+
+      // Track interaction timestamps and inactivity
+      let lastActivityAt = a.submittedAt || null;
+      if (a.status === 'IN_PROGRESS') {
+        let latestInteraction = null;
+        if (a.responses && typeof a.responses === 'object') {
+          for (const k of Object.keys(a.responses)) {
+            const resp = a.responses[k];
+            if (resp && resp.updatedAt) {
+              const d = new Date(resp.updatedAt);
+              if (!latestInteraction || d > latestInteraction) latestInteraction = d;
+            }
+          }
+        }
+        const hb = proc && proc.lastHeartbeatAt ? new Date(proc.lastHeartbeatAt) : null;
+        if (hb && (!latestInteraction || hb > latestInteraction)) {
+          lastActivityAt = hb;
+        } else if (latestInteraction) {
+          lastActivityAt = latestInteraction;
+        } else {
+          lastActivityAt = a.startedAt;
+        }
+      }
+
+      const inactivitySeconds = (a.status === 'IN_PROGRESS' && lastActivityAt)
+        ? Math.max(0, Math.round((now - new Date(lastActivityAt).getTime()) / 1000))
+        : 0;
+
+      return {
+        _id: a._id,
+        proctoring: proc,
+        student: a.student ? { _id: a.student._id, name: a.student.name, email: maskEmail(a.student.email), standard: a.student.currentStandard } : null,
+        status: a.status,
+        submissionType: a.submissionType,
+        startedAt: a.startedAt,
+        submittedAt: a.submittedAt,
+        score: a.score,
+        totalMarks: a.totalMarks,
+        percentage: a.percentage,
+        grade: a.status === 'COMPLETED' ? gradeFor(a.percentage) : null,
+        correctCount: a.correctCount,
+        wrongCount: a.wrongCount,
+        unansweredCount: a.unansweredCount,
+        timeTakenSeconds: a.timeTakenSeconds,
+        lastActivityAt,
+        inactivitySeconds,
+        isInactive: a.status === 'IN_PROGRESS' && inactivitySeconds > 180,
+      };
+    }),
+  });
+});
+
 
 // POST /api/olympiad/admin/seed — creates / refreshes the Standard 9 and Standard 10 exams and their questions (idempotent)
 const adminSeedExam = handler(async (req, res) => {
@@ -945,6 +1047,25 @@ const adminUpdateProctoring = handler(async (req, res) => {
   exam.proctoring = policy;
   await exam.save();
   res.json({ success: true, proctoring: resolvePolicy(exam.proctoring) });
+});
+
+// PUT /api/olympiad/admin/exams/:id/teacher   (admin) - assign or unassign a teacher to an Olympiad exam
+const adminAssignTeacher = handler(async (req, res) => {
+  const exam = await loadExamAdmin(req.params.id);
+  const { teacherId } = req.body || {};
+  if (teacherId === null || teacherId === undefined || teacherId === '') {
+    exam.teacher = undefined;
+  } else {
+    if (!mongoose.isValidObjectId(teacherId)) {
+      throw new ApiError(400, 'Invalid teacher ID.', 'INVALID_REQUEST');
+    }
+    const User = require('../models/User');
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher', isActive: true });
+    if (!teacher) throw new ApiError(404, 'Teacher not found or account is not active.', 'TEACHER_NOT_FOUND');
+    exam.teacher = teacher._id;
+  }
+  await exam.save();
+  res.json({ success: true, teacher: exam.teacher ? { _id: exam.teacher } : null });
 });
 
 // One admin-facing shape for an OlympiadPayment (never includes the Razorpay signature).
@@ -1071,7 +1192,8 @@ module.exports = {
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
   startExam, getAttempt, saveAnswers, submitExam,
   getResult, getReview,
-  adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam, adminUpdateProctoring,
+  adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam, adminUpdateProctoring, adminAssignTeacher,
+  teacherListExams, teacherAttempts,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // used by the proctoring adapters (services/proctoring/adapters.js) - the Olympiad rules stay in this file
   _proctoring: { loadExam, assertEligibleStudent, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt },

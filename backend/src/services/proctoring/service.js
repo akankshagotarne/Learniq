@@ -358,6 +358,7 @@ const summaryOf = (s) => ({
   terminationReason: s.terminationReason || null,
   terminationText: s.terminationReason ? TERMINATION_TEXT[s.terminationReason] : null,
   terminatedAt: s.terminatedAt || null,
+  lastHeartbeatAt: s.lastHeartbeatAt || null,
   reviewRequired: ['FLAGGED_FOR_REVIEW', 'AUTO_SUBMITTED'].includes(deriveStatus(s)),
   review: s.review && s.review.reviewedAt ? { outcome: s.review.outcome, reviewedAt: s.review.reviewedAt } : null,
 });

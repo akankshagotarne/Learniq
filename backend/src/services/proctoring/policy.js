@@ -21,7 +21,7 @@ const NUMERIC = {
   faceAbsenceThresholdMs: [2000, 30000, 4000],   // no face for this long = one confirmed absence episode
   multiFacePersistenceMs: [1000, 15000, 2500],    // 2+ faces for this long = one confirmed episode
   phonePersistenceMs: [500, 10000, 1500],         // phone seen (above confidence) for this long = one confirmed episode
-  phoneConfidence: [0.3, 0.95, 0.5],              // EfficientDet-Lite0 "cell phone" score
+  phoneConfidence: [0.3, 0.95, 0.35],              // EfficientDet-Lite0 "cell phone" score (lowered from 0.5: partial/angled phones score 0.25–0.45)
   recoveryMs: [500, 10000, 1500],                 // condition must be gone this long before a NEW episode can start
   fullscreenGraceMs: [3000, 60000, 10000],        // strict mode: not back in fullscreen within this = confirmed exit
   cameraGraceMs: [10000, 300000, 60000],          // AUTO_SUBMIT_AFTER_GRACE: camera not back within this = submit

@@ -46,6 +46,7 @@ const TeacherStudents = lazy(() => import('./pages/teacher/TeacherStudents'));
 const TeacherExamsPage = lazy(() => import('./pages/teacher/TeacherExamsPage'));
 const ExamBuilderPage = lazy(() => import('./pages/teacher/ExamBuilderPage'));
 const ExamResultsPage = lazy(() => import('./pages/teacher/ExamResultsPage'));
+const TeacherOlympiadAttemptsPage = lazy(() => import('./pages/teacher/TeacherOlympiadAttemptsPage'));
 const TeacherDoubts = lazy(() => import('./pages/teacher/TeacherDoubts'));
 
 // Admin pages
@@ -264,6 +265,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/teacher/exams/:id/results" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
           <ExamResultsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/olympiad/:id/attempts" element={
+        <ProtectedRoute roles={['teacher', 'admin']}>
+          <TeacherOlympiadAttemptsPage />
         </ProtectedRoute>
       } />
       <Route path="/teacher/quizzes" element={<Navigate to="/teacher/exams" replace />} />

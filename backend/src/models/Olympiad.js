@@ -23,6 +23,9 @@ const olympiadExamSchema = new mongoose.Schema({
   slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
   description: { type: String, trim: true },
   conductedBy: { type: String, trim: true },
+  // Optional link to the teacher account that conducts/reviews this exam.
+  // Lets the teacher dashboard query Olympiad exams they are assigned to.
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true, sparse: true },
   examType: { type: String, default: 'olympiad' },
   standard: { type: Number, required: true, min: 1, max: 10 },
   instructions: [{ type: String }],

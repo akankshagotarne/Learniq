@@ -68,4 +68,7 @@ export const olympiadApi = {
     const { data } = await api.get('/olympiad/admin/payments', { params: { standard, view } });
     return { payments: data.payments || [], summary: data.summary };
   },
+  // teacher
+  teacherExams: async (): Promise<OlympiadExam[]> => (await api.get('/olympiad/teacher/exams')).data.exams || [],
+  teacherAttempts: async (id: string): Promise<{ exam: any; attempts: any[] }> => (await api.get(`/olympiad/teacher/exams/${id}/attempts`)).data,
 };

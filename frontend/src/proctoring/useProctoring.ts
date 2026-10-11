@@ -233,11 +233,11 @@ export const useProctoring = (opts: ProctoringOptions) => {
     }
   }, []);
 
-  // ── detection loop (independent of React renders) ──
   const startLoop = useCallback(() => {
     const p = optsRef.current.policy;
     const tracker = createEpisodeTracker({ ...p, maxGapMs: 3000 });
     let tick = 0; let lastVideoTime = -1; let lastAdvance = performance.now(); let stalled = false; let failures = 0;
+    let lastDiagnosticLog = 0; // dev: rate-limit no-phone log
     const loop = async () => {
       if (stoppedRef.current) return;
       const v = videoRef.current; const det = detectorRef.current;
@@ -250,6 +250,21 @@ export const useProctoring = (opts: ProctoringOptions) => {
             const withPhone = p.phoneDetection && tick % PHONE_EVERY_N === 0;
             const r = await det.detect(v, withPhone);
             failures = 0;
+            // ── dev diagnostics (never in production bundles with no console) ──
+            if (import.meta.env.DEV && withPhone) {
+              if (r.phoneScore !== null && r.phoneScore >= 0.2) {
+                // always log a plausible phone frame so confidence vs threshold is visible
+                console.debug(
+                  `[proctor/phone] score=${r.phoneScore.toFixed(3)} threshold=${p.phoneConfidence} ${
+                    r.phoneScore >= p.phoneConfidence ? '✅ ABOVE THRESHOLD — episode tracker notified' : '⬇️ below threshold — ignored'
+                  } inferenceMs=${Math.round(r.inferenceMs)}`
+                );
+              } else if (now - lastDiagnosticLog > 10000) {
+                // rate-limited: once every 10 s confirm detection is running
+                lastDiagnosticLog = now;
+                console.debug(`[proctor/phone] running — no phone (score=${r.phoneScore?.toFixed(3) ?? 'n/a'}) faces=${r.faceCount} inferenceMs=${Math.round(r.inferenceMs)}`);
+              }
+            }
             tracker.observe({ at: performance.now(), faceCount: r.faceCount, phoneScore: withPhone ? r.phoneScore : null }).forEach(episodeToEvent);
             setLive((l) => ({ ...l, faceCount: r.faceCount, inferenceMs: Math.round(r.inferenceMs), monitoring: true }));
           }
@@ -258,11 +273,13 @@ export const useProctoring = (opts: ProctoringOptions) => {
       } catch {
         failures += 1; // a failed inference is NOT treated as "no face"; the tracker sees a gap instead
         if (failures === 10) report('VIDEO_FEED_STALLED', { metadata: { detail: 'detector error' } });
+        if (import.meta.env.DEV && failures <= 3) console.warn('[proctor] inference error (failure', failures, ')');
       }
       if (!stoppedRef.current) timersRef.current.loop = window.setTimeout(loop, FACE_INTERVAL_MS);
     };
     timersRef.current.loop = window.setTimeout(loop, FACE_INTERVAL_MS);
   }, [report]);
+
 
   // ── browser signals ──
   const attachListeners = useCallback(() => {

@@ -4,12 +4,30 @@ import {
   ClipboardList, Plus, Search, Filter, Clock, HelpCircle,
   Award, Eye, Edit3, Trash2, CheckCircle2, AlertCircle,
   Users, BarChart2, Calendar, Globe, Lock, MoreVertical,
-  RotateCcw
+  RotateCcw, Trophy, ShieldCheck
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Exam } from '../../types';
 import toast from 'react-hot-toast';
+
+/** Shape of an Olympiad exam returned from /api/olympiad/teacher/exams */
+interface OlympiadExam {
+  _id: string;
+  title: string;
+  standard: number;
+  startDate: string;
+  endDate: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  totalMarks: number;
+  fee: number;
+  completedAttempts: number;
+  inProgressAttempts: number;
+  isPublished: boolean;
+  window: 'upcoming' | 'open' | 'closed';
+}
+
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -27,9 +45,26 @@ const TeacherExamsPage: React.FC = () => {
   const [standardFilter, setStandardFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
+  // Olympiad exams assigned to this teacher
+  const [olympiadExams, setOlympiadExams] = useState<OlympiadExam[]>([]);
+  const [olympiadLoading, setOlympiadLoading] = useState(true);
+
   useEffect(() => {
     fetchExams();
+    fetchOlympiadExams();
   }, []);
+
+  const fetchOlympiadExams = async () => {
+    setOlympiadLoading(true);
+    try {
+      const res = await api.get('/olympiad/teacher/exams');
+      setOlympiadExams(res.data.exams || []);
+    } catch (err) {
+      // Silently ignore if teacher has no olympiad exams assigned
+    } finally {
+      setOlympiadLoading(false);
+    }
+  };
 
   const fetchExams = async () => {
     setLoading(true);
@@ -88,8 +123,20 @@ const TeacherExamsPage: React.FC = () => {
     return matchesSearch && matchesStd && matchesStatus;
   });
 
-  const totalAttempts = exams.reduce((sum, e) => sum + (e.attemptCount || 0), 0);
-  const publishedCount = exams.filter(e => e.isPublished).length;
+  const filteredOlympiadExams = olympiadExams.filter(e => {
+    const matchesSearch = !searchQuery || e.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStd = standardFilter === 'All' || e.standard.toString() === standardFilter;
+    const matchesStatus =
+      statusFilter === 'All' ||
+      (statusFilter === 'Published' && e.isPublished !== false) ||
+      (statusFilter === 'Draft' && e.isPublished === false);
+    return matchesSearch && matchesStd && matchesStatus;
+  });
+
+  const totalExamsCount = exams.length + olympiadExams.length;
+  const publishedCount = exams.filter(e => e.isPublished).length + olympiadExams.filter(e => e.isPublished !== false).length;
+  const draftsCount = exams.filter(e => !e.isPublished).length + olympiadExams.filter(e => e.isPublished === false).length;
+  const totalSubmissionsCount = exams.reduce((sum, e) => sum + (e.attemptCount || 0), 0) + olympiadExams.reduce((sum, e) => sum + (e.completedAttempts || 0), 0);
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -131,7 +178,7 @@ const TeacherExamsPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-text-muted">Total Exams</p>
-                <p className="text-xl font-heading font-bold text-text-primary">{exams.length}</p>
+                <p className="text-xl font-heading font-bold text-text-primary">{totalExamsCount}</p>
               </div>
             </div>
 
@@ -151,9 +198,7 @@ const TeacherExamsPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-text-muted">Drafts</p>
-                <p className="text-xl font-heading font-bold text-text-primary">
-                  {exams.length - publishedCount}
-                </p>
+                <p className="text-xl font-heading font-bold text-text-primary">{draftsCount}</p>
               </div>
             </div>
 
@@ -163,7 +208,7 @@ const TeacherExamsPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-text-muted">Student Submissions</p>
-                <p className="text-xl font-heading font-bold text-text-primary">{totalAttempts}</p>
+                <p className="text-xl font-heading font-bold text-text-primary">{totalSubmissionsCount}</p>
               </div>
             </div>
           </div>
@@ -364,6 +409,80 @@ const TeacherExamsPage: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {/* Olympiad Exams Section (only shown if teacher is assigned to any) */}
+          {(olympiadLoading || olympiadExams.length > 0) && (
+            <div className="mt-10">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B]"><Trophy className="w-5 h-5" /></span>
+                <div>
+                  <h2 className="font-heading font-bold text-xl text-text-primary">Olympiad Exams</h2>
+                  <p className="text-xs text-text-secondary">Paid Olympiad examinations assigned to you for monitoring</p>
+                </div>
+              </div>
+
+              {olympiadLoading ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                  {[...Array(2)].map((_, i) => (
+                    <div key={i} className="card-soft h-48 rounded-2xl animate-pulse bg-surface-alt" />
+                  ))}
+                </div>
+              ) : filteredOlympiadExams.length === 0 ? (
+                <div className="card-soft p-6 text-center text-xs text-text-muted rounded-2xl bg-surface">
+                  No Olympiad exams match your search or filter criteria.
+                </div>
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                  {filteredOlympiadExams.map(exam => {
+                    const windowBadge = {
+                      upcoming: { label: 'Upcoming', cls: 'bg-[#5AC8FA]/15 text-[#5AC8FA]' },
+                      open: { label: 'Open', cls: 'bg-[#4ADE9A]/15 text-[#16A34A] dark:text-[#4ADE9A]' },
+                      closed: { label: 'Closed', cls: 'bg-surface-alt text-text-muted border border-border-subtle' },
+                    }[exam.window];
+                    return (
+                      <div key={exam._id} className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-[#FFC24B]/30 rounded-2xl bg-surface group">
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="badge-primary text-[10px] py-0 px-2">Std {exam.standard}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${windowBadge.cls}`}>{windowBadge.label}</span>
+                            </div>
+                            <span className="flex items-center gap-1 text-[10px] font-semibold text-[#FFC24B]"><ShieldCheck className="w-3.5 h-3.5" /> Olympiad</span>
+                          </div>
+                          <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2 mb-3">{exam.title}</h3>
+                          <div className="grid grid-cols-2 gap-2 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
+                            <div className="flex items-center gap-1.5 text-text-secondary">
+                              <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
+                              <span>{exam.durationMinutes} mins</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-text-secondary">
+                              <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
+                              <span>{exam.totalQuestions} Qs</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-text-secondary">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
+                              <span>{exam.completedAttempts} submitted</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-text-secondary">
+                              <Users className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
+                              <span>{exam.inProgressAttempts} in progress</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pt-3 border-t border-border-subtle mt-3">
+                          <Link
+                            to={`/teacher/olympiad/${exam._id}/attempts`}
+                            className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold w-full"
+                          >
+                            <BarChart2 className="w-3.5 h-3.5 text-brand-primary" /> View Student Attempts
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

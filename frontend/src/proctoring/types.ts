@@ -33,7 +33,7 @@ export const DEFAULT_PROCTORING_POLICY: ProctoringPolicy = {
   fullscreenRequired: true, strictMode: false, desktopRequired: false,
   switchAction: 'WARN_AND_REQUIRE_FULLSCREEN', cameraFailureAction: 'BLOCK_UNTIL_RESTORED',
   maxFaceAbsenceWarnings: 5, maxMultiFaceWarnings: 3, maxPhoneWarnings: 2,
-  faceAbsenceThresholdMs: 4000, multiFacePersistenceMs: 2500, phonePersistenceMs: 1500, phoneConfidence: 0.5,
+  faceAbsenceThresholdMs: 4000, multiFacePersistenceMs: 2500, phonePersistenceMs: 1500, phoneConfidence: 0.35,
   recoveryMs: 1500, fullscreenGraceMs: 10000, cameraGraceMs: 60000, warningCooldownMs: 5000,
 };
 

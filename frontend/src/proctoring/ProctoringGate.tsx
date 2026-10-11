@@ -128,8 +128,16 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       try {
         const t0 = performance.now();
         detectorRef.current = await loadDetector({ phone: policy.phoneDetection });
-        setModels({ state: 'ok', message: `Monitoring ready (${secs(performance.now() - t0)}). Everything runs on this device - no video is uploaded.` });
-      } catch {
+        const elapsed = performance.now() - t0;
+        if (import.meta.env.DEV) {
+          console.debug(
+            `[proctor/gate] detector loaded: name=${detectorRef.current.name} phone=${policy.phoneDetection} elapsedMs=${Math.round(elapsed)}`
+          );
+          if (!policy.phoneDetection) console.debug('[proctor/gate] phoneDetection is disabled — phone counter will not be populated.');
+        }
+        setModels({ state: 'ok', message: `Monitoring ready (${secs(elapsed)}). Everything runs on this device - no video is uploaded.` });
+      } catch (e) {
+        if (import.meta.env.DEV) console.error('[proctor/gate] detector load failed:', e);
         setModels({ state: 'fail', message: 'The monitoring components could not be loaded on this device. Use the latest Chrome, Edge or Firefox on a laptop or desktop, or contact support.' });
         return;
       }

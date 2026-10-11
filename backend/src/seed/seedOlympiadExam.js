@@ -52,6 +52,9 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
     }
   }
 
+  const User = require('../models/User');
+  const teacherUser = await User.findOne({ name: 'Nikhil Sir', role: 'teacher', isActive: true });
+
   const exam = await OlympiadExam.findOneAndUpdate(
     { slug },
     {
@@ -60,6 +63,7 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
         slug,
         description: config.description,
         conductedBy: 'Nikhil Sir',
+        ...(teacherUser ? { teacher: teacherUser._id } : {}),
         examType: 'olympiad',
         standard,
         instructions: INSTRUCTIONS,

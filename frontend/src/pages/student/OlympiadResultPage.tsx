@@ -128,7 +128,7 @@ const OlympiadResultPage: React.FC = () => {
               <span className="badge-success text-[10px] py-0.5 px-2 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Completed</span>
             </div>
             <h1 className="font-heading font-bold text-xl sm:text-2xl text-text-primary">{exam.title}</h1>
-            <p className="text-xs text-text-secondary mt-1">Standard {exam.standard} · Exam by {exam.conductedBy || 'Nikhil Sir'}</p>
+            <p className="text-xs text-text-secondary mt-1">Standard {exam.standard} · {exam.conductedBy ? `Exam by ${exam.conductedBy}` : 'LearnIQ Olympiad'}</p>
             {autoNote && <p className="text-xs text-[#B7791F] dark:text-[#FFC24B] mt-2">{autoNote}</p>}
           </div>
           <div className="flex items-center gap-4 self-start sm:self-auto">
