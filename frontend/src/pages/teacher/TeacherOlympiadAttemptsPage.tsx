@@ -359,10 +359,21 @@ const TeacherOlympiadAttemptsPage: React.FC = () => {
           </div>
 
           {/* Proctoring Event Review Dialog */}
-          <ProctoringReviewDialog
-            sessionId={reviewSession}
-            onClose={() => setReviewSession(null)}
-          />
+          {reviewSession && (
+            <ProctoringReviewDialog
+              sessionId={reviewSession}
+              onClose={() => setReviewSession(null)}
+              onReviewed={(summary) =>
+                setAttempts(prev =>
+                  prev.map(a =>
+                    a.proctoring?.sessionId === summary.sessionId
+                      ? { ...a, proctoring: summary }
+                      : a
+                  )
+                )
+              }
+            />
+          )}
         </div>
       </main>
     </div>

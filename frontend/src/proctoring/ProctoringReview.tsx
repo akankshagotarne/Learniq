@@ -52,7 +52,8 @@ export const ProctoringBadges: React.FC<{ summary: ProctoringSummary | null | un
 
 const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
 
-export const ProctoringReviewDialog: React.FC<{ sessionId: string; onClose: () => void; onReviewed?: (s: ProctoringSummary) => void }> = ({ sessionId, onClose, onReviewed }) => {
+export const ProctoringReviewDialog: React.FC<{ sessionId: string | null; onClose: () => void; onReviewed?: (s: ProctoringSummary) => void }> = ({ sessionId, onClose, onReviewed }) => {
+  if (!sessionId) return null;
   const [data, setData] = useState<ReviewDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<ReviewOutcome | ''>('');
@@ -60,7 +61,10 @@ export const ProctoringReviewDialog: React.FC<{ sessionId: string; onClose: () =
   const [saving, setSaving] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const load = () => proctoringApi.reviewDetail(sessionId).then(setData).catch((e) => setErr(errorMessage(e, 'Could not load the proctoring record.')));
+  const load = () => {
+    if (!sessionId) return;
+    proctoringApi.reviewDetail(sessionId).then(setData).catch((e) => setErr(errorMessage(e, 'Could not load the proctoring record.')));
+  };
   useEffect(() => { void load(); closeRef.current?.focus(); }, [sessionId]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
