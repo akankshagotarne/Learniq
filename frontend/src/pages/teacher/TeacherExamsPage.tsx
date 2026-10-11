@@ -252,14 +252,14 @@ const TeacherExamsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Exams List */}
-          {loading ? (
+          {/* Exams List & Olympiad Section */}
+          {(loading && olympiadLoading && totalExamsCount === 0) ? (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="card-soft h-56 rounded-2xl animate-pulse bg-surface-alt" />
               ))}
             </div>
-          ) : filteredExams.length === 0 ? (
+          ) : totalExamsCount === 0 && !loading && !olympiadLoading ? (
             <div className="card-soft p-12 text-center max-w-md mx-auto my-8 bg-surface">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-[#6C63F2]/10 text-brand-primary flex items-center justify-center mb-4">
                 <ClipboardList className="w-7 h-7" />
@@ -268,221 +268,298 @@ const TeacherExamsPage: React.FC = () => {
                 No exams found
               </h3>
               <p className="text-xs text-text-secondary mb-5">
-                {exams.length === 0
-                  ? 'You have not authored any exams yet. Click below to build your first standardized test.'
-                  : 'No exams match your active filter criteria.'}
+                You have not authored any exams yet. Click below to build your first standardized test.
               </p>
-              {exams.length === 0 ? (
-                <Link
-                  to="/teacher/exams/new"
-                  className="btn-primary text-xs py-2.5 px-4 inline-flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Create Your First Exam
-                </Link>
-              ) : (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setStandardFilter('All');
-                    setStatusFilter('All');
-                  }}
-                  className="btn-secondary text-xs py-2 px-4"
-                >
-                  Reset Filters
-                </button>
-              )}
+              <Link
+                to="/teacher/exams/new"
+                className="btn-primary text-xs py-2.5 px-4 inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Create Your First Exam
+              </Link>
+            </div>
+          ) : filteredExams.length === 0 && filteredOlympiadExams.length === 0 ? (
+            <div className="card-soft p-12 text-center max-w-md mx-auto my-8 bg-surface">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-[#6C63F2]/10 text-brand-primary flex items-center justify-center mb-4">
+                <Search className="w-7 h-7" />
+              </div>
+              <h3 className="font-heading font-bold text-lg text-text-primary mb-1">
+                No matching exams
+              </h3>
+              <p className="text-xs text-text-secondary mb-5">
+                No examinations match your active filter criteria.
+              </p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setStandardFilter('All');
+                  setStatusFilter('All');
+                }}
+                className="btn-secondary text-xs py-2 px-4"
+              >
+                Reset Filters
+              </button>
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
-              {filteredExams.map(exam => {
-                const questionCount = exam.questions?.length || exam.questionCount || 0;
-
-                return (
-                  <div
-                    key={exam._id}
-                    className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-border-subtle rounded-2xl bg-surface group"
-                  >
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="badge-primary text-[10px] py-0 px-2">
-                            Std {exam.standard}
-                          </span>
-                          <span className={`${getSubjectBadgeClass(exam.subject)} text-[10px] font-semibold px-2 py-0.5 rounded-full`}>
-                            {exam.subject}
-                          </span>
-                        </div>
-
-                        <button
-                          onClick={() => handleTogglePublish(exam._id, exam.isPublished, questionCount)}
-                          title="Click to toggle publish status"
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all ${
-                            exam.isPublished
-                              ? 'bg-[#4ADE9A]/15 text-[#16A34A] dark:text-[#4ADE9A] hover:bg-[#4ADE9A]/25'
-                              : 'bg-surface-alt text-text-muted hover:text-text-primary border border-border-subtle'
-                          }`}
-                        >
-                          {exam.isPublished ? (
-                            <>
-                              <Globe className="w-3 h-3" /> Published
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="w-3 h-3" /> Draft
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Title & Chapter */}
-                      <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2">
-                        {exam.title}
-                      </h3>
-
-                      {exam.chapter && (
-                        <p className="text-xs text-text-muted mt-0.5">
-                          Chapter: {exam.chapter}
-                        </p>
-                      )}
-
-                      {/* Specs */}
-                      <div className="grid grid-cols-2 gap-2 my-4 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
-                        <div className="flex items-center gap-1.5 text-text-secondary">
-                          <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
-                          <span>{exam.durationMinutes} mins</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-text-secondary">
-                          <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
-                          <span>{questionCount} Questions</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-text-secondary">
-                          <Award className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
-                          <span>{exam.totalMarks} Marks</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-text-secondary">
-                          <Users className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
-                          <span>{exam.attemptCount || 0} Submissions</span>
-                        </div>
-                      </div>
-
-                      {/* Negative Marking tag */}
-                      {exam.negativeMarking && (
-                        <div className="text-[11px] text-[#E1447A] mb-3 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          <span>Negative Marking enabled (-{exam.negativeMarkValue} per wrong)</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="pt-3 border-t border-border-subtle space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Link
-                          to={`/teacher/exams/${exam._id}/results`}
-                          className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold"
-                        >
-                          <BarChart2 className="w-3.5 h-3.5 text-brand-primary" /> Analytics
-                        </Link>
-
-                        <Link
-                          to={`/teacher/exams/${exam._id}/edit`}
-                          className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-[#5AC8FA]" /> Edit Questions
-                        </Link>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-[10px] text-text-muted">
-                          Created {new Date(exam.createdAt).toLocaleDateString()}
-                        </span>
-
-                        <button
-                          onClick={() => handleDelete(exam._id, exam.title)}
-                          className="text-[11px] text-[#E1447A] hover:bg-[#E1447A]/10 p-1.5 rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {/* Olympiad Exams Section (only shown if teacher is assigned to any) */}
-          {(olympiadLoading || olympiadExams.length > 0) && (
-            <div className="mt-10">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B]"><Trophy className="w-5 h-5" /></span>
+            <div className="space-y-10">
+              {/* Olympiad Exams Section */}
+              {(olympiadLoading || olympiadExams.length > 0) && (
                 <div>
-                  <h2 className="font-heading font-bold text-xl text-text-primary">Olympiad Exams</h2>
-                  <p className="text-xs text-text-secondary">Paid Olympiad examinations assigned to you for monitoring</p>
-                </div>
-              </div>
-
-              {olympiadLoading ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
-                  {[...Array(2)].map((_, i) => (
-                    <div key={i} className="card-soft h-48 rounded-2xl animate-pulse bg-surface-alt" />
-                  ))}
-                </div>
-              ) : filteredOlympiadExams.length === 0 ? (
-                <div className="card-soft p-6 text-center text-xs text-text-muted rounded-2xl bg-surface">
-                  No Olympiad exams match your search or filter criteria.
-                </div>
-              ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
-                  {filteredOlympiadExams.map(exam => {
-                    const windowBadge = {
-                      upcoming: { label: 'Upcoming', cls: 'bg-[#5AC8FA]/15 text-[#5AC8FA]' },
-                      open: { label: 'Open', cls: 'bg-[#4ADE9A]/15 text-[#16A34A] dark:text-[#4ADE9A]' },
-                      closed: { label: 'Closed', cls: 'bg-surface-alt text-text-muted border border-border-subtle' },
-                    }[exam.window];
-                    return (
-                      <div key={exam._id} className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-[#FFC24B]/30 rounded-2xl bg-surface group">
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="badge-primary text-[10px] py-0 px-2">Std {exam.standard}</span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${windowBadge.cls}`}>{windowBadge.label}</span>
-                            </div>
-                            <span className="flex items-center gap-1 text-[10px] font-semibold text-[#FFC24B]"><ShieldCheck className="w-3.5 h-3.5" /> Olympiad</span>
-                          </div>
-                          <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2 mb-3">{exam.title}</h3>
-                          <div className="grid grid-cols-2 gap-2 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
-                              <span>{exam.durationMinutes} mins</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
-                              <span>{exam.totalQuestions} Qs</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
-                              <span>{exam.completedAttempts} submitted</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <Users className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
-                              <span>{exam.inProgressAttempts} in progress</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="pt-3 border-t border-border-subtle mt-3">
-                          <Link
-                            to={`/teacher/olympiad/${exam._id}/attempts`}
-                            className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold w-full"
-                          >
-                            <BarChart2 className="w-3.5 h-3.5 text-brand-primary" /> View Student Attempts
-                          </Link>
-                        </div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B]">
+                        <Trophy className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <h2 className="font-heading font-bold text-xl text-text-primary">
+                          All India Olympiad Examinations
+                        </h2>
+                        <p className="text-xs text-text-secondary">
+                          Standardized assessments assigned to you • Live AI proctoring active
+                        </p>
                       </div>
-                    );
-                  })}
+                    </div>
+                    {filteredOlympiadExams.length > 0 && (
+                      <span className="badge-primary text-xs py-1 px-3">
+                        {filteredOlympiadExams.length} {filteredOlympiadExams.length === 1 ? 'Exam' : 'Exams'}
+                      </span>
+                    )}
+                  </div>
+
+                  {olympiadLoading ? (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="card-soft h-48 rounded-2xl animate-pulse bg-surface-alt" />
+                      ))}
+                    </div>
+                  ) : filteredOlympiadExams.length === 0 ? (
+                    <div className="card-soft p-6 text-center text-xs text-text-muted rounded-2xl bg-surface">
+                      No Olympiad exams match your search or filter criteria.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                      {filteredOlympiadExams.map(exam => {
+                        const windowBadge = {
+                          upcoming: { label: 'Upcoming', cls: 'bg-[#5AC8FA]/15 text-[#5AC8FA]' },
+                          open: { label: 'Open', cls: 'bg-[#4ADE9A]/15 text-[#16A34A] dark:text-[#4ADE9A]' },
+                          closed: { label: 'Closed', cls: 'bg-surface-alt text-text-muted border border-border-subtle' },
+                        }[exam.window];
+                        return (
+                          <div key={exam._id} className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-[#FFC24B]/30 rounded-2xl bg-surface group">
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="badge-primary text-[10px] py-0 px-2">Std {exam.standard}</span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${windowBadge.cls}`}>{windowBadge.label}</span>
+                                </div>
+                                <span className="flex items-center gap-1 text-[10px] font-semibold text-[#FFC24B]"><ShieldCheck className="w-3.5 h-3.5" /> Olympiad</span>
+                              </div>
+                              <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2 mb-3">{exam.title}</h3>
+                              <div className="grid grid-cols-2 gap-2 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
+                                <div className="flex items-center gap-1.5 text-text-secondary">
+                                  <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
+                                  <span>{exam.durationMinutes} mins</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-text-secondary">
+                                  <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
+                                  <span>{exam.totalQuestions} Qs</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-text-secondary">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
+                                  <span>{exam.completedAttempts} submitted</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-text-secondary">
+                                  <Users className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
+                                  <span>{exam.inProgressAttempts} in progress</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="pt-3 border-t border-border-subtle mt-3">
+                              <Link
+                                to={`/teacher/olympiad/${exam._id}/attempts`}
+                                className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold w-full"
+                              >
+                                <BarChart2 className="w-3.5 h-3.5 text-brand-primary" /> View Student Attempts
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Classroom & Practice Exams Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-[#6C63F2]/10 text-brand-primary">
+                      <ClipboardList className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h2 className="font-heading font-bold text-xl text-text-primary">
+                        Classroom & Practice Exams
+                      </h2>
+                      <p className="text-xs text-text-secondary">
+                        Custom quizzes and subject assessments authored by you
+                      </p>
+                    </div>
+                  </div>
+                  {filteredExams.length > 0 && (
+                    <span className="badge-primary text-xs py-1 px-3">
+                      {filteredExams.length} {filteredExams.length === 1 ? 'Exam' : 'Exams'}
+                    </span>
+                  )}
+                </div>
+
+                {loading ? (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="card-soft h-56 rounded-2xl animate-pulse bg-surface-alt" />
+                    ))}
+                  </div>
+                ) : filteredExams.length > 0 ? (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-5">
+                    {filteredExams.map(exam => {
+                      const questionCount = exam.questions?.length || exam.questionCount || 0;
+
+                      return (
+                        <div
+                          key={exam._id}
+                          className="card-soft p-5 flex flex-col justify-between hover:shadow-lg transition-all border border-border-subtle rounded-2xl bg-surface group"
+                        >
+                          <div>
+                            {/* Top Badges */}
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="badge-primary text-[10px] py-0 px-2">
+                                  Std {exam.standard}
+                                </span>
+                                <span className={`${getSubjectBadgeClass(exam.subject)} text-[10px] font-semibold px-2 py-0.5 rounded-full`}>
+                                  {exam.subject}
+                                </span>
+                              </div>
+
+                              <button
+                                onClick={() => handleTogglePublish(exam._id, exam.isPublished, questionCount)}
+                                title="Click to toggle publish status"
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all ${
+                                  exam.isPublished
+                                    ? 'bg-[#4ADE9A]/15 text-[#16A34A] dark:text-[#4ADE9A] hover:bg-[#4ADE9A]/25'
+                                    : 'bg-surface-alt text-text-muted hover:text-text-primary border border-border-subtle'
+                                }`}
+                              >
+                                {exam.isPublished ? (
+                                  <>
+                                    <Globe className="w-3 h-3" /> Published
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-3 h-3" /> Draft
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Title & Chapter */}
+                            <h3 className="font-heading font-bold text-base text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2">
+                              {exam.title}
+                            </h3>
+
+                            {exam.chapter && (
+                              <p className="text-xs text-text-muted mt-0.5">
+                                Chapter: {exam.chapter}
+                              </p>
+                            )}
+
+                            {/* Specs */}
+                            <div className="grid grid-cols-2 gap-2 my-4 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
+                              <div className="flex items-center gap-1.5 text-text-secondary">
+                                <Clock className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
+                                <span>{exam.durationMinutes} mins</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-text-secondary">
+                                <HelpCircle className="w-3.5 h-3.5 text-[#5AC8FA] flex-shrink-0" />
+                                <span>{questionCount} Questions</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-text-secondary">
+                                <Award className="w-3.5 h-3.5 text-[#FFC24B] flex-shrink-0" />
+                                <span>{exam.totalMarks} Marks</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-text-secondary">
+                                <Users className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
+                                <span>{exam.attemptCount || 0} Submissions</span>
+                              </div>
+                            </div>
+
+                            {/* Negative Marking tag */}
+                            {exam.negativeMarking && (
+                              <div className="text-[11px] text-[#E1447A] mb-3 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Negative Marking enabled (-{exam.negativeMarkValue} per wrong)</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="pt-3 border-t border-border-subtle space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <Link
+                                to={`/teacher/exams/${exam._id}/results`}
+                                className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold"
+                              >
+                                <BarChart2 className="w-3.5 h-3.5 text-brand-primary" /> Analytics
+                              </Link>
+
+                              <Link
+                                to={`/teacher/exams/${exam._id}/edit`}
+                                className="btn-secondary text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-[#5AC8FA]" /> Edit Questions
+                              </Link>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-[10px] text-text-muted">
+                                Created {new Date(exam.createdAt).toLocaleDateString()}
+                              </span>
+
+                              <button
+                                onClick={() => handleDelete(exam._id, exam.title)}
+                                className="text-[11px] text-[#E1447A] hover:bg-[#E1447A]/10 p-1.5 rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : exams.length === 0 ? (
+                  <div className="card-soft p-6 border border-dashed border-border-subtle rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface/50">
+                    <div className="flex items-center gap-3 text-left">
+                      <div className="w-10 h-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold flex-shrink-0">
+                        <ClipboardList className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-heading font-bold text-sm text-text-primary">No Classroom Exams Yet</h3>
+                        <p className="text-xs text-text-secondary">Create customized MCQ question papers with negative marking rules for your students.</p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/teacher/exams/new"
+                      className="btn-primary text-xs py-2 px-4 inline-flex items-center gap-2 whitespace-nowrap flex-shrink-0"
+                    >
+                      <Plus className="w-4 h-4" /> Create Classroom Exam
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="card-soft p-6 text-center text-xs text-text-muted rounded-2xl bg-surface">
+                    No classroom exams match your active filter criteria.
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

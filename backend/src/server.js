@@ -192,6 +192,9 @@ const startServer = async () => {
     require('./seed/seedOlympiadAll')({ ifMissing: true })
       .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
       .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
+    // Auto-link Olympiad exams to their teacher (e.g. Nikhil Sir) in production
+    require('./scripts/backfillOlympiadTeacher').run({ apply: true, log: () => {} })
+      .catch((err) => console.error('⚠️  Olympiad teacher backfill skipped:', err.message));
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);

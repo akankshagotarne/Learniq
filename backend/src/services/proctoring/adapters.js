@@ -160,8 +160,17 @@ const olympiadAdapter = {
 
   async reviewerIds(examId) {
     const { OlympiadExam } = olympiadModels();
-    const exam = await OlympiadExam.findById(examId).select('title teacher');
-    return { ids: exam && exam.teacher ? [String(exam.teacher)] : [], title: exam ? exam.title : '' };
+    const exam = await OlympiadExam.findById(examId).select('title teacher conductedBy');
+    const ids = [];
+    if (exam && exam.teacher) {
+      ids.push(String(exam.teacher));
+    } else if (exam && exam.conductedBy) {
+      const User = require('../../models/User');
+      const escaped = exam.conductedBy.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const teacher = await User.findOne({ name: { $regex: new RegExp(`^${escaped}$`, 'i') }, role: 'teacher' });
+      if (teacher) ids.push(String(teacher._id));
+    }
+    return { ids, title: exam ? exam.title : '' };
   },
 };
 

@@ -184,6 +184,29 @@ test('TEST 1: A teacher creates or owns an exam -> it appears in that teacher da
   assert.equal(olyRes.body.exams[0].standard, 2);
 });
 
+test('TEST 1B: Historical exam with missing teacher field matches by conductedBy and self-heals', async () => {
+  const std3Olympiad = await fake.OlympiadExam.create({
+    title: 'LearnIQ – All India Olympiad Examination 2026',
+    slug: 'oly-2026-std-3',
+    standard: 3,
+    conductedBy: 'Nikhil Sir', // No teacher field!
+    durationMinutes: 60,
+    totalQuestions: 40,
+    totalMarks: 40,
+    fee: 20,
+    isPublished: true,
+  });
+
+  const res = await call('GET', '/api/olympiad/teacher/exams', { token: nikhilToken });
+  assert.equal(res.status, 200);
+  const found = res.body.exams.find((e) => String(e._id) === String(std3Olympiad._id));
+  assert.ok(found, 'Should find Olympiad exam with conductedBy = Nikhil Sir');
+
+  // Verify self-healing persisted teacher ID
+  const updatedDoc = fake.OlympiadExam.docs.find((e) => String(e._id) === String(std3Olympiad._id));
+  assert.equal(String(updatedDoc.teacher), String(nikhilTeacher._id), 'Self-healed teacher reference');
+});
+
 test('TEST 2 & 3: A student attempts and submits Olympiad associated with Nikhil Sir -> submission appears in Nikhil Sir portal', async () => {
   // Create payment and completed attempt for Aarav
   const payment = await fake.OlympiadPayment.create({

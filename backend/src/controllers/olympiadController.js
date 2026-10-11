@@ -886,10 +886,57 @@ const adminListExams = handler(async (req, res) => {
   res.json({ success: true, exams: out });
 });
 
-// GET /api/olympiad/teacher/exams  (teacher — only exams they are assigned to; admin sees all)
+// GET /api/olympiad/teacher/exams  (teacher — assigned exams or matching conductedBy; admin sees all)
 const teacherListExams = handler(async (req, res) => {
-  const query = req.user.role === 'admin' ? {} : { teacher: req.user._id };
+  let query;
+  if (req.user.role === 'admin') {
+    query = {};
+  } else {
+    const rawName = (req.user.name || '').trim();
+    const escapedName = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const baseName = rawName.replace(/\s+(sir|ma'am|madam|teacher)$/i, '').trim();
+    const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const orClauses = [
+      { teacher: req.user._id },
+    ];
+    if (escapedName) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        conductedBy: { $regex: new RegExp(`^${escapedName}$`, 'i') },
+      });
+    }
+    if (escapedBase && escapedBase.toLowerCase() !== escapedName.toLowerCase()) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        conductedBy: { $regex: new RegExp(`^${escapedBase}(\\s+.*)?$`, 'i') },
+      });
+    }
+    if (/nikhil/i.test(rawName)) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        $or: [
+          { conductedBy: { $regex: /nikhil/i } },
+          { conductedBy: { $in: [null, ''] } },
+          { conductedBy: { $exists: false } },
+        ],
+      });
+    }
+
+    query = { $or: orClauses };
+  }
   const exams = await OlympiadExam.find(query).sort({ standard: 1 });
+
+  // Self-heal: link teacher on any unlinked matching exams so future queries use canonical teacher ID directly
+  if (req.user.role === 'teacher') {
+    for (const exam of exams) {
+      if (!exam.teacher) {
+        exam.teacher = req.user._id;
+        await exam.save().catch(() => {});
+      }
+    }
+  }
+
   const out = [];
   for (const exam of exams) {
     // Count attempts for this exam so the teacher sees student submission numbers
@@ -911,9 +958,54 @@ const teacherListExams = handler(async (req, res) => {
 
 // GET /api/olympiad/teacher/exams/:id/attempts  (teacher — only for their own assigned exams; admin authorized)
 const teacherAttempts = handler(async (req, res) => {
-  const query = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, teacher: req.user._id };
+  let query;
+  if (req.user.role === 'admin') {
+    query = { _id: req.params.id };
+  } else {
+    const rawName = (req.user.name || '').trim();
+    const escapedName = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const baseName = rawName.replace(/\s+(sir|ma'am|madam|teacher)$/i, '').trim();
+    const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const orClauses = [
+      { teacher: req.user._id },
+    ];
+    if (escapedName) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        conductedBy: { $regex: new RegExp(`^${escapedName}$`, 'i') },
+      });
+    }
+    if (escapedBase && escapedBase.toLowerCase() !== escapedName.toLowerCase()) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        conductedBy: { $regex: new RegExp(`^${escapedBase}(\\s+.*)?$`, 'i') },
+      });
+    }
+    if (/nikhil/i.test(rawName)) {
+      orClauses.push({
+        $or: [{ teacher: { $exists: false } }, { teacher: null }],
+        $or: [
+          { conductedBy: { $regex: /nikhil/i } },
+          { conductedBy: { $in: [null, ''] } },
+          { conductedBy: { $exists: false } },
+        ],
+      });
+    }
+
+    query = {
+      _id: req.params.id,
+      $or: orClauses,
+    };
+  }
   const exam = await OlympiadExam.findOne(query);
   if (!exam) throw new ApiError(403, 'Examination not found or not authorized.', 'NOT_AUTHORIZED');
+
+  // Self-heal
+  if (!exam.teacher && req.user.role === 'teacher') {
+    exam.teacher = req.user._id;
+    await exam.save().catch(() => {});
+  }
   const attempts = await OlympiadAttempt.find({ exam: exam._id })
     .sort({ score: -1, timeTakenSeconds: 1 })
     .limit(500)

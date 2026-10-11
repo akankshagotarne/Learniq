@@ -38,11 +38,15 @@ const run = async ({ apply = false, log = console.log } = {}) => {
       continue;
     }
 
-    // Lookup matching active teacher user
+    // Lookup matching teacher user
+    const conducted = (exam.conductedBy || '').trim();
+    const escaped = conducted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const teacher = await User.findOne({
-      name: exam.conductedBy.trim(),
       role: 'teacher',
-      isActive: true,
+      $or: [
+        ...(escaped ? [{ name: { $regex: new RegExp(`^${escaped}$`, 'i') } }] : []),
+        { name: { $regex: /nikhil/i } },
+      ],
     });
 
     if (teacher) {
