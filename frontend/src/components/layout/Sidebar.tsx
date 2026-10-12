@@ -4,7 +4,7 @@ import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
-  Menu, X, Trophy, Award, Cpu
+  Menu, X, Trophy, Award
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -23,7 +23,6 @@ interface NavItem {
 
 const studentNav: NavItem[] = [
   { label: 'Dashboard', href: '/student', icon: Home },
-  { label: 'Engineering Exam', href: '/student/engineering', icon: Cpu },
   { label: 'My Courses', href: '/student/my-courses', icon: GraduationCap, courses: true },
   { label: 'My Standard', href: '/student/standard', icon: Layers },
   { label: 'Courses', href: '/courses', icon: BookOpen, courses: true },
@@ -46,7 +45,6 @@ const teacherNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: Home },
-  { label: 'Engineering', href: '/admin/engineering', icon: Cpu },
   { label: 'Students', href: '/admin/students', icon: Users },
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
   { label: 'Courses', href: '/admin/courses', icon: BookOpen, courses: true },
@@ -56,7 +54,6 @@ const adminNav: NavItem[] = [
   { label: 'Help & Support', href: '/admin/support', icon: HelpCircle },
   { label: 'About Page', href: '/about', icon: Building2 },
 ];
-
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();

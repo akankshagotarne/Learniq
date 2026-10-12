@@ -37,9 +37,6 @@ const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage
 const AIInterviewPage = lazy(() => import('./pages/student/AIInterviewPage'));
 const AIInterviewResultPage = lazy(() => import('./pages/student/AIInterviewResultPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
-const EngineeringPage = lazy(() => import('./pages/student/EngineeringPage'));
-const EngineeringTakerPage = lazy(() => import('./pages/student/EngineeringTakerPage'));
-const EngineeringResultPage = lazy(() => import('./pages/student/EngineeringResultPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
@@ -63,7 +60,6 @@ const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
-const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -211,22 +207,6 @@ const AppRoutes: React.FC = () => (
           <StudentCertificatesPage />
         </ProtectedRoute>
       } />
-      {/* BE Engineering Examination Routes */}
-      <Route path="/student/engineering" element={
-        <ProtectedRoute roles={['student']}>
-          <EngineeringPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/student/engineering/take" element={
-        <ProtectedRoute roles={['student']}>
-          <EngineeringTakerPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/student/engineering/result" element={
-        <ProtectedRoute roles={['student']}>
-          <EngineeringResultPage />
-        </ProtectedRoute>
-      } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
 
       {/* Help & Support (student + teacher) */}
@@ -348,11 +328,6 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiad />
-        </ProtectedRoute>
-      } />
-      <Route path="/admin/engineering" element={
-        <ProtectedRoute roles={['admin']}>
-          <AdminEngineering />
         </ProtectedRoute>
       } />
 

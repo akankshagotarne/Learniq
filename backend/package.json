@@ -21,11 +21,9 @@
     "test:fee": "node --test src/tests/olympiadFee.test.js",
     "test:aiinterview": "node --test src/tests/aiInterview.test.js src/tests/aiInterviewLocalStt.test.js src/tests/aiInterviewOpenAiStt.test.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateUi.test.js",
-    "seed:engineering": "node src/seed/seedEngineeringExam.js",
-    "test:engineering": "node --test src/tests/engineering.test.js",
+    "test:teachervisibility": "node --test src/tests/teacherOlympiadVisibility.test.js",
     "backfill:teacher": "node src/scripts/backfillOlympiadTeacher.js"
   },
-
   "keywords": [],
   "author": "Learniq",
   "license": "ISC",

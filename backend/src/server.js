@@ -34,11 +34,9 @@ const olympiadRoutes = require('./routes/olympiad');
 const certificateRoutes = require('./routes/certificates');
 const aiInterviewRoutes = require('./routes/aiInterviews');
 const proctoringRoutes = require('./routes/proctoring');
-const engineeringRoutes = require('./routes/engineering');
 const { startOlympiadSweeper } = require('./controllers/olympiadController');
 const { startExamSweeper } = require('./services/examAttempts');
 const { startPaymentReconciler } = require('./services/paymentReconciler');
-const { startEngineeringSweeper } = require('./controllers/engineeringController');
 
 const app = express();
 const server = http.createServer(app);
@@ -110,7 +108,6 @@ app.use('/api/olympiad', olympiadRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/ai-interviews', aiInterviewRoutes);
 app.use('/api/proctoring', proctoringRoutes);
-app.use('/api/engineering', engineeringRoutes);
 app.use('/api', miscRoutes);
 
 // 404
@@ -188,7 +185,6 @@ const startServer = async () => {
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
-    startEngineeringSweeper(); // auto-submits engineering attempts whose timer has expired
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
     const reconciler = startPaymentReconciler();
     console.log(reconciler.started ? '🔁 Payment reconciler: running (every 60 s, first check ~5 min after checkout)' : `⚠️  Payment reconciler NOT running: ${reconciler.reason}`);
@@ -196,10 +192,6 @@ const startServer = async () => {
     require('./seed/seedOlympiadAll')({ ifMissing: true })
       .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
       .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
-    // Auto-seed the Engineering exam if not already present
-    require('./seed/seedEngineeringExam').seedEngineeringExam({ ifMissing: true })
-      .then((exam) => console.log(`🎓 Engineering exam ready: ${exam.title}`))
-      .catch((err) => console.error('⚠️  Engineering auto-seed skipped:', err.message));
     // Auto-link Olympiad exams to their teacher (e.g. Nikhil Sir) in production
     require('./scripts/backfillOlympiadTeacher').run({ apply: true, log: () => {} })
       .catch((err) => console.error('⚠️  Olympiad teacher backfill skipped:', err.message));

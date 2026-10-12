@@ -140,31 +140,6 @@ const StudentDashboard: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8">
             {/* Left 2 Cols: Courses (or, while courses are switched off, the student's exams & results) */}
             <div className="xl:col-span-2 space-y-6">
-              {isOthersStandard(user?.currentStandard) && (
-                <div className="bg-gradient-to-r from-[#6C63F2]/10 via-[#4F46E5]/10 to-[#06B6D4]/10 border border-[#6C63F2]/30 rounded-2xl p-6 sm:p-7 shadow-[0_4px_20px_rgba(108,99,242,0.08)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-[#6C63F2] text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        BE Engineering Special
-                      </span>
-                      <span className="text-emerald-500 font-bold text-xs">₹0 FREE</span>
-                    </div>
-                    <h3 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">
-                      LearnIQ BE Engineering Mock Test 2026
-                    </h3>
-                    <p className="text-xs sm:text-sm text-[#6B6E8C] dark:text-[#A6A8C4] max-w-xl">
-                      40 Questions • 40 Marks • 45 Minutes. Dedicated technical assessment for B.E. students across Computer, IT, ENTC, Electrical, Mechanical, and Civil branches.
-                    </p>
-                  </div>
-                  <Link
-                    to="/student/engineering"
-                    className="btn-primary text-xs sm:text-sm py-2.5 px-6 whitespace-nowrap self-start md:self-auto inline-flex items-center gap-2 shadow-md shadow-[#6C63F2]/25"
-                  >
-                    <span>Enter Engineering Portal</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              )}
               {!COURSES_ENABLED ? (
                 <div className="bg-white dark:bg-[#1B1C2E] border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl p-6 sm:p-8 shadow-[0_4px_20px_rgba(34,36,58,0.06)]">
                   <h2 className="text-lg sm:text-xl font-display font-bold text-[#22243A] dark:text-[#F4F4FA]">Your Olympiad & exams</h2>
