@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
-import OlympiadShowcase from '../components/olympiad/promo/OlympiadShowcase';
+import EngineeringPromoHero from '../components/engineering/EngineeringPromoHero';
 import api from '../services/api';
 import { Course, LiveSession } from '../types';
 import { getCourseThumbnail } from '../utils/courseImage';
@@ -68,8 +68,8 @@ const HomePage: React.FC = () => {
     <div className="min-h-screen bg-[#F8F8FC] dark:bg-[#12121F] text-[#22243A] dark:text-[#F4F4FA]">
       <Navbar />
 
-      {/* All India Olympiad Test 2026 — top promotional banner (directly under the navbar) */}
-      <OlympiadShowcase />
+      {/* Engineering Online Test 2026 — top promotional banner (directly under the navbar) */}
+      <EngineeringPromoHero />
 
       {/* Section 6.6 Hero Section (the banner above already clears the fixed navbar) */}
       <section className="relative flex items-center pt-2 pb-16 overflow-hidden bg-[#F8F8FC] dark:bg-[#12121F]">
