@@ -412,13 +412,38 @@ const createFakeDb = () => {
   const realProctoring = require('../../models/Proctoring');
   const proctoringModels = { ...realProctoring, ProctoringSession, ProctoringEvent };
 
+  // engineering models (models/Engineering.js)
+
+  const EngineeringExam = new FakeModel('EngineeringExam', {
+    registry, unique: [{ fields: ['slug'] }],
+    defaults: () => ({ isPublished: true, isActive: true, durationMinutes: 45, totalQuestions: 40, totalMarks: 40, fee: 0, currency: 'INR', sections: [], instructions: [] }),
+  });
+  const EngineeringQuestion = new FakeModel('EngineeringQuestion', {
+    registry, hidden: ['correctAnswer', 'explanation'], unique: [{ fields: ['exam', 'questionNumber'] }],
+    defaults: () => ({ marks: 1 }),
+  });
+  const EngineeringRequest = new FakeModel('EngineeringRequest', {
+    registry, refs: { student: 'User', exam: 'EngineeringExam', reviewedBy: 'User' },
+    unique: [{ fields: ['student', 'exam'] }],
+    defaults: () => ({ status: 'PENDING', requestedAt: new Date(), reviewHistory: [] }),
+  });
+  const EngineeringAttempt = new FakeModel('EngineeringAttempt', {
+    registry, refs: { student: 'User', exam: 'EngineeringExam', request: 'EngineeringRequest' },
+    unique: [{ fields: ['student', 'exam'] }],
+    defaults: () => ({
+      status: 'IN_PROGRESS', responses: {}, score: 0, totalMarks: 40, percentage: 0,
+      correctCount: 0, wrongCount: 0, unansweredCount: 0, timeTakenSeconds: 0, sectionResults: [],
+    }),
+  });
+
   // sign-in sessions (models/AuthSession.js) - every authenticated test request needs one
   const sessionStore = createSessionStore(registry);
   const { sessionToken } = sessionStore;
   const authSessionModels = sessionStore.models;
 
-  return { sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels, EngineeringExam, EngineeringQuestion, EngineeringRequest, EngineeringAttempt };
 };
+
 
 /**
  * In-memory models/AuthSession.js (same unique indexes: sid, ONE active session per user, takeover token hash) and

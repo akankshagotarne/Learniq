@@ -129,5 +129,20 @@ const Badge = mongoose.model('Badge', badgeSchema);
 const Company = mongoose.model('Company', companySchema);
 
 const { Exam, ExamAttempt } = require('./Exam');
+const { EngineeringExam, EngineeringQuestion, EngineeringRequest, EngineeringAttempt } = require('./Engineering');
 
-module.exports = { Enrollment, Payment, Notification, Progress, Badge, Company, Exam, ExamAttempt };
+module.exports = {
+  Enrollment,
+  Payment,
+  Notification,
+  Progress,
+  Badge,
+  Company,
+  Exam,
+  ExamAttempt,
+  EngineeringExam,
+  EngineeringQuestion,
+  EngineeringRequest,
+  EngineeringAttempt,
+};
+

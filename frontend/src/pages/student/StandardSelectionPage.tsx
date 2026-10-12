@@ -38,11 +38,16 @@ const StandardSelectionPage: React.FC = () => {
     try {
       await updateStandard(std);
       toast.success(`${standardLabel(std)} selected!`);
-      navigate('/student');
+      if (isOthersStandard(std)) {
+        navigate('/student/engineering');
+      } else {
+        navigate('/student');
+      }
     } catch {
       toast.error('Failed to update standard.');
     }
   };
+
 
   return (
     <div className="min-h-screen bg-page flex items-center justify-center p-6 relative overflow-hidden transition-colors">
@@ -98,12 +103,18 @@ const StandardSelectionPage: React.FC = () => {
                 <p className="text-text-primary font-heading font-semibold text-center text-sm mb-0.5">{standardLabel(std)}</p>
                 <p className="text-text-muted text-xs text-center mb-3 font-medium">{levelLabel(std)}</p>
                 <div className="flex flex-wrap gap-1 justify-center">
-                  {subjects(std).slice(0, 2).map(s => (
-                    <span key={s} className="text-[11px] bg-surface-alt border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded-md font-medium">
-                      {s}
+                  {isOthersStandard(std) ? (
+                    <span className="text-[11px] bg-brand-primary/10 border border-brand-primary/20 text-brand-primary font-semibold px-2 py-0.5 rounded-md">
+                      BE Engineering
                     </span>
-                  ))}
-                  {subjects(std).length > 2 && (
+                  ) : (
+                    subjects(std).slice(0, 2).map(s => (
+                      <span key={s} className="text-[11px] bg-surface-alt border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded-md font-medium">
+                        {s}
+                      </span>
+                    ))
+                  )}
+                  {!isOthersStandard(std) && subjects(std).length > 2 && (
                     <span className="text-[11px] bg-surface-alt border border-border-subtle text-text-muted px-1.5 py-0.5 rounded-md font-medium">
                       +{subjects(std).length - 2}
                     </span>
@@ -114,10 +125,26 @@ const StandardSelectionPage: React.FC = () => {
           })}
         </div>
 
+        {isOthersStandard(user?.currentStandard) && (
+          <div className="mt-6 p-4 rounded-2xl bg-gradient-to-r from-brand-primary/10 via-cyan-500/10 to-brand-primary/5 border border-brand-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <p className="font-heading font-bold text-sm text-text-primary">Engineering Students Assessment Available</p>
+              <p className="text-xs text-text-secondary">Request access to the LearnIQ BE Engineering Mock Test 2026 (Free ₹0)</p>
+            </div>
+            <button
+              onClick={() => navigate('/student/engineering')}
+              className="btn-primary text-xs py-2 px-4 whitespace-nowrap shadow-sm"
+            >
+              Open Engineering Portal →
+            </button>
+          </div>
+        )}
+
         <p className="text-center text-text-muted text-xs mt-8">
           You can change your standard anytime from your profile settings.
         </p>
       </div>
+
     </div>
   );
 };
