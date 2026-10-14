@@ -11,7 +11,7 @@ const svc = require('../services/engineering');
 const results = require('../services/engineeringResults');
 const pdf = require('../services/engineeringPdf');
 const { ProctoringEvent } = require('../models/Proctoring');
-const { publicPolicy, resolvePolicy } = require('../services/proctoring/policy');
+const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
 const { STANDARD_OTHERS } = require('../constants/standards');
 
 const olympiad = () => require('./olympiadController');
@@ -133,7 +133,7 @@ const adminGetExam = handler(async (req, res) => {
   res.json({ success: true, exam: await examAdminView(exam), serverNow: new Date().toISOString() });
 });
 
-const ALLOWED_EXAM_EDITS = ['endDate', 'durationMinutes', 'isPublished', 'accessEnabled', 'instructions', 'confirmPast'];
+const ALLOWED_EXAM_EDITS = ['title', 'description', 'startDate', 'endDate', 'durationMinutes', 'isPublished', 'accessEnabled', 'instructions', 'confirmPast'];
 
 // PUT /api/engineering/admin/exam
 const adminUpdateExam = handler(async (req, res) => {
@@ -147,10 +147,27 @@ const adminUpdateExam = handler(async (req, res) => {
   const errors = {};
   const changes = [];
 
+  if (b.title !== undefined) {
+    const t = svc.clean(b.title, 160);
+    if (typeof b.title !== 'string' || t.length < 3) errors.title = 'The title must be 3-160 characters.';
+    else if (t !== exam.title) { exam.title = t; changes.push('EXAM_UPDATED'); }
+  }
+  if (b.description !== undefined) {
+    const t = typeof b.description === 'string' ? b.description.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ').trim() : null;
+    if (t === null || t.length > 1000) errors.description = 'The description can be at most 1000 characters.';
+    else if (t !== (exam.description || '')) { exam.description = t; changes.push('EXAM_UPDATED'); }
+  }
+  if (b.startDate !== undefined) {
+    const d = svc.parseInstant(b.startDate);
+    const endAfter = b.endDate !== undefined ? svc.parseInstant(b.endDate) : exam.endDate;
+    if (!d) errors.startDate = 'Use a valid date and time with a time zone, for example 2026-10-01T09:00:00+05:30.';
+    else if (endAfter && d >= endAfter) errors.startDate = 'The opening time must be before the deadline.';
+    else if (d.getTime() !== exam.startDate.getTime()) { exam.startDate = d; changes.push('EXAM_UPDATED'); }
+  }
   if (b.endDate !== undefined) {
     const d = svc.parseInstant(b.endDate);
     if (!d) errors.endDate = 'Use a valid date and time with a time zone, for example 2026-10-14T18:00:00+05:30.';
-    else if (d <= exam.startDate) errors.endDate = 'The deadline must be after the opening time.';
+    else if (d <= (b.startDate !== undefined && svc.parseInstant(b.startDate) ? svc.parseInstant(b.startDate) : exam.startDate)) errors.endDate = 'The deadline must be after the opening time.';
     else if (d.getTime() > now.getTime() + 366 * 24 * 3600 * 1000) errors.endDate = 'The deadline cannot be more than a year ahead.';
     else if (d <= now && b.confirmPast !== true) errors.endDate = 'This deadline is in the past and would close the test immediately. Confirm to continue.';
     else if (d.getTime() !== exam.endDate.getTime()) { exam.endDate = d; changes.push('DEADLINE_CHANGED'); }
@@ -188,6 +205,25 @@ const adminUpdateExam = handler(async (req, res) => {
     await svc.audit(exam, req.user, action, { details });
   }
   res.json({ success: true, changed: [...new Set(changes)], runningAttemptsAdjusted: adjusted, exam: await examAdminView(exam) });
+});
+
+// PUT /api/engineering/admin/exam/proctoring   { proctoring: { ...policy fields } }
+// Same validation and policy engine as the Olympiad editor (services/proctoring/policy.js), but it only ever touches the
+// engineering exam document. Attempts already running keep the policy snapshot frozen when they started.
+const adminUpdateProctoring = handler(async (req, res) => {
+  const exam = await loadExam();
+  let edit;
+  try { edit = validatePolicyInput(req.body && req.body.proctoring); } catch (e) {
+    if (e instanceof PolicyValidationError) throw new EngineeringError(400, e.message, 'INVALID_PROCTORING_SETTINGS', { errors: e.errors });
+    throw e;
+  }
+  const { policy, changed } = applyPolicyEdit(exam.proctoring, edit);
+  if (changed) {
+    exam.proctoring = policy;
+    await exam.save();
+    await svc.audit(exam, req.user, 'PROCTORING_UPDATED', { details: { fields: Object.keys(edit) } });
+  }
+  res.json({ success: true, changed, proctoring: resolvePolicy(exam.proctoring) });
 });
 
 // GET /api/engineering/admin/overview
@@ -425,7 +461,7 @@ const adminSeed = handler(async (req, res) => {
 
 module.exports = {
   getExam, getMyRequest, submitRequest,
-  adminGetExam, adminUpdateExam, adminOverview, adminListRequests, adminGetRequest, adminApprove, adminReject, adminAllowResubmit,
+  adminGetExam, adminUpdateExam, adminUpdateProctoring, adminOverview, adminListRequests, adminGetRequest, adminApprove, adminReject, adminAllowResubmit,
   adminBulk, adminApproveAll, adminResults, adminAttempt, adminReportPdf, adminAttemptPdf, adminSeed,
   _internals: { buildReportData },
 };

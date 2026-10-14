@@ -21,7 +21,8 @@ export interface ProctoringPolicy {
   faceAbsenceThresholdMs: number;
   multiFacePersistenceMs: number;
   phonePersistenceMs: number;
-  phoneConfidence: number;
+  phoneConfidence: number;          // detector scale 0-1 (0.01-1.00)
+  phoneConfidencePercent?: number;  // same value as a whole percentage 1-100 (admin-facing; derived by the server)
   recoveryMs: number;
   fullscreenGraceMs: number;
   cameraGraceMs: number;

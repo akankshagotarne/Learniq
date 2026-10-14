@@ -127,7 +127,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       setModels({ state: 'working', message: 'Loading the monitoring models (about 10–20 MB the first time, then cached)…' });
       try {
         const t0 = performance.now();
-        detectorRef.current = await loadDetector({ phone: policy.phoneDetection });
+        detectorRef.current = await loadDetector({ phone: policy.phoneDetection, phoneConfidence: policy.phoneConfidence });
         const elapsed = performance.now() - t0;
         if (import.meta.env.DEV) {
           console.debug(

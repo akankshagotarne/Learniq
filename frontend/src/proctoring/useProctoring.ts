@@ -9,12 +9,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { proctoringApi, errorCode, errorMessage, PrecheckResult } from './api';
-import { createEpisodeTracker, Episode } from './episodes';
+import { createEpisodeTracker, Episode, scanTiming } from './episodes';
 import { Detector, stopStream, openCamera, waitForFrames } from './engine';
 import { ClientEvent, ClientEventType, ExamKind, ProctoringPolicy, SessionState } from './types';
 
-const FACE_INTERVAL_MS = 500;
-const PHONE_EVERY_N = 3;           // phone model on every 3rd tick = every ~1.5 s
 const HEARTBEAT_MS = 20000;
 const STALL_MS = 5000;             // video time not advancing for this long = feed stalled
 const BLUR_MIN_MS = 3000;          // shorter focus losses (notifications, accidental clicks) are ignored
@@ -236,6 +234,7 @@ export const useProctoring = (opts: ProctoringOptions) => {
   const startLoop = useCallback(() => {
     const p = optsRef.current.policy;
     const tracker = createEpisodeTracker({ ...p, maxGapMs: 3000 });
+    const { faceIntervalMs: FACE_INTERVAL_MS, phoneEveryN: PHONE_EVERY_N } = scanTiming(p.faceAbsenceThresholdMs); // phone model ~ every 1.5 s
     let tick = 0; let lastVideoTime = -1; let lastAdvance = performance.now(); let stalled = false; let failures = 0;
     let lastDiagnosticLog = 0; // dev: rate-limit no-phone log
     const loop = async () => {

@@ -88,3 +88,23 @@ test('TEST H — Detection rearming: removing phone and bringing it back trigger
   const eps2 = feedObservations(tr, 6200, 9000, 200, 1, 0.45);
   assert.equal(eps2.length, 1, 'Second distinct episode emitted after recovery');
 });
+
+// ── configurable phone confidence: 1 % .. 100 % on the detector's 0-1 scale ──
+import { detectorScoreFloor } from '../src/proctoring/episodes.ts';
+
+test('detector score floor follows the saved confidence (1 % -> ~0.01, never 0.25 and never 1.0)', () => {
+  assert.ok(Math.abs(detectorScoreFloor(0.01) - 0.0095) < 1e-9);
+  assert.ok(detectorScoreFloor(0.01) < 0.01, 'a score of exactly 1 % still passes the detector');
+  assert.ok(detectorScoreFloor(0.3) < 0.3 && detectorScoreFloor(0.3) > 0.299);
+  assert.ok(detectorScoreFloor(1) < 1 && detectorScoreFloor(1) > 0.999);
+  assert.ok(detectorScoreFloor(0.1) < 0.25, 'values below the old 0.25 detector floor are now reachable');
+  assert.equal(detectorScoreFloor(undefined), 0.3495, 'missing -> default 0.35');
+  assert.equal(detectorScoreFloor(Number.NaN), 0.3495);
+});
+
+test('a 1 % threshold confirms a phone episode from a 2 % score; a 50 % threshold ignores it', () => {
+  const mk = (c: number) => createEpisodeTracker({ ...POLICY, phoneConfidence: c });
+  const feed = (tr: ReturnType<typeof createEpisodeTracker>) => { const out = []; for (let t = 0; t <= 3000; t += 500) out.push(...tr.observe({ at: t, faceCount: 1, phoneScore: 0.02 })); return out; };
+  assert.equal(feed(mk(0.01)).length, 1);
+  assert.equal(feed(mk(0.5)).length, 0);
+});

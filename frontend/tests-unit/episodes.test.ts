@@ -99,3 +99,37 @@ test('6-8: pre-exam face check needs exactly one face held for 2 s', () => {
   assert.equal(fc.observe(3000, 1), 'ok');
   assert.equal(fc.observe(3500, 0), 'no_face', 'leaving the frame restarts the check');
 });
+
+// ── configurable face absence: 1 s minimum ──
+import { scanTiming } from '../src/proctoring/episodes.ts';
+
+test('a 1 s face-absence setting confirms ONE warning after ~1 s of continuous absence (not after 2 s)', () => {
+  const tr = createEpisodeTracker({ ...CFG, faceAbsenceThresholdMs: 1000 });
+  const { faceIntervalMs } = scanTiming(1000);
+  let eps = run(tr, 0, 750, faceIntervalMs, 0);
+  assert.equal(eps.length, 0, 'not yet 1 s');
+  eps = run(tr, 1000, 1000, faceIntervalMs, 0);
+  assert.equal(eps.length, 1, 'confirmed at 1 s');
+  assert.equal(eps[0].type, 'FACE_MISSING');
+  assert.ok(eps[0].durationMs >= 1000 && eps[0].durationMs < 1500);
+  assert.equal(run(tr, 1250, 10000, faceIntervalMs, 0).length, 0, 'still one episode');
+});
+
+test('a face visible within the 1 s window cancels the pending absence', () => {
+  const tr = createEpisodeTracker({ ...CFG, faceAbsenceThresholdMs: 1000 });
+  let eps = run(tr, 0, 750, 250, 0);
+  eps = eps.concat(run(tr, 1000, 1000, 250, 1), run(tr, 1250, 3000, 250, 1));
+  assert.equal(eps.length, 0);
+});
+
+test('20 s setting: nothing before 20 s, one warning after', () => {
+  const tr = createEpisodeTracker({ ...CFG, faceAbsenceThresholdMs: 20000 });
+  assert.equal(run(tr, 0, 19500, 500, 0).length, 0);
+  assert.equal(run(tr, 20000, 40000, 500, 0).length, 1);
+});
+
+test('scan timing: short thresholds scan faster; the phone model still runs about every 1.5 s', () => {
+  assert.deepEqual(scanTiming(1000), { faceIntervalMs: 250, phoneEveryN: 6 });
+  assert.deepEqual(scanTiming(2000), { faceIntervalMs: 250, phoneEveryN: 6 });
+  assert.deepEqual(scanTiming(4000), { faceIntervalMs: 500, phoneEveryN: 3 });
+});

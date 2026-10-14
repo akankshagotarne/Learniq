@@ -12,6 +12,7 @@ import wasmLoaderSimd from '@mediapipe/tasks-vision/vision_wasm_internal.js?url'
 import wasmBinarySimd from '@mediapipe/tasks-vision/vision_wasm_internal.wasm?url';
 import wasmLoaderNoSimd from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.js?url';
 import wasmBinaryNoSimd from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.wasm?url';
+import { detectorScoreFloor } from './episodes';
 
 export interface Reading { faceCount: number; phoneScore: number | null; inferenceMs: number }
 
@@ -38,7 +39,7 @@ const testDetector = (): Detector | null => {
 let monotonic = 0;
 const nextTimestamp = () => { monotonic = Math.max(monotonic + 1, Math.round(performance.now())); return monotonic; };
 
-export const loadDetector = async ({ phone }: { phone: boolean }): Promise<Detector> => {
+export const loadDetector = async ({ phone, phoneConfidence }: { phone: boolean; phoneConfidence?: number }): Promise<Detector> => {
   const fake = testDetector();
   if (fake) return fake;
 
@@ -59,7 +60,7 @@ export const loadDetector = async ({ phone }: { phone: boolean }): Promise<Detec
   }));
   const objects = phone ? await create((delegate) => vision.ObjectDetector.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: PHONE_MODEL, delegate },
-    runningMode: 'VIDEO', categoryAllowlist: ['cell phone'], scoreThreshold: 0.25, maxResults: 3,
+    runningMode: 'VIDEO', categoryAllowlist: ['cell phone'], scoreThreshold: detectorScoreFloor(phoneConfidence), maxResults: 3,
   })) : null;
 
   return {

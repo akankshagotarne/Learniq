@@ -10,6 +10,8 @@ import {
   EngineeringRequestRecord, EngineeringResultList, EngineeringResultRow, EngineeringSummary, ResultStatus,
 } from '../../services/engineering';
 import { formatISTDateTime } from '../../utils/olympiadFormat';
+import ProctoringSettings, { policyPayload } from '../../proctoring/ProctoringSettings';
+import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
 
 type Tab = 'overview' | 'requests' | 'results' | 'settings';
 const TABS: { id: Tab; label: string; icon: React.FC<any> }[] = [
@@ -447,11 +449,22 @@ const Settings_: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onC
   const [duration, setDuration] = useState('45');
   const [busy, setBusy] = useState(false);
   const [confirmPast, setConfirmPast] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [opens, setOpens] = useState('');
+  const [proc, setProc] = useState<ProctoringPolicy>(DEFAULT_PROCTORING_POLICY);
+  const [procSaving, setProcSaving] = useState(false);
+  const procLoaded = React.useRef(false); // later reloads (after saving another card) must not overwrite proctoring edits in progress
+  const fill = (e: EngineeringAdminExam, withProctoring = true) => {
+    setDeadline(toISTInput(e.endDate)); setDuration(String(e.durationMinutes));
+    setTitle(e.title); setDescription(e.description || ''); setOpens(toISTInput(e.startDate));
+    if (withProctoring) setProc({ ...DEFAULT_PROCTORING_POLICY, ...(e.proctoring || {}) }); // keep unsaved proctoring edits when another card is saved
+  };
 
   const load = useCallback(async () => {
     try {
       const e = await engineeringApi.adminExam();
-      setExam(e); setDeadline(toISTInput(e.endDate)); setDuration(String(e.durationMinutes)); setErr(null);
+      setExam(e); fill(e, !procLoaded.current); procLoaded.current = true; setErr(null);
     } catch (x: any) { setErr(engineeringErrorMessage(x, 'Unable to load the exam settings.')); }
   }, []);
   useEffect(() => { load(); }, [load, reloadKey]);
@@ -461,7 +474,7 @@ const Settings_: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onC
     setBusy(true);
     try {
       const r = await engineeringApi.updateExam(body);
-      setExam(r.exam); setDeadline(toISTInput(r.exam.endDate)); setDuration(String(r.exam.durationMinutes));
+      setExam(r.exam); fill(r.exam, false);
       toast.success(r.runningAttemptsAdjusted ? `${ok} ${r.runningAttemptsAdjusted} running attempt(s) were adjusted.` : ok);
       onChanged();
     } catch (x: any) {
@@ -475,6 +488,27 @@ const Settings_: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onC
   const deadlineIso = deadline ? fromISTInput(deadline) : '';
   const isPast = !!deadlineIso && new Date(deadlineIso).getTime() < Date.now();
   const changedDeadline = deadline !== toISTInput(exam.endDate);
+  const opensIso = opens ? fromISTInput(opens) : '';
+  const detailsChanged = title.trim() !== exam.title || description.trim() !== (exam.description || '') || opens !== toISTInput(exam.startDate);
+  const saveDetails = () => {
+    if (title.trim().length < 3) { toast.error('The title must be at least 3 characters.'); return; }
+    if (!opensIso) { toast.error('Choose a valid opening time.'); return; }
+    return save({ title: title.trim(), description: description.trim(), startDate: opensIso }, 'Exam details updated.');
+  };
+  const saveProctoring = async () => {
+    if (procSaving) return;
+    setProcSaving(true);
+    const sent = proc;
+    try {
+      const r = await engineeringApi.updateProctoring(policyPayload(sent) || {});
+      setProc(cur => (cur === sent ? { ...DEFAULT_PROCTORING_POLICY, ...r.proctoring } : cur)); // never overwrite an edit made while saving
+      setExam(e => (e ? { ...e, proctoring: r.proctoring } : e));
+      toast.success(r.changed ? 'Proctoring settings saved. They apply to attempts that start from now on.' : 'No changes to save.');
+    } catch (x: any) {
+      const list: string[] | undefined = x?.response?.data?.errors;
+      toast.error(list?.length ? list.join(' ') : engineeringErrorMessage(x, 'Could not save the proctoring settings.'));
+    } finally { setProcSaving(false); }
+  };
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -484,6 +518,27 @@ const Settings_: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onC
           <ul className="list-disc pl-5 mt-1 text-text-secondary">{exam.problems.map(p => <li key={p}>{p}</li>)}</ul>
         </div>
       )}
+      <div className="card-soft p-5 rounded-2xl space-y-3" data-testid="engineering-details">
+        <h3 className="font-heading font-bold text-sm text-text-primary">Exam details</h3>
+        <div>
+          <label htmlFor="eng-title" className="block text-xs font-semibold text-text-secondary mb-1">Title</label>
+          <input id="eng-title" value={title} maxLength={160} onChange={e => setTitle(e.target.value)} className="input-field w-full" />
+        </div>
+        <div>
+          <label htmlFor="eng-desc" className="block text-xs font-semibold text-text-secondary mb-1">Description</label>
+          <textarea id="eng-desc" value={description} maxLength={1000} rows={3} onChange={e => setDescription(e.target.value)} className="input-field w-full" />
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="opens" className="block text-xs font-semibold text-text-secondary mb-1">Opens (IST)</label>
+            <input id="opens" type="datetime-local" value={opens} onChange={e => setOpens(e.target.value)} className="input-field" />
+          </div>
+          <button type="button" disabled={busy || !detailsChanged} onClick={saveDetails} data-testid="save-details"
+            className="btn-primary text-xs py-2 px-4 rounded-xl min-h-[40px] disabled:opacity-50">Save details</button>
+        </div>
+        <p className="text-[11px] text-text-muted">The paper is fixed at <b>{exam.questionCount} questions · {exam.totalMarks} marks</b> (1 mark each, no negative marking); these follow the questions in the paper and are not edited here. Closing time is set below.</p>
+      </div>
+
       <div className="card-soft p-5 rounded-2xl space-y-4">
         <h3 className="font-heading font-bold text-sm text-text-primary">Closing time</h3>
         <p className="text-xs text-text-secondary">Currently closes <b>{exam.endDateIST}</b>. After this time nobody can start, and any attempt still running is submitted automatically. The server enforces this — a student's device clock does not matter.</p>
@@ -520,6 +575,13 @@ const Settings_: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onC
             className="text-xs font-semibold py-2 px-4 rounded-xl min-h-[40px] border border-border-subtle bg-surface-alt">{exam.accessEnabled ? 'Pause access' : 'Re-open access'}</button>
         </div>
         <p className="text-[11px] text-text-muted">Pausing stops new requests and new starts; students who are already writing finish normally. Questions in the paper: {exam.questionCount}.</p>
+      </div>
+
+      <div className="card-soft p-5 rounded-2xl space-y-3" data-testid="engineering-proctoring">
+        <h3 className="font-heading font-bold text-sm text-text-primary">Online proctoring</h3>
+        <ProctoringSettings value={proc} onChange={setProc} />
+        <button type="button" disabled={procSaving} onClick={saveProctoring} data-testid="save-proctoring"
+          className="btn-primary text-xs py-2 px-4 rounded-xl min-h-[40px] disabled:opacity-50">{procSaving ? 'Saving…' : 'Save proctoring settings'}</button>
       </div>
 
       {confirmPast && (

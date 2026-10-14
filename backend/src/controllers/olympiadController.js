@@ -952,9 +952,18 @@ const examStats = async (exam) => {
   };
 };
 
+// The BE Engineering mock test lives in the same collection (it reuses the exam engine) but it is NOT an Olympiad: it has no
+// school standard and is managed under Admin > Engineering. Every Olympiad management query therefore excludes it.
+const NOT_ENGINEERING = { examType: { $ne: 'engineering' } };
+const assertOlympiadManaged = (exam) => {
+  if (exam.examType === 'engineering') {
+    throw new ApiError(404, 'This examination is managed under Admin > Engineering, not under Olympiad.', 'MANAGED_IN_ENGINEERING');
+  }
+};
+
 // GET /api/olympiad/admin/exams
 const adminListExams = handler(async (req, res) => {
-  const exams = await OlympiadExam.find().sort({ standard: 1 }).populate('teacher', 'name email');
+  const exams = await OlympiadExam.find(NOT_ENGINEERING).sort({ standard: 1 }).populate('teacher', 'name email');
   const out = [];
   for (const exam of exams) {
     out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, window: windowState(exam), stats: await examStats(exam) });
@@ -966,7 +975,7 @@ const adminListExams = handler(async (req, res) => {
 const teacherListExams = handler(async (req, res) => {
   let query;
   if (req.user.role === 'admin') {
-    query = {};
+    query = { ...NOT_ENGINEERING };
   } else {
     const rawName = (req.user.name || '').trim();
     const escapedName = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -999,7 +1008,7 @@ const teacherListExams = handler(async (req, res) => {
       });
     }
 
-    query = { $or: orClauses };
+    query = { $and: [NOT_ENGINEERING, { $or: orClauses }] };
   }
   const exams = await OlympiadExam.find(query).sort({ standard: 1 });
 
@@ -1036,7 +1045,7 @@ const teacherListExams = handler(async (req, res) => {
 const teacherAttempts = handler(async (req, res) => {
   let query;
   if (req.user.role === 'admin') {
-    query = { _id: req.params.id };
+    query = { _id: req.params.id, ...NOT_ENGINEERING };
   } else {
     const rawName = (req.user.name || '').trim();
     const escapedName = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1071,6 +1080,7 @@ const teacherAttempts = handler(async (req, res) => {
 
     query = {
       _id: req.params.id,
+      ...NOT_ENGINEERING,
       $or: orClauses,
     };
   }
@@ -1206,6 +1216,7 @@ const adminAttempts = handler(async (req, res) => {
 // PUT /api/olympiad/admin/exams/:id/proctoring   (admin) - attempts already running keep their frozen snapshot
 const adminUpdateProctoring = handler(async (req, res) => {
   const exam = await loadExamAdmin(req.params.id);
+  assertOlympiadManaged(exam); // the Engineering test has its own endpoint: PUT /api/engineering/admin/exam/proctoring
   let edit;
   try { edit = validatePolicyInput(req.body && req.body.proctoring); } catch (e) {
     if (e instanceof PolicyValidationError) throw new ApiError(400, e.message, 'INVALID_PROCTORING_SETTINGS', { errors: e.errors });
@@ -1220,6 +1231,7 @@ const adminUpdateProctoring = handler(async (req, res) => {
 // PUT /api/olympiad/admin/exams/:id/teacher   (admin) - assign or unassign a teacher to an Olympiad exam
 const adminAssignTeacher = handler(async (req, res) => {
   const exam = await loadExamAdmin(req.params.id);
+  assertOlympiadManaged(exam);
   const { teacherId } = req.body || {};
   if (teacherId === null || teacherId === undefined || teacherId === '') {
     exam.teacher = undefined;
