@@ -61,3 +61,6 @@ test('student: Start Interview sends the request, shows Waiting for Teacher Appr
   state.status = 'APPROVED'; // the teacher accepts: the waiting page picks it up by itself (push / polling)
   await expect(page.getByTestId('interview-status')).toHaveText('Request Approved', { timeout: 20000 });
 });
+
+// The teacher-room close / end actions are exercised in REAL Chromium with real media in e2e/real-media/interview-media.spec.ts
+// (mocked pages have no camera, so the room view never reaches a stable state there).

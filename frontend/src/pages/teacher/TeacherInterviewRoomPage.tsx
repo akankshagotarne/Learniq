@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, CheckCircle2, Loader2, PhoneOff, ShieldCheck, ShieldX, Undo2, UserRound } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, DoorClosed, Loader2, PhoneOff, ShieldCheck, ShieldX, Undo2, UserRound } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import InterviewRoomView from '../../components/interview/InterviewRoomView';
 import InterviewEvaluationForm from '../../components/interview/InterviewEvaluationForm';
@@ -18,6 +18,8 @@ const TeacherInterviewRoomPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     try { setData(await interviewApi.detail(interviewId)); setLoadError(null); }
@@ -35,6 +37,17 @@ const TeacherInterviewRoomPage: React.FC = () => {
     finally { setBusy(false); }
   };
   const inRoom = mine && !!status && ROOM_STATUSES.includes(status);
+  // the PERSISTED status decides the action: only a running interview can be ended + evaluated; before that the teacher closes the waiting session
+  const running = status === 'IN_PROGRESS';
+  const closeWaiting = async () => {
+    setBusy(true);
+    try {
+      await interviewApi.closeWaiting(interviewId);
+      toast.success('The waiting session was closed. No evaluation is needed.');
+      navigate('/teacher/interview');
+    } catch (e) { toast.error(interviewErrorMessage(e)); setConfirmClose(false); await load(); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -89,9 +102,21 @@ const TeacherInterviewRoomPage: React.FC = () => {
                 <>
                   <InterviewRoomView
                     interviewId={interviewId} role="teacher" peerLabel={data.student?.name || 'Student'} onEnded={load}
-                    actions={<button type="button" onClick={() => setConfirmEnd(true)} className="min-h-[44px] px-4 rounded-xl bg-[#E1447A] text-white text-sm font-bold inline-flex items-center gap-2" data-testid="end-interview"><PhoneOff className="w-4 h-4" /> End Interview &amp; Evaluate</button>}
+                    actions={running
+                      ? <button type="button" onClick={() => setConfirmEnd(true)} className="min-h-[44px] px-4 rounded-xl bg-[#E1447A] text-white text-sm font-bold inline-flex items-center gap-2" data-testid="end-interview"><PhoneOff className="w-4 h-4" /> End Interview &amp; Evaluate</button>
+                      : <button type="button" onClick={() => setConfirmClose(true)} className="min-h-[44px] px-4 rounded-xl bg-[#E1447A] text-white text-sm font-bold inline-flex items-center gap-2" data-testid="close-waiting"><DoorClosed className="w-4 h-4" /> Close Waiting Session</button>}
                   />
-                  {confirmEnd && (
+                  {confirmClose && !running && (
+                    <div className="card-soft p-4 rounded-2xl border border-[#E1447A]/30" role="dialog" aria-label="Close this interview session" data-testid="close-waiting-dialog">
+                      <p className="text-sm font-medium text-text-primary">Close this interview session?</p>
+                      <p className="text-xs text-text-muted mt-1">The student has not joined yet. Closing this session will end the current waiting session. No interview evaluation will be required.</p>
+                      <div className="mt-3 flex flex-col-reverse sm:flex-row gap-3">
+                        <button type="button" onClick={() => setConfirmClose(false)} className="min-h-[48px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold" data-testid="keep-waiting">Keep Waiting</button>
+                        <button type="button" disabled={busy} onClick={closeWaiting} className="btn-primary min-h-[48px] px-5 rounded-xl text-sm font-bold" data-testid="confirm-close-waiting">{busy ? 'Closing…' : 'Close Interview'}</button>
+                      </div>
+                    </div>
+                  )}
+                  {confirmEnd && running && (
                     <div className="card-soft p-4 rounded-2xl border border-[#E1447A]/30" role="dialog" aria-label="End interview and evaluate">
                       <p className="text-sm font-medium text-text-primary">End the video call and open the evaluation form?</p>
                       <p className="text-xs text-text-muted mt-1">The call closes for both of you. The interview is completed only after you submit the evaluation.</p>

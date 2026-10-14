@@ -62,7 +62,11 @@ const StudentInterviewPage: React.FC = () => {
                   <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusTone(status)}`} data-testid="interview-status">{studentStatusLabel(status)}</span>
                   {data.teacher && open && <span className="text-xs text-text-muted flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" /> {data.teacher.name}</span>}
                 </div>
-                <p className="text-sm text-text-secondary mt-3" role="status" aria-live="polite">{studentStatusHint(status)}</p>
+                <p className="text-sm text-text-secondary mt-3" role="status" aria-live="polite" data-testid="interview-hint">
+                  {status === 'CANCELLED' && data.interview.endReason === 'TEACHER_CLOSED_BEFORE_START'
+                    ? 'Your teacher closed this session before you joined. You can request the interview again from the Exams page.'
+                    : studentStatusHint(status)}
+                </p>
 
                 {status === 'ASSIGNED' && (
                   <button type="button" disabled={busy} onClick={() => act(() => interviewApi.joinRequest(interviewId))}
