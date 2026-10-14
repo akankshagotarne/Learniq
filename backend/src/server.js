@@ -158,13 +158,12 @@ server.on('error', (err) => {
 const verifyUserIndexes = async () => {
   const User = require('./models/User');
   try {
-    await User.init();
-    const names = (await User.collection.indexes()).map((i) => i.name);
-    const missing = ['email_1', 'uniq_phoneNormalized'].filter((n) => !names.includes(n));
+    const { present, dropped } = await require('./services/identity').migrateEmailIndex(User);
+    const missing = ['uniq_email', 'uniq_phoneNormalized'].filter((n) => !present.includes(n));
     if (missing.length) throw new Error(`missing index(es): ${missing.join(', ')}`);
-    console.log('🔒 User uniqueness indexes verified: email_1, uniq_phoneNormalized');
+    console.log(`🔒 User uniqueness indexes verified: uniq_email, uniq_phoneNormalized${dropped ? ' (replaced the old email_1 index)' : ''}`);
   } catch (err) {
-    console.error(`🚨 User uniqueness index check FAILED (${err.message}). New sign-ups are NOT protected against duplicates at the database level until this is fixed — run: node src/scripts/auditUserIdentities.js`);
+    console.error(`🚨 User uniqueness index check FAILED (${err.message}). New sign-ups are NOT fully protected against duplicates at the database level until this is fixed — run: node src/scripts/auditUserIdentities.js`);
   }
 };
 
@@ -206,9 +205,21 @@ const startServer = async () => {
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
     const reconciler = startPaymentReconciler();
     console.log(reconciler.started ? '🔁 Payment reconciler: running (every 60 s, first check ~5 min after checkout)' : `⚠️  Payment reconciler NOT running: ${reconciler.reason}`);
+    // Interview reminders: only ever sent through a configured provider (Twilio env vars); otherwise nothing is sent or marked sent
+    const rem = require('./services/interviewSchedule').startReminderWorker();
+    const remProv = require('./services/reminderProvider').status();
+    console.log(rem.started
+      ? `⏰ Interview reminders: worker running; WhatsApp ${remProv.configured.whatsapp ? 'configured' : 'NOT configured'}, SMS ${remProv.configured.sms ? 'configured' : 'NOT configured'} (unconfigured = no automated reminders)`
+      : `⚠️  Interview reminder worker NOT running: ${rem.reason}`);
     // Make sure the Standard 9 and Standard 10 Olympiad exams exist (no-op when they are already there)
     require('./seed/seedOlympiadAll')({ ifMissing: true })
-      .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
+      .then(async ({ exams }) => {
+        // existing exams keep their questions/marks/etc.; only the display TITLE is brought to "LearnIQ Practice Test – Nth Standard"
+        const t = await require('./seed/olympiadTitles').syncOlympiadTitles(require('./models/Olympiad').OlympiadExam);
+        if (t.renamed) console.log(`🏷️  Olympiad exam titles updated: ${t.renamed} renamed`);
+        const fresh = await require('./models/Olympiad').OlympiadExam.find({ slug: { $in: exams.map((e) => e.slug) } }).select('standard title');
+        fresh.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`));
+      })
       .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
     // Make sure the free BE Engineering mock test exists (creates it only when missing; never overwrites admin changes)
     require('./services/engineering').ensureEngineeringExam()

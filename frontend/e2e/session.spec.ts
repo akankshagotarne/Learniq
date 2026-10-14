@@ -23,7 +23,7 @@ async function loginWithConflict(page: Page, role: 'student' | 'teacher' | 'admi
   await page.goto('/login');
   await page.getByPlaceholder('you@example.com').fill('aarav@example.com');
   await page.getByPlaceholder('Your password').fill('Str0ngPass1');
-  await page.getByRole('button', { name: /^Sign In as/ }).click();
+  await page.getByRole('button', { name: /^Sign In$/ }).click();
   const dialog = page.getByRole('alertdialog', { name: 'Already logged in' });
   await expect(dialog).toBeVisible();
   return { log, dialog };
@@ -53,7 +53,7 @@ test('Cancel keeps the other device signed in: the takeover token is voided, not
   expect(log.some((r) => r.path === '/auth/session/takeover')).toBe(false);
   expect(await page.evaluate(() => localStorage.getItem('learniq_token'))).toBeNull();
   // Escape cancels too
-  await page.getByRole('button', { name: /^Sign In as/ }).click();
+  await page.getByRole('button', { name: /^Sign In$/ }).click();
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
@@ -124,7 +124,7 @@ test('a wrong password shows the normal error and no dialog', async ({ page }) =
   await page.goto('/login');
   await page.getByPlaceholder('you@example.com').fill('aarav@example.com');
   await page.getByPlaceholder('Your password').fill('nope');
-  await page.getByRole('button', { name: /^Sign In as/ }).click();
+  await page.getByRole('button', { name: /^Sign In$/ }).click();
   await expect(page.getByRole('alert')).toHaveText('Invalid email or password.');
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
@@ -191,12 +191,12 @@ test('login box: one field labelled "Email or Phone Number"; e-mail and phone bo
   const box = page.getByLabel('Email or Phone Number');
   await expect(box).toBeVisible();
   await expect(page.getByLabel('Email Address')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^Sign In as/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Sign In$/ })).toBeVisible();
   await expect(page.getByText('Forgot password?')).toBeVisible();
 
   await box.fill('+91 98765 43210');
   await page.getByPlaceholder('Your password').fill('Str0ngPass1');
-  await page.getByRole('button', { name: /^Sign In as/ }).click();
+  await page.getByRole('button', { name: /^Sign In$/ }).click();
   await expect(page).toHaveURL(/\/student$/);
   expect(sent).toEqual([{ identifier: '+91 98765 43210', password: 'Str0ngPass1' }]);
 });
@@ -207,7 +207,7 @@ test('login box: clear validation messages, nothing is sent for an obviously inv
   await page.route('**/api/auth/login', async (route) => { sent.push(1); await route.fallback(); });
   await page.goto('/login');
   const box = page.getByLabel('Email or Phone Number');
-  const submit = page.getByRole('button', { name: /^Sign In as/ });
+  const submit = page.getByRole('button', { name: /^Sign In$/ });
   await page.getByPlaceholder('Your password').fill('x');
   const cases: [string, string][] = [['', 'Enter your email or phone number.'], ['user@', 'Enter a valid email address.'], ['12345', 'Enter a valid phone number'], ['hello', 'Enter a valid email address or phone number.']];
   for (const [value, msg] of cases) {

@@ -109,7 +109,7 @@ test('1-3: eligibility comes from the server - student ok, teacher refused, unpa
   assert.equal(r.json.eligible, false); assert.equal(r.json.code, 'WRONG_STANDARD');
 });
 
-test('6-10: a session needs consent, exactly one face and fullscreen; then it starts', async () => {
+test('6-10: a session needs consent and fullscreen (no pre-exam face check); then it starts', async () => {
   const teacher = await mkUser('teacher'); const student = await mkUser('student');
   const exam = await mkExam(teacher);
   const s = await call('POST', `/exams/${exam._id}/start`, student);
@@ -118,10 +118,9 @@ test('6-10: a session needs consent, exactly one face and fullscreen; then it st
   assert.ok(s.json.attempt.remainingSeconds > 1790);
   const url = `/proctoring/exam/${exam._id}/session`;
   assert.equal((await call('POST', url, student, { attemptId, consent: false, precheck: PRE })).json.code, 'CONSENT_REQUIRED');
-  assert.equal((await call('POST', url, student, { attemptId, consent: true, precheck: { ...PRE, faceCount: 0 } })).json.code, 'PRECHECK_REQUIRED');
-  assert.equal((await call('POST', url, student, { attemptId, consent: true, precheck: { ...PRE, faceCount: 2 } })).json.code, 'PRECHECK_REQUIRED');
   assert.equal((await call('POST', url, student, { attemptId, consent: true, precheck: { ...PRE, fullscreen: false } })).json.code, 'FULLSCREEN_REQUIRED');
-  const ok = await call('POST', url, student, { attemptId, consent: true, precheck: PRE });
+  // the pre-exam face check was removed: no faceCount at all (or 0 / 2) no longer blocks the start; consent + fullscreen still do
+  const ok = await call('POST', url, student, { attemptId, consent: true, precheck: { fullscreen: true, detector: 'mediapipe' } });
   assert.equal(ok.status, 201);
   assert.equal(ok.json.state.limits.faceAbsence, 5);
   assert.equal(ok.json.state.limits.multiFace, 3);

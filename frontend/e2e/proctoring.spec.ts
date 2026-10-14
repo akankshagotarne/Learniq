@@ -49,21 +49,18 @@ test.describe('pre-exam checks', () => {
     await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
   });
 
-  test('6-8: no face / several faces block the start; one steady face passes', async ({ page }) => {
+  test('6-8: there is no separate face check - camera on is enough to start (monitoring runs during the exam)', async ({ page }) => {
     const server = new MockProctorServer();
-    await installDetector(page, 0);
+    await installDetector(page, 0); // nobody in front of the camera: the gate must not block on it any more
     await setup(page, server);
     await page.goto(`/student/exams/${EXAM_ID}`);
     await page.getByTestId('consent').check();
+    await expect(page.getByTestId('start-secure-exam')).toBeDisabled(); // camera not on yet
     await page.getByTestId('camera-button').click();
     await expect(page.getByTestId('camera-message')).toHaveText('Camera connected.');
-    await expect(page.getByTestId('face-message')).toHaveText('No face detected. Please adjust your position or lighting.');
-    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
-    await setScene(page, 2);
-    await expect(page.getByTestId('face-message')).toHaveText('Multiple faces detected. Only the examinee should be visible.');
-    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
-    await setScene(page, 1);
-    await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: 6000 });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
+    await expect(page.getByTestId('check-face')).toHaveCount(0);
+    await expect(page.getByTestId('face-message')).toHaveCount(0);
     await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
     expect(server.startCalls).toBe(0);
   });
@@ -76,7 +73,7 @@ test.describe('pre-exam checks', () => {
     await page.goto(`/student/exams/${EXAM_ID}`);
     await page.getByTestId('consent').check();
     await page.getByTestId('camera-button').click();
-    await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: 15000 });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
     await page.getByTestId('start-secure-exam').click();
     await expect(page.getByTestId('start-error')).toContainText('Fullscreen could not be entered');
     await expect(page.getByTestId('proctoring-panel')).toHaveCount(0);
@@ -88,7 +85,8 @@ test.describe('pre-exam checks', () => {
     const server = new MockProctorServer();
     await startExam(page, server);
     expect(server.startCalls).toBe(1);
-    expect(server.sessionRequests[0]).toMatchObject({ attemptId: 'att-1', consent: true, precheck: { faceCount: 1, fullscreen: true } });
+    expect(server.sessionRequests[0]).toMatchObject({ attemptId: 'att-1', consent: true, precheck: { fullscreen: true } });
+    expect(server.sessionRequests[0].precheck).not.toHaveProperty('faceCount'); // no pre-exam face check any more
     expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
     await expect(page.getByTestId('count-face')).toHaveText('0/5');
     await expect(page.getByTestId('count-multi')).toHaveText('0/3');

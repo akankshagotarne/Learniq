@@ -348,7 +348,7 @@ for (const width of [360, 390, 768]) {
 
     // with consent the normal checks can run and the exam starts, sending consent to the server
     await page.getByTestId('camera-button').click();
-    await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: 15000 });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
     await page.getByTestId('start-secure-exam').click();
     await expect(page.getByTestId('proctoring-panel')).toBeVisible({ timeout: 15000 });
     expect(server.sessionRequests[0]).toMatchObject({ consent: true });

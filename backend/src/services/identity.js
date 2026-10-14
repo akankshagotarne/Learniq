@@ -2,7 +2,8 @@
  * Account identity rules: ONE email address and ONE phone number per account, across every role.
  *
  * Students, teachers and admins live in the same `User` collection, so a unique index there is a global guarantee.
- *  - email          canonical already (schema lowercases + trims it); unique index `email_1`.
+ *  - email          optional for students; when present it is canonical already (schema lowercases + trims it) and unique via the
+ *                   PARTIAL index `uniq_email` (only real values), so phone-only accounts never collide.
  *  - phoneNormalized E.164 form of `phone` (e.g. "+919876543210"); unique PARTIAL index (only real values), so accounts
  *                   without a phone never clash with each other.
  * The pre-checks below give friendly, field-specific errors; the indexes are the final authority (races, direct API calls).
@@ -12,9 +13,11 @@ const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const DEFAULT_PHONE_COUNTRY = (process.env.DEFAULT_PHONE_COUNTRY || 'IN').toUpperCase();
 
 const MESSAGES = Object.freeze({
-  EMAIL_ALREADY_EXISTS: 'This email address is already registered. Please use a different email or log in to your existing account.',
-  PHONE_ALREADY_EXISTS: 'This phone number is already registered. Please use a different phone number or log in to your existing account.',
-  EMAIL_AND_PHONE_ALREADY_EXIST: 'This email address and phone number are already registered. Please check your details or log in to your existing account.',
+  EMAIL_ALREADY_EXISTS: 'This email address is already registered. Please log in or use a different email address.',
+  PHONE_ALREADY_EXISTS: 'This phone number is already registered. Please log in or use a different phone number.',
+  EMAIL_AND_PHONE_ALREADY_EXIST: 'An account with this email address and phone number already exists. Please log in instead.',
+  PHONE_REQUIRED: 'Please enter your phone number.',
+  EMAIL_REQUIRED: 'Please enter your email address.',
   INVALID_EMAIL: 'Please enter a valid email address.',
   INVALID_PHONE: 'Please enter a valid phone number, for example +91 98765 43210.',
   INVALID_IDENTIFIER: 'Please enter a valid email address or phone number.',
@@ -148,12 +151,33 @@ const conflictsFromDuplicateKeyError = (err) => {
   if (!err || err.code !== 11000) return null;
   const keys = Object.keys(err.keyPattern || err.keyValue || {});
   const text = String(err.message || '');
-  const email = keys.includes('email') || /\bemail_1\b|index: email\b/.test(text);
+  const email = keys.includes('email') || /\bemail_1\b|uniq_email|index: email\b/.test(text);
   const phone = keys.includes('phoneNormalized') || /phoneNormalized/.test(text);
   return email || phone ? { email, phone } : null;
 };
 
+/**
+ * One-time, idempotent index migration: the old non-partial unique index `email_1` allows only ONE account without an email,
+ * which phone-only students need to be many. Once the new PARTIAL unique `uniq_email` exists, the old one is dropped - so there is
+ * never a moment without uniqueness protection on emails. No data is read or changed. Safe to run on every start.
+ * @returns {Promise<{ present: string[], dropped: boolean }>}
+ */
+const migrateEmailIndex = async (User) => {
+  await User.init(); // Mongoose builds the indexes declared in models/User.js (uniq_email, uniq_phoneNormalized)
+  const list = await User.collection.indexes();
+  if (!list.some((i) => i.name === 'uniq_email')) throw new Error('index uniq_email is not present (existing duplicate emails?)');
+  let dropped = false;
+  const legacy = list.find((i) => i.name === 'email_1');
+  if (legacy && !legacy.partialFilterExpression) { await User.collection.dropIndex('email_1'); dropped = true; }
+  const after = dropped ? await User.collection.indexes() : list;
+  return { present: after.map((i) => i.name), dropped };
+};
+
+/** Teacher approval state read from any account document (legacy teachers only have the `isApproved` flag). */
+const approvalStatusOf = (u) => (u && u.approvalStatus) || (u && u.isApproved === false ? 'PENDING' : 'APPROVED');
+
 module.exports = {
+  approvalStatusOf,
   MESSAGES, DEFAULT_PHONE_COUNTRY,
-  normalizeEmail, normalizePhone, classifyIdentifier, findPhoneCandidates, backfillPhoneNormalized, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
+  migrateEmailIndex, normalizeEmail, normalizePhone, classifyIdentifier, findPhoneCandidates, backfillPhoneNormalized, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
 };

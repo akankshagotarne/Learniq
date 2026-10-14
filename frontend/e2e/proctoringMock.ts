@@ -106,7 +106,7 @@ export async function setup(page: Page, server: MockProctorServer) {
     }
     if (m === 'POST' && path === `/proctoring/exam/${EXAM_ID}/session`) {
       const b = JSON.parse(body); server.sessionRequests.push(b);
-      if (b.precheck?.faceCount !== 1 || b.precheck?.fullscreen !== true || b.consent !== true) return json(route, 400, { success: false, code: 'PRECHECK_REQUIRED', message: 'Checks not passed.' });
+      if (b.precheck?.fullscreen !== true || b.consent !== true) return json(route, 400, { success: false, code: 'PRECHECK_REQUIRED', message: 'Checks not passed.' });
       const resumed = server.sessionOpen; server.sessionOpen = true;
       return json(route, resumed ? 200 : 201, { success: true, resumed, state: server.state() });
     }
@@ -139,7 +139,7 @@ export async function passChecks(page: Page) {
   await expect(page.getByTestId('check-eligibility')).toHaveAttribute('data-state', 'ok');
   await page.getByTestId('consent').check();
   await page.getByTestId('camera-button').click();
-  await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: 15000 });
+  await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
   await page.getByTestId('start-secure-exam').click();
   await expect(page.getByTestId('proctoring-panel')).toBeVisible({ timeout: 15000 });
 }

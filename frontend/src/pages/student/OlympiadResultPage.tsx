@@ -8,6 +8,8 @@ import Sidebar from '../../components/layout/Sidebar';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadCertificate, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem } from '../../types/olympiad';
 import CertificateBanner from '../../components/olympiad/CertificateBanner';
+import { interviewApi, ScheduleInfo } from '../../services/interview';
+import InterviewScheduleBanner from '../../components/interview/InterviewScheduleBanner';
 import { formatDuration, formatISTDateTime } from '../../utils/olympiadFormat';
 
 type Filter = 'ALL' | 'CORRECT' | 'INCORRECT' | 'NOT_ATTEMPTED';
@@ -43,6 +45,7 @@ const OlympiadResultPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [schedule, setSchedule] = useState<ScheduleInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +57,10 @@ const OlympiadResultPage: React.FC = () => {
         setResult(res.result);
         setCertificate(res.certificate ?? null);
         setReview([...rev].sort((a, b) => a.questionNumber - b.questionNumber));
+        // the interview message only applies to the school Olympiad exams (not the engineering mock test)
+        if (res.exam.accessMode !== 'approval') {
+          try { const mine = await interviewApi.mine(); if (!cancelled) setSchedule(mine.byExam?.[examId]?.schedule ?? null); } catch { /* no banner: the result itself is unaffected */ }
+        }
       } catch (err: any) {
         if (cancelled) return;
         if (olympiadErrorCode(err) === 'NOT_SUBMITTED') {
@@ -117,6 +124,7 @@ const OlympiadResultPage: React.FC = () => {
 
   return (
     <Shell>
+      {schedule && <InterviewScheduleBanner info={schedule} />}
       {/* Score hero */}
       <div className="card-soft rounded-2xl p-6 border border-[#6C63F2]/30 relative overflow-hidden mb-6">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#8B03ED] to-[#09ACEF]" />

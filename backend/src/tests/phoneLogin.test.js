@@ -216,8 +216,9 @@ test('12. account status checks still apply to phone login (deactivated / unappr
   const teacher = await makeUser({ role: 'teacher', isApproved: false, phone: '+91 90000 33333' });
   for (const [u, num] of [[off, '+91 90000 22222'], [teacher, '+91 90000 33333']]) {
     const byEmail = await login(u.email); const byPhone = await login(num);
-    assert.equal(byEmail.status, 401); assert.equal(byPhone.status, 401);
+    assert.equal(byEmail.status, u === off ? 401 : 403); assert.equal(byPhone.status, byEmail.status); // pending teacher = 403 TEACHER_PENDING_APPROVAL
     assert.equal(byEmail.json.message, byPhone.json.message);
+    if (u === teacher) assert.equal(byPhone.json.message, 'Your account is awaiting admin approval. You will be able to log in after your registration is approved.');
     assert.equal(byPhone.json.token, undefined);
   }
 });

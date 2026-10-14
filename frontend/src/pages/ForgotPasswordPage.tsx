@@ -61,6 +61,9 @@ const ForgotPasswordPage: React.FC = () => {
               <p className="text-text-secondary text-sm mb-6">
                 Enter the email linked to your account and we'll send you a link to reset your password.
               </p>
+              <p className="text-text-muted text-xs -mt-4 mb-6" data-testid="no-email-help">
+                Registered with a phone number only? There is no email to send a link to - please contact LearnIQ support and we will help you set a new password.
+              </p>
 
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4 animate-slide-down">

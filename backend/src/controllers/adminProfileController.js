@@ -48,6 +48,11 @@ const sendPasswordReset = async (req, res) => {
       .select('name email role resetPasswordToken resetPasswordExpire');
     if (!target) return res.status(404).json({ success: false, message: 'User not found.' });
 
+    if (!target.email) {
+      // phone-only student: there is nowhere to send a link, and we never pretend otherwise
+      return res.status(422).json({ success: false, code: 'NO_EMAIL_ON_ACCOUNT', message: 'This account has no email address, so a reset link cannot be sent. Ask the student to contact LearnIQ support to set a new password.' });
+    }
+
     if (target.resetPasswordToken && target.resetPasswordExpire) {
       const issuedAt = new Date(target.resetPasswordExpire).getTime() - RESET_TTL_MS;
       if (Date.now() - issuedAt < RESET_COOLDOWN_MS) {

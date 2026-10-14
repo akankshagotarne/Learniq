@@ -7,6 +7,7 @@ const { Notification } = require('../models/index');
 const { getPrimaryClientUrl } = require('../config/clientUrls');
 const identity = require('../services/identity');
 const { parseStudentStandard, standardLabel } = require('../constants/standards');
+const { passwordProblem } = require('../services/passwordPolicy');
 
 // Two ways to actually send the reset email, both optional so the server
 // still boots before either is configured (forgotPassword then sends nothing
@@ -68,12 +69,26 @@ const sendResetEmail = async (user, resetUrl) => {
 // Every token is tied to a server-side session (services/authSessions.js): one active session per account.
 const sessions = require('../services/authSessions');
 
-/** Same rules for a password login and for "Log out other device & continue". null = allowed. */
-const signInBlockReason = (user) => {
-  if (!user.isActive) return 'Your account has been deactivated.';
-  if (user.role === 'teacher' && !user.isApproved) return 'Your teacher account is pending approval.';
+const TEACHER_PENDING_MESSAGE = 'Your account is awaiting admin approval. You will be able to log in after your registration is approved.';
+const TEACHER_REJECTED_MESSAGE = 'Your teacher registration was not approved. Please contact LearnIQ support if you think this is a mistake.';
+
+/**
+ * One place that decides whether an authenticated account may start a session (password login AND "Log out other device &
+ * continue"). The decision is read from the database on every attempt, so approval / suspension take effect immediately.
+ * @returns {null | { status: number, code: string, message: string }}
+ */
+const signInBlock = (user) => {
+  if (!user.isActive) return { status: 401, code: 'ACCOUNT_DEACTIVATED', message: 'Your account has been deactivated.' };
+  if (user.role === 'teacher' && user.isApproved !== true) {
+    const rejected = identity.approvalStatusOf(user) === 'REJECTED';
+    return rejected
+      ? { status: 403, code: 'TEACHER_REJECTED', message: TEACHER_REJECTED_MESSAGE }
+      : { status: 403, code: 'TEACHER_PENDING_APPROVAL', message: TEACHER_PENDING_MESSAGE };
+  }
   return null;
 };
+/** Same rules as above, as the plain message the session service expects (null = allowed). */
+const signInBlockReason = (user) => { const b = signInBlock(user); return b ? b.message : null; };
 
 const sendAuthError = (res, e, fallback) => {
   if (e instanceof sessions.AuthError) return res.status(e.status).json({ success: false, code: e.code, message: e.message });
@@ -83,52 +98,51 @@ const sendAuthError = (res, e, fallback) => {
 
 // @desc   Register user
 // @route  POST /api/auth/register
+// Students: phone number REQUIRED, email optional. Teachers: email required (phone optional) and the account is created
+// PENDING admin approval - no session/token is issued, so a pending teacher can never reach the Teacher Dashboard.
+// The role comes from the form but only ever 'student' or 'teacher' is accepted ('admin' cannot be requested here).
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone } = req.body || {};
+    const fail = (status, code, field, message) => res.status(status).json({ success: false, code, field, message, errors: field ? [{ field, code, message }] : undefined });
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email and password are required.' });
-    }
+    if (typeof name !== 'string' || !name.trim()) return fail(400, 'NAME_REQUIRED', 'name', 'Please enter your full name.');
+    const validRole = role === 'teacher' ? 'teacher' : 'student';
 
-    // Password strength
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters with uppercase, lowercase, and number.',
-      });
-    }
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return fail(400, 'INVALID_PASSWORD', 'password', pwProblem);
 
     // Canonical identity values (the same ones the unique indexes are built on)
-    const emailNormalized = identity.normalizeEmail(email);
-    if (!emailNormalized) {
-      return res.status(400).json({ success: false, code: 'INVALID_EMAIL', field: 'email', message: identity.MESSAGES.INVALID_EMAIL });
-    }
+    // anything other than a blank/absent value counts as "supplied" - so a non-string (e.g. an object) is rejected, never ignored
+    const hasEmail = !(email === undefined || email === null || (typeof email === 'string' && email.trim() === ''));
+    if (!hasEmail && validRole === 'teacher') return fail(400, 'EMAIL_REQUIRED', 'email', identity.MESSAGES.EMAIL_REQUIRED);
+    const emailNormalized = hasEmail ? identity.normalizeEmail(email) : undefined;
+    if (hasEmail && !emailNormalized) return fail(400, 'INVALID_EMAIL', 'email', identity.MESSAGES.INVALID_EMAIL);
+
     const phoneInfo = identity.normalizePhone(phone);
-    if (!phoneInfo.empty && !phoneInfo.valid) {
-      return res.status(400).json({ success: false, code: 'INVALID_PHONE', field: 'phone', message: identity.MESSAGES.INVALID_PHONE });
-    }
+    if (phoneInfo.empty && validRole === 'student') return fail(400, 'PHONE_REQUIRED', 'phone', identity.MESSAGES.PHONE_REQUIRED);
+    if (!phoneInfo.empty && !phoneInfo.valid) return fail(400, 'INVALID_PHONE', 'phone', identity.MESSAGES.INVALID_PHONE);
     const phoneNormalized = phoneInfo.valid ? phoneInfo.e164 : undefined;
 
     // Friendly pre-check across ALL roles (one shared collection). The unique indexes below remain the final authority.
     const conflict = identity.conflictBody(await identity.findIdentityConflicts(User, { email: emailNormalized, phoneNormalized }));
     if (conflict) return res.status(409).json(conflict);
 
-    const validRole = ['student', 'teacher'].includes(role) ? role : 'student';
-    const isApproved = validRole !== 'teacher'; // teachers need admin approval
+    const isTeacher = validRole === 'teacher';
+    const doc = {
+      name: name.trim(),
+      password,
+      role: validRole,
+      phone: phoneInfo.valid ? String(phone).trim() : '',
+      phoneNormalized,
+      isApproved: !isTeacher, // teachers need admin approval
+    };
+    if (emailNormalized) doc.email = emailNormalized;
+    if (isTeacher) doc.approvalStatus = 'PENDING';
 
     let user;
     try {
-      user = await User.create({
-        name,
-        email: emailNormalized,
-        password,
-        role: validRole,
-        phone: phoneInfo.valid ? phone.toString().trim() : '',
-        phoneNormalized,
-        isApproved,
-      });
+      user = await User.create(doc);
     } catch (createError) {
       // Two simultaneous registrations can both pass the pre-check; MongoDB lets only one of them in.
       const raced = identity.conflictsFromDuplicateKeyError(createError);
@@ -136,25 +150,30 @@ const register = async (req, res) => {
       throw createError;
     }
 
+    if (isTeacher) {
+      // Deliberately NO session and NO token: the account exists only as a request until an administrator approves it.
+      return res.status(201).json({
+        success: true,
+        pendingApproval: true,
+        code: 'TEACHER_PENDING_APPROVAL',
+        message: 'Your teacher registration request has been submitted successfully. Please wait for admin approval before logging in.',
+      });
+    }
+
     // Welcome notification
     await Notification.create({
       recipient: user._id,
       title: 'Welcome to Learniq! 🎉',
-      message: `Hi ${name}, welcome to Learniq! Start your learning journey today.`,
+      message: `Hi ${user.name}, welcome to Learniq! Start your learning journey today.`,
       type: 'success',
     });
 
     // a brand-new account has no other session; startSession still goes through the one-active-session index
     const { token } = await sessions.startSession(user, req);
 
-    res.status(201).json({
-      success: true,
-      message: validRole === 'teacher' ? 'Registration successful! Awaiting admin approval.' : 'Registration successful!',
-      token,
-      user: user.toJSON(),
-    });
+    res.status(201).json({ success: true, message: 'Registration successful!', token, user: user.toJSON() });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Register error:', error && error.message);
     res.status(500).json({ success: false, message: 'Server error during registration.' });
   }
 };
@@ -192,14 +211,14 @@ const login = async (req, res) => {
       if (candidates.length === 0) await bcrypt.compare(password, DUMMY_HASH).catch(() => false);
       const accepted = [];
       for (const c of candidates) if (await c.comparePassword(password)) accepted.push(c);
-      const eligible = accepted.filter((c) => !signInBlockReason(c));
+      const eligible = accepted.filter((c) => !signInBlock(c));
       user = eligible.length === 1 ? eligible[0] : (eligible.length === 0 && accepted.length === 1 ? accepted[0] : null);
       if (!user) return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
     }
 
-    const blocked = signInBlockReason(user);
+    const blocked = signInBlock(user);
     if (blocked) {
-      return res.status(401).json({ success: false, message: blocked });
+      return res.status(blocked.status).json({ success: false, code: blocked.code, message: blocked.message });
     }
 
     // Password is right. Another device with a LIVE session -> 409 + a short-lived takeover token for THIS attempt only.
@@ -416,13 +435,8 @@ const resetPassword = async (req, res) => {
     }
 
     const { password } = req.body;
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters with uppercase, lowercase, and number.',
-      });
-    }
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return res.status(400).json({ success: false, code: 'INVALID_PASSWORD', field: 'password', message: pwProblem });
 
     user.password = password;
     user.resetPasswordToken = undefined;

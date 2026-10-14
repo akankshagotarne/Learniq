@@ -4,7 +4,7 @@ import { ClientEvent, ExamKind, ProctoringPolicy, ReviewDetail, ReviewOutcome, S
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export interface Eligibility { eligible: boolean; code: string | null; message: string | null; resume: boolean; proctoring: ProctoringPolicy | { enabled: false } }
-export interface PrecheckResult { faceCount: number; fullscreen: boolean; mobileDevice: boolean; detector: string }
+export interface PrecheckResult { faceCount?: number; fullscreen: boolean; mobileDevice: boolean; detector: string }
 
 export const proctoringApi = {
   eligibility: async (kind: ExamKind, examId: string): Promise<Eligibility> =>

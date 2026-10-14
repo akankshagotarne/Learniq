@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
+import { PASSWORD_HELP, passwordProblem } from '../constants/passwordPolicy';
 import { Link, useParams } from 'react-router-dom';
 import { Eye, EyeOff, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { LogoLink } from '../components/ui/Logo';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 const ResetPasswordPage: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -20,8 +20,8 @@ const ResetPasswordPage: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!PASSWORD_REGEX.test(password)) {
-      setError('Password must be at least 8 characters with uppercase, lowercase, and a number.');
+    if (passwordProblem(password)) {
+      setError(PASSWORD_HELP);
       return;
     }
     if (password !== confirmPassword) {
@@ -77,8 +77,7 @@ const ResetPasswordPage: React.FC = () => {
             <>
               <h2 className="font-heading text-2xl font-bold text-text-primary mb-1.5">Reset Password</h2>
               <p className="text-text-secondary text-sm mb-6">
-                Enter a new password for your account. Make it at least 8 characters, with an uppercase letter,
-                a lowercase letter, and a number.
+                Enter a new password for your account. {PASSWORD_HELP}
               </p>
 
               {error && (

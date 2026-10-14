@@ -1,14 +1,13 @@
 /**
  * Pre-exam security check. Nothing starts (no attempt, no timer) until every required check passes:
- *   1 eligibility (server)   2 device support   3 rules + consent   4 camera   5 one steady face   6 fullscreen
+ *   1 eligibility (server)   2 device support   3 rules + consent   4 camera on   5 fullscreen (the separate face-check step was removed)
  * The camera is only requested after the student has read the rules and pressed "Turn on camera".
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, CheckCircle2, Loader2, Maximize2, ShieldCheck, XCircle, AlertTriangle, MonitorSmartphone, Info } from 'lucide-react';
 import { proctoringApi, errorMessage, PrecheckResult } from './api';
 import { checkDeviceSupport, Detector, loadDetector, openCamera, stopStream, waitForFrames } from './engine';
-import { createFaceCheck, FaceCheckStatus } from './episodes';
 import { ExamKind, ProctoringPolicy } from './types';
 
 export interface GateResult { precheck: PrecheckResult; stream: MediaStream | null; detector: Detector | null }
@@ -43,13 +42,6 @@ const StepRow: React.FC<{ state: Step; title: string; children?: React.ReactNode
   </li>
 );
 
-const FACE_TEXT: Record<FaceCheckStatus, string> = {
-  waiting: 'Position your face within the camera frame.',
-  no_face: 'No face detected. Please adjust your position or lighting.',
-  multiple: 'Multiple faces detected. Only the examinee should be visible.',
-  steadying: 'Face found - hold still for a moment…',
-  ok: 'Camera verification successful.',
-};
 
 const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinutes, policy, resume, backTo, onReady }) => {
   const [eligible, setEligible] = useState<{ state: Step; message?: string }>({ state: 'working' });
@@ -57,8 +49,6 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
   const [consent, setConsent] = useState(false);
   const [camera, setCamera] = useState<{ state: Step; message?: string }>({ state: 'idle' });
   const [models, setModels] = useState<{ state: Step; message?: string }>({ state: 'idle' });
-  const [face, setFace] = useState<FaceCheckStatus>('waiting');
-  const [faceCount, setFaceCount] = useState(-1);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -89,23 +79,6 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
     if (!handedOver.current) { stopStream(streamRef.current); try { detectorRef.current?.close(); } catch { /* ignore */ } }
   }, []);
 
-  const runFaceCheck = useCallback(() => {
-    const check = createFaceCheck(2000);
-    const tick = async () => {
-      const v = videoRef.current; const det = detectorRef.current;
-      if (v && det && v.readyState >= 2) {
-        try {
-          const r = await det.detect(v, false);
-          setFaceCount(r.faceCount);
-          setFace(check.observe(performance.now(), r.faceCount));
-        } catch { /* one failed inference: try again */ }
-      }
-      loopRef.current = window.setTimeout(tick, 400);
-    };
-    stopLoop();
-    void tick();
-  }, []);
-
   const turnOnCamera = async () => {
     setCamera({ state: 'working' });
     setStartError(null);
@@ -118,7 +91,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       await v.play().catch(() => {});
       await waitForFrames(v);
       setCamera({ state: 'ok', message: 'Camera connected.' });
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => { setCamera({ state: 'fail', message: 'The camera stopped. Press "Try again".' }); stopLoop(); });
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => { setCamera({ state: 'fail', message: 'The camera stopped. Press "Try again".' }); });
     } catch (e: any) {
       setCamera({ state: 'fail', message: e?.message || 'The camera could not be started.' });
       return;
@@ -142,11 +115,11 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
         return;
       }
     }
-    runFaceCheck();
   };
 
-  const faceOk = !cameraNeeded || face === 'ok';
-  const ready = eligible.state === 'ok' && !deviceBlocked && consent && (!cameraNeeded || (camera.state === 'ok' && models.state === 'ok')) && faceOk;
+  // The separate face-check step was removed: the student switches the camera on, then starts. Face absence / other-person
+  // monitoring continues DURING the exam (useProctoring), using the detector loaded here.
+  const ready = eligible.state === 'ok' && !deviceBlocked && consent && (!cameraNeeded || (camera.state === 'ok' && models.state === 'ok'));
 
   const startSecureExam = async () => {
     if (!ready || starting) return;
@@ -156,10 +129,9 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
         try { await document.documentElement.requestFullscreen(); } catch { /* checked below */ }
         if (!document.fullscreenElement) throw new Error('Fullscreen could not be entered. Allow fullscreen for this site and press "Start Secure Exam" again.');
       }
-      stopLoop();
       handedOver.current = true;
       await onReady({
-        precheck: { faceCount: cameraNeeded ? faceCount : 1, fullscreen: !!document.fullscreenElement, mobileDevice: device.mobile, detector: detectorRef.current?.name || 'none' },
+        precheck: { fullscreen: !!document.fullscreenElement, mobileDevice: device.mobile, detector: detectorRef.current?.name || 'none' },
         stream: cameraNeeded ? streamRef.current : null,
         detector: cameraNeeded ? detectorRef.current : null,
       });
@@ -167,7 +139,6 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       handedOver.current = false;
       if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch { /* ignore */ } }
       setStartError(e?.message || 'The exam could not be started.');
-      if (cameraNeeded && camera.state === 'ok') runFaceCheck();
     } finally {
       setStarting(false);
     }
@@ -248,9 +219,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                   </div>
                 )}
                 {camera.state === 'ok' && (
-                  <span className={`absolute left-2 top-2 text-[11px] font-semibold px-2 py-1 rounded-full ${face === 'ok' ? 'bg-[#22A06B] text-white' : face === 'steadying' ? 'bg-[#FFC24B] text-[#3D2C0C]' : 'bg-[#E1447A] text-white'}`} data-testid="face-badge">
-                    {face === 'ok' ? '1 face ✓' : faceCount < 0 ? 'Checking…' : `${faceCount} face${faceCount === 1 ? '' : 's'}`}
-                  </span>
+                  <span className="absolute left-2 top-2 text-[11px] font-semibold px-2 py-1 rounded-full bg-[#22A06B] text-white" data-testid="camera-badge">Camera on ✓</span>
                 )}
               </div>
             )}
@@ -276,10 +245,10 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                 </StepRow>
               )}
               {cameraNeeded && (
-                <StepRow state={models.state === 'fail' ? 'fail' : camera.state !== 'ok' || models.state !== 'ok' ? (models.state === 'working' ? 'working' : 'idle') : face === 'ok' ? 'ok' : 'working'} title="Face check" testId="check-face">
+                <StepRow state={models.state === 'fail' ? 'fail' : camera.state !== 'ok' ? 'idle' : models.state === 'ok' ? 'ok' : 'working'} title="Camera ready" testId="check-camera-ready">
                   {models.state === 'fail' ? <span className="text-[#E1447A]">{models.message}</span>
                     : models.state === 'working' ? models.message
-                      : camera.state === 'ok' ? <span data-testid="face-message" className={face === 'no_face' || face === 'multiple' ? 'text-[#E1447A]' : ''}>{FACE_TEXT[face]}</span>
+                      : models.state === 'ok' ? <span data-testid="camera-ready-message">Camera is on. You can start the exam.</span>
                         : 'Starts after the camera is on.'}
                   {models.state === 'ok' && <span className="block text-text-muted">{models.message}</span>}
                 </StepRow>

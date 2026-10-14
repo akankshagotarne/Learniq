@@ -23,7 +23,7 @@ const authSessionSchema = new mongoose.Schema({
   lastActiveAt: { type: Date, required: true },
   expiresAt: { type: Date, required: true }, // the JWT's own expiry
   endedAt: { type: Date, default: null },
-  endReason: { type: String, enum: ['logout', 'takeover', 'expired', 'idle', 'password_reset'], default: null },
+  endReason: { type: String, enum: ['logout', 'takeover', 'expired', 'idle', 'password_reset', 'access_revoked'], default: null },
   purgeAt: { type: Date, required: true }, // ended/expired rows are deleted by MongoDB some time after this
 }, { timestamps: true });
 

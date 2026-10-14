@@ -750,8 +750,12 @@ const studentOverview = async (student) => {
   ]);
   const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
   const byExam = {};
+  const sched = require('./interviewSchedule');
+  const now = new Date();
+  const summaryMap = await sched.summaries(payments.map((p) => ({ student: student._id, exam: p.exam })), now);
   for (const p of payments) {
     const e = await checkEligibility(student._id, oid(p.exam));
+    const sum = summaryMap.get(`${oid(student._id)}:${oid(p.exam)}`) || null;
     const own = interviews.filter((i) => same(i.exam, p.exam)).sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
     const iv = own.find((i) => i.isOpen) || own[0] || null;
     byExam[oid(p.exam)] = {
@@ -760,6 +764,7 @@ const studentOverview = async (student) => {
       code: e.eligible ? null : e.code,
       message: e.eligible ? null : e.message,
       interview: iv ? view(iv) : null,
+      schedule: { summary: sum, ...sched.messageFor(sum, now) },
       ...workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null),
     };
   }
