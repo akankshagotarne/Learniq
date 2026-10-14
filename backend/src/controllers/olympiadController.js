@@ -93,6 +93,16 @@ const assertEligibleStudent = (user, exam) => {
   }
 };
 
+/**
+ * Entitlement-aware version of assertEligibleStudent, used by every student exam endpoint. A student may use an exam of THEIR
+ * standard (normal rule), or the one specific exam an administrator authorised for them (OlympiadAccessGrant) even when it belongs
+ * to another standard. Nothing else changes: no grant -> the normal WRONG_STANDARD refusal, so payment cannot be used cross-standard.
+ */
+const assertCanAccessExam = async (user, exam) => {
+  if (user && user.role === 'student' && user.currentStandard !== exam.standard && await examAccess.activeGrant(user._id, exam._id)) return;
+  assertEligibleStudent(user, exam);
+};
+
 const assertWindowOpen = (exam, purpose) => {
   const state = windowState(exam);
   if (state === 'upcoming') {
@@ -372,10 +382,14 @@ const buildState = async (exam, userId, now = new Date()) => {
 // GET /api/olympiad/exams
 const listExams = handler(async (req, res) => {
   const now = new Date();
-  if (req.user.role !== 'student' || !req.user.currentStandard) {
-    return res.json({ success: true, exams: [], serverNow: now.toISOString() });
-  }
-  const exams = await OlympiadExam.find({ isPublished: true, standard: req.user.currentStandard }).sort({ startDate: 1 });
+  if (req.user.role !== 'student') return res.json({ success: true, exams: [], serverNow: now.toISOString() });
+  // the student's own standard + the specific exams an administrator authorised for them (never a whole other standard)
+  const grantedIds = (await examAccess.activeGrantExamIds(req.user._id));
+  const conditions = [];
+  if (req.user.currentStandard) conditions.push({ standard: req.user.currentStandard });
+  if (grantedIds.length) conditions.push({ _id: { $in: grantedIds } });
+  if (!conditions.length) return res.json({ success: true, exams: [], serverNow: now.toISOString() });
+  const exams = await OlympiadExam.find({ isPublished: true, $or: conditions }).sort({ startDate: 1 });
   const out = [];
   for (const exam of exams) {
     out.push({ ...examPublic(exam), ...(await buildState(exam, req.user._id, now)) });
@@ -387,7 +401,7 @@ const listExams = handler(async (req, res) => {
 const getExam = handler(async (req, res) => {
   const now = new Date();
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   res.json({
     success: true,
     exam: {
@@ -467,7 +481,7 @@ const safeEqual = (a, b) => {
 // POST /api/olympiad/exams/:id/payment/order
 const createOrder = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   if (isApprovalExam(exam)) throw new ApiError(400, 'This examination is free. Request access instead of paying.', 'NO_PAYMENT_REQUIRED');
 
   const alreadyPaid = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
@@ -595,7 +609,7 @@ const verifyPayment = handler(async (req, res) => {
 // GET /api/olympiad/exams/:id/payment/status
 const getPaymentStatus = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
 
   let payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
   if (!payment) {
@@ -712,7 +726,7 @@ const requireProctoring = async (exam, attempt) => {
 const startExam = handler(async (req, res) => {
   const now = new Date();
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
 
   let attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (attempt) {
@@ -762,7 +776,7 @@ const startExam = handler(async (req, res) => {
 const getAttempt = handler(async (req, res) => {
   const now = new Date();
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   let attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (!attempt) throw new ApiError(404, 'You have not started this examination yet.', 'NO_ATTEMPT');
   attempt = await expireIfNeeded(attempt, now);
@@ -812,7 +826,7 @@ const applyAnswers = async (attempt, exam, answers, now) => {
 const saveAnswers = handler(async (req, res) => {
   const now = new Date();
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   let attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (!attempt) throw new ApiError(404, 'You have not started this examination yet.', 'NO_ATTEMPT');
 
@@ -844,7 +858,7 @@ const saveAnswers = handler(async (req, res) => {
 const submitExam = handler(async (req, res) => {
   const now = new Date();
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   let attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (!attempt) throw new ApiError(404, 'You have not started this examination yet.', 'NO_ATTEMPT');
 
@@ -875,7 +889,7 @@ const submitExam = handler(async (req, res) => {
 // ──────────────────────────────────────────────
 const loadCompletedAttempt = async (req) => {
   const exam = await loadExam(req.params.id);
-  assertEligibleStudent(req.user, exam);
+  await assertCanAccessExam(req.user, exam);
   let attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (!attempt) throw new ApiError(404, 'You have not attempted this examination.', 'NO_ATTEMPT');
   attempt = await expireIfNeeded(attempt);
@@ -1394,7 +1408,7 @@ module.exports = {
   teacherListExams, teacherAttempts,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // used by the proctoring adapters (services/proctoring/adapters.js) - the Olympiad rules stay in this file
-  _proctoring: { loadExam, assertEligibleStudent, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt, isApprovalExam, resolveAccess },
+  _proctoring: { loadExam, assertEligibleStudent, assertCanAccessExam, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt, isApprovalExam, resolveAccess },
   // exported for tests
   _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated, resultSummary, responsesToObject, buildState, examPublic },
 };

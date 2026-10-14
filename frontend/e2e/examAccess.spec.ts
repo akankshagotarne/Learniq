@@ -10,8 +10,10 @@ const row = (over: Record<string, unknown> = {}) => ({
   purchase: { status: 'NOT_PURCHASED' }, grant: null, attempt: null, history: [],
   canGrant: true, grantBlocked: null, canReset: false, resetBlocked: 'No attempt to reset.', ...over,
 });
+const cat = (examId: string, standard: number, over: Record<string, unknown> = {}) => ({ examId, title: `LearnIQ Practice Test – ${standard}th Standard${over.suffix ?? ''}`, standard, fee: 20, windowClosed: false, purchase: 'NOT_PURCHASED', ...over });
+const catalog = [cat('ex5', 5), cat('ex8', 8), cat('ex9a', 9, { suffix: ' (A)' }), cat('ex9b', 9, { suffix: ' (B)' })];
 const overview = (r = row()) => ({
-  success: true, student: { id: STUDENT_ID, name: 'Asha Patil', email: 'asha@example.com', phone: '+919876543210', standard: 5 }, exams: [r], audit: [],
+  success: true, catalog, student: { id: STUDENT_ID, name: 'Asha Patil', email: 'asha@example.com', phone: '+919876543210', standard: 5 }, exams: [r], audit: [],
 });
 const paidDone = row({
   purchase: { status: 'PAID', amount: 20 }, canGrant: false, grantBlocked: 'Already paid - no exception needed.', canReset: true, resetBlocked: null,
@@ -55,16 +57,16 @@ test('admin: grant dialog shows the real student + exam, needs a reason, Cancel 
 test('admin: confirming a grant sends exactly the chosen student-scoped request and shows success only after the server answers', async ({ page }) => {
   let after = false;
   const calls = await openPanel(page, overview(), (m, p) => {
-    if (m === 'POST' && p.endsWith('/grant')) { after = true; return { status: 201, body: { success: true, created: true, alreadyGranted: false, message: 'Exceptional access granted successfully for the selected student and examination.' } }; }
+    if (m === 'POST' && p.endsWith('/grant')) { after = true; return { status: 201, body: { success: true, created: true, alreadyGranted: false, message: 'Exceptional access granted successfully for the selected student and Standard 5 examination.' } }; }
     if (m === 'GET' && p === `/admin/students/${STUDENT_ID}/exam-access` && after) return { body: overview(row({ purchase: { status: 'EXCEPTIONAL_ACCESS' }, canGrant: false, grantBlocked: 'Exceptional access is already granted.' })) };
     return undefined;
   });
   await page.getByTestId('grant-btn-ex5').click();
   await page.getByTestId('reason-select').selectOption('VERIFIED_TECH_ISSUE');
   await page.getByTestId('confirm-action').click();
-  await expect(page.getByText('Exceptional access granted successfully for the selected student and examination.')).toBeVisible();
+  await expect(page.getByText('Exceptional access granted successfully for the selected student and Standard 5 examination.')).toBeVisible();
   expect(calls).toHaveLength(1);
-  expect(calls[0].body).toMatchObject({ examId: 'ex5', reasonCode: 'VERIFIED_TECH_ISSUE', includesInterview: true });
+  expect(calls[0].body).toMatchObject({ examId: 'ex5', targetStandard: 5, reasonCode: 'VERIFIED_TECH_ISSUE', includesInterview: true });
   await expect(page.getByTestId('purchase-status')).toHaveText('Exceptional access (no payment)');
   await expect(page.getByTestId('grant-btn-ex5')).toBeDisabled();
 });
@@ -109,4 +111,47 @@ test('a student cannot open the admin screen that holds these actions', async ({
   await page.goto(`/admin/students/${STUDENT_ID}`);
   await expect(page.getByTestId('exam-access-panel')).toHaveCount(0);
   await expect(page).not.toHaveURL(new RegExp(`/admin/students/${STUDENT_ID}$`));
+});
+
+test('admin: Standard 1-10 selector - registered standard preselected, exam options follow the standard, forged mismatch impossible', async ({ page }) => {
+  let after = false;
+  const calls = await openPanel(page, overview(), (m, p) => {
+    if (m === 'POST' && p.endsWith('/grant')) { after = true; return { status: 201, body: { success: true, created: true, alreadyGranted: false, message: 'Exceptional access granted successfully for the selected student and Standard 8 examination.' } }; }
+    return undefined;
+  });
+  await page.getByTestId('grant-any-btn').click();
+  const d = page.getByTestId('access-dialog');
+  await expect(page.getByTestId('registered-standard')).toHaveText('Standard 5');
+  await expect(page.getByTestId('standard-select')).toHaveValue('5');
+  await expect(page.getByTestId('exam-select')).toHaveValue('ex5'); // one exam for the Standard -> selected
+  expect(await page.getByTestId('standard-select').locator('option').count()).toBe(11); // placeholder + Standard 1..10
+  await page.getByTestId('standard-select').selectOption('8');
+  await expect(page.getByTestId('exam-select')).toHaveValue('ex8');
+  await page.getByTestId('standard-select').selectOption('9'); // two exams -> admin must choose, previous exam cleared
+  await expect(page.getByTestId('exam-select')).toHaveValue('');
+  await page.getByTestId('reason-select').selectOption('VERIFIED_TECH_ISSUE');
+  await expect(page.getByTestId('confirm-action')).toBeDisabled();
+  await page.getByTestId('standard-select').selectOption('3'); // none configured
+  await expect(page.getByTestId('no-exam-msg')).toContainText('No examination is configured for Standard 3');
+  await expect(page.getByTestId('confirm-action')).toBeDisabled();
+  await page.getByTestId('standard-select').selectOption('8');
+  await page.getByTestId('include-interview').uncheck();
+  await expect(page.getByTestId('dialog-summary')).toContainText('You are granting exceptional access to Asha Patil for LearnIQ Practice Test – 8th Standard, Standard 8.');
+  await expect(page.getByTestId('dialog-summary')).toContainText('not included');
+  await page.getByTestId('confirm-action').click();
+  await expect(page.getByText('Exceptional access granted successfully for the selected student and Standard 8 examination.')).toBeVisible();
+  expect(after).toBe(true);
+  expect(calls).toHaveLength(1);
+  expect(calls[0].body).toMatchObject({ examId: 'ex8', targetStandard: 8, reasonCode: 'VERIFIED_TECH_ISSUE', includesInterview: false });
+  await expect(d).toHaveCount(0);
+});
+
+test('admin: grant dialog already-paid exams are disabled and the modal has no horizontal overflow on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 760 });
+  const data = { ...overview(), catalog: [cat('ex5', 5, { purchase: 'PAID' }), cat('ex8', 8)] };
+  await openPanel(page, data);
+  await page.getByTestId('grant-any-btn').click();
+  await expect(page.getByTestId('exam-select').locator('option', { hasText: 'already paid' })).toBeDisabled();
+  await expect(page.getByTestId('confirm-action')).toBeDisabled();
+  expect((await findOverflow(page)).offenders).toEqual([]);
 });

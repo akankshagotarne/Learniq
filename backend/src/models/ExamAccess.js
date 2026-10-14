@@ -17,7 +17,8 @@ const REASON_CODES = {
 const grantSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
-  standard: { type: Number },
+  standard: { type: Number },                              // the standard of the authorised exam (the admin-selected target)
+  registeredStandard: { type: Number },                    // the student's registered standard when granted (never changed by the grant)
   status: { type: String, enum: ['ACTIVE'], default: 'ACTIVE' },
   includesInterview: { type: Boolean, default: true },     // the exam + teacher-interview package, exactly like the paid one
   reasonCode: { type: String, enum: REASON_CODES.grant, required: true },
@@ -59,6 +60,9 @@ const auditSchema = new mongoose.Schema({
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   examTitle: { type: String },
   standard: { type: Number },
+  registeredStandard: { type: Number },
+  grantedStandard: { type: Number },
+  reasonNote: { type: String },
   admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   adminName: { type: String },
   reasonCode: { type: String },

@@ -26,3 +26,12 @@ Pay 20 rupees (2000 paise, price calculated by the backend) -> verified payment 
 New collections only (`openaccessgrants`, `olympiadattempthistories`, `examadminaudits`); indexes are created automatically. No migration, no env var, no data change.
 ## Not covered
 The separate AI Interview still requires a purchase. Engineering mock test access is unchanged. There is no "revoke grant" action yet.
+
+## Cross-standard grants (registered Standard ≠ granted Standard)
+
+An administrator can grant exceptional access to ANY Standard 1–10 examination, regardless of the student's registered standard.
+
+- **Modal:** "Standard to Grant" (1–10, preselected to the registered standard) → "Examination" (options come from the backend `catalog`; one exam is auto-selected, several force a choice, none blocks submit). Changing the Standard clears the exam.
+- **API:** `POST /api/admin/students/:id/exam-access/grant { examId, targetStandard, reasonCode, note?, includesInterview }`. The server requires an integer 1–10 and `exam.standard === targetStandard` (`STANDARD_MISMATCH` / `INVALID_STANDARD`). It does NOT compare with the student's registered standard.
+- **Student side:** `assertCanAccessExam` (olympiad + proctoring) lets a student use an exam of their own standard OR the one exam covered by an ACTIVE grant; `GET /olympiad/exams` returns own-standard exams plus granted ones only. Payment cannot be used cross-standard; the registered standard is never modified.
+- **Audit:** `registeredStandard`, `grantedStandard`, exam, admin, reason + note, interview flag, grant reference, timestamp (admin-only).
