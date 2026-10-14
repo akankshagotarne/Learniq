@@ -39,6 +39,7 @@ const parseReason = (kind, body) => {
 };
 
 // ── lookups ──────────────────────────────────────────────────────────────────────────────────
+const activeGrantExamIds = async (studentId) => (await OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' })).map((g) => g.exam);
 const activeGrant = (studentId, examId) => OlympiadAccessGrant.findOne({ student: studentId, exam: examId, status: 'ACTIVE' });
 const successPayment = (studentId, examId) => OlympiadPayment.findOne({ student: studentId, exam: examId, status: 'SUCCESS' });
 
@@ -57,9 +58,7 @@ const loadTarget = async (studentId, examId) => {
   if (exam.examType !== 'olympiad' || exam.accessMode === 'approval' || !(exam.standard >= 1 && exam.standard <= 10)) {
     throw new ExamAccessError(400, 'NOT_SUPPORTED', 'This action is only available for the Standard 1-10 Olympiad examinations.');
   }
-  if (student.currentStandard !== exam.standard) {
-    throw new ExamAccessError(400, 'WRONG_STANDARD', `This student is not in Standard ${exam.standard}, so this examination cannot be used for them.`);
-  }
+  // NOTE: the exam's standard may differ from the student's registered standard - that is exactly what an administrator exception is for.
   if (new Date() > exam.endDate) {
     throw new ExamAccessError(409, 'EXAM_CLOSED', 'The examination window has closed. Extend the exam dates first, then try again.');
   }
@@ -75,9 +74,14 @@ const ensureAudit = async (doc) => {
 };
 
 // ── Feature 1: exceptional access ────────────────────────────────────────────────────────────
-const grantAccess = async ({ studentId, examId, includesInterview = true, ...reasonBody }, admin) => {
+const grantAccess = async ({ studentId, examId, targetStandard, includesInterview = true, ...reasonBody }, admin) => {
   const reason = parseReason('grant', reasonBody);
+  const target = typeof targetStandard === 'number' ? targetStandard : (typeof targetStandard === 'string' && /^\d+$/.test(targetStandard) ? Number(targetStandard) : NaN);
+  if (!Number.isInteger(target) || target < 1 || target > 10) throw new ExamAccessError(400, 'INVALID_STANDARD', 'Please select a Standard from 1 to 10.');
   const { student, exam } = await loadTarget(studentId, examId);
+  if (exam.standard !== target) {
+    throw new ExamAccessError(400, 'STANDARD_MISMATCH', `The selected examination belongs to Standard ${exam.standard}, not Standard ${target}. Please choose an examination of the selected Standard.`);
+  }
 
   if (await successPayment(student._id, exam._id)) {
     throw new ExamAccessError(409, 'ALREADY_ENTITLED', 'This student already has a verified payment for this examination. No exception is needed - use "Reset Test Attempt" if they need another attempt.');
@@ -88,7 +92,7 @@ const grantAccess = async ({ studentId, examId, includesInterview = true, ...rea
   if (!grant) {
     try {
       grant = await OlympiadAccessGrant.create({
-        student: student._id, exam: exam._id, standard: exam.standard, status: 'ACTIVE', includesInterview: includesInterview !== false,
+        student: student._id, exam: exam._id, standard: exam.standard, registeredStandard: student.currentStandard, status: 'ACTIVE', includesInterview: includesInterview !== false,
         reasonCode: reason.code, reasonNote: reason.note, grantedBy: admin._id, grantedByName: admin.name,
       });
       created = true;
@@ -100,7 +104,7 @@ const grantAccess = async ({ studentId, examId, includesInterview = true, ...rea
   // audit is keyed by the grant: a retry after a crash adds the missing record, a repeat adds nothing
   await ensureAudit({
     dedupeKey: `grant:${oid(grant)}`, action: 'FREE_ACCESS_GRANTED', student: student._id, studentName: student.name,
-    exam: exam._id, examTitle: exam.title, standard: exam.standard, admin: grant.grantedBy || admin._id, adminName: grant.grantedByName || admin.name,
+    exam: exam._id, examTitle: exam.title, standard: exam.standard, grantedStandard: exam.standard, registeredStandard: grant.registeredStandard !== undefined ? grant.registeredStandard : student.currentStandard, reasonNote: reason.note, admin: grant.grantedBy || admin._id, adminName: grant.grantedByName || admin.name,
     reasonCode: grant.reasonCode, reason: reason.text, grant: grant._id, grantStatus: grant.status, includesInterview: grant.includesInterview, entitlement: 'GRANT',
   });
   return { grant, created };
@@ -184,9 +188,12 @@ const linkRetake = async (studentId, examId, newAttemptId) => {
 const overviewForStudent = async (studentId) => {
   const student = await User.findById(studentId);
   if (!student || student.role !== 'student') throw new ExamAccessError(404, 'STUDENT_NOT_FOUND', 'Student not found.');
-  const exams = (student.currentStandard >= 1 && student.currentStandard <= 10)
-    ? (await OlympiadExam.find({ examType: 'olympiad', standard: student.currentStandard })).filter((e) => e.accessMode !== 'approval')
-    : [];
+  const isStd = (e) => e.examType === 'olympiad' && e.accessMode !== 'approval' && e.standard >= 1 && e.standard <= 10;
+  const allExams = (await OlympiadExam.find({ examType: 'olympiad' })).filter(isStd);
+  const grantedIds = new Set((await activeGrantExamIds(student._id)).map(String));
+  const attemptedIds = new Set((await OlympiadAttempt.find({ student: student._id })).map((a) => String(a.exam)));
+  // rows: the registered standard's exams + any exam the student already holds an exception / attempt for (so it can be reset)
+  const exams = allExams.filter((e) => e.standard === student.currentStandard || grantedIds.has(String(e._id)) || attemptedIds.has(String(e._id)));
   const now = new Date();
   const rows = [];
   for (const exam of exams) {
@@ -217,11 +224,18 @@ const overviewForStudent = async (studentId) => {
     });
   }
   const audit = await ExamAdminAudit.find({ student: student._id }).sort('-at').limit(20);
+  // catalog: every Standard 1-10 examination with this student's purchase state, for the Standard -> Examination selectors
+  const paidIds = new Set((await OlympiadPayment.find({ student: student._id, status: 'SUCCESS' })).map((x) => String(x.exam)));
+  const catalog = allExams.sort((a, b) => a.standard - b.standard || new Date(a.startDate) - new Date(b.startDate)).map((e) => ({
+    examId: oid(e), title: e.title, standard: e.standard, fee: e.fee, windowClosed: now > e.endDate,
+    purchase: paidIds.has(String(e._id)) ? 'PAID' : grantedIds.has(String(e._id)) ? 'EXCEPTIONAL_ACCESS' : 'NOT_PURCHASED',
+  }));
   return {
+    catalog,
     student: { id: oid(student), name: student.name, email: student.email || null, phone: student.phone || null, standard: student.currentStandard },
     exams: rows,
-    audit: audit.map((a) => ({ id: oid(a), action: a.action, examTitle: a.examTitle, adminName: a.adminName, reason: a.reason, at: a.at })),
+    audit: audit.map((a) => ({ id: oid(a), action: a.action, examTitle: a.examTitle, registeredStandard: a.registeredStandard ?? null, grantedStandard: a.grantedStandard ?? a.standard ?? null, includesInterview: a.includesInterview ?? null, adminName: a.adminName, reason: a.reason, at: a.at })),
   };
 };
 
-module.exports = { ExamAccessError, entitlementFor, activeGrant, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };
+module.exports = { ExamAccessError, entitlementFor, activeGrant, activeGrantExamIds, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };

@@ -19,10 +19,12 @@ export interface ExamAccessRow {
   canGrant: boolean; grantBlocked: string | null;
   canReset: boolean; resetBlocked: string | null;
 }
+export interface CatalogExam { examId: string; title: string; standard: number; fee: number; windowClosed: boolean; purchase: PurchaseStatus }
 export interface ExamAccessOverview {
+  catalog: CatalogExam[];
   student: { id: string; name: string; email: string | null; phone: string | null; standard: number };
   exams: ExamAccessRow[];
-  audit: { id: string; action: 'FREE_ACCESS_GRANTED' | 'EXAM_ATTEMPT_RESET'; examTitle: string; adminName: string; reason: string; at: string }[];
+  audit: { id: string; action: 'FREE_ACCESS_GRANTED' | 'EXAM_ATTEMPT_RESET'; examTitle: string; adminName: string; reason: string; at: string; registeredStandard?: number | null; grantedStandard?: number | null; includesInterview?: boolean | null }[];
 }
 
 export const GRANT_REASONS: { code: string; label: string }[] = [
@@ -41,7 +43,7 @@ export const RESET_REASONS: { code: string; label: string }[] = [
 const base = (id: string) => `/admin/students/${encodeURIComponent(id)}/exam-access`;
 export const examAccessApi = {
   overview: async (studentId: string): Promise<ExamAccessOverview> => (await api.get(base(studentId))).data,
-  grant: async (studentId: string, body: { examId: string; reasonCode: string; note?: string; includesInterview: boolean }): Promise<{ message: string; alreadyGranted: boolean }> =>
+  grant: async (studentId: string, body: { examId: string; targetStandard: number; reasonCode: string; note?: string; includesInterview: boolean }): Promise<{ message: string; alreadyGranted: boolean }> =>
     (await api.post(`${base(studentId)}/grant`, body)).data,
   reset: async (studentId: string, body: { examId: string; attemptId: string; reasonCode: string; note?: string }): Promise<{ message: string; alreadyReset: boolean }> =>
     (await api.post(`${base(studentId)}/reset`, body)).data,

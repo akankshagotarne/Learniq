@@ -112,7 +112,7 @@ const olympiadAdapter = {
     const o = olympiad();
     try {
       const exam = await o.loadExam(examId);
-      o.assertEligibleStudent(user, exam);
+      await o.assertCanAccessExam(user, exam);
       const { OlympiadAttempt, OlympiadPayment } = olympiadModels();
       let attempt = await OlympiadAttempt.findOne({ student: user._id, exam: exam._id });
       if (attempt) {

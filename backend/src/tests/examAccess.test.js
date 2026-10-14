@@ -67,7 +67,7 @@ const mkExam = (extra = {}) => fake.OlympiadExam.create({
   startDate: new Date(Date.now() - 3600e3), endDate: new Date(Date.now() + 2 * 86400e3), durationMinutes: 60, totalQuestions: 2, totalMarks: 2, fee: 20, currency: 'INR', instructions: ['x'], ...extra,
 });
 const payDirect = (u, exam) => fake.OlympiadPayment.create({ student: u.user._id, exam: exam._id, amount: 20, currency: 'INR', status: 'SUCCESS', razorpayOrderId: `order_d_${++seq}`, razorpayPaymentId: `pay_d_${seq}`, verifiedAt: new Date(), verifiedVia: 'checkout' });
-const grantBody = (exam, extra = {}) => ({ examId: String(exam._id), reasonCode: 'VERIFIED_TECH_ISSUE', ...extra });
+const grantBody = (exam, extra = {}) => ({ examId: String(exam._id), targetStandard: exam.standard, reasonCode: 'VERIFIED_TECH_ISSUE', ...extra });
 const resetBody = (exam, attemptId, extra = {}) => ({ examId: String(exam._id), attemptId: String(attemptId), reasonCode: 'AUTO_SUBMIT_TECH_ISSUE', ...extra });
 const admin = () => ({ token: S.admin.token });
 const doGrant = (stu, exam, extra, who = S.admin) => call('POST', `/api/admin/students/${stu.user._id}/exam-access/grant`, { token: who.token, body: grantBody(exam, extra) });
@@ -109,14 +109,18 @@ test('A: only an admin can open, grant or reset - students, teachers and anonymo
 test('A: invalid ids, missing / incomplete reasons and wrong targets are rejected and nothing is recorded', async () => {
   const stu = await mkUser(); const base = `/api/admin/students/${stu.user._id}/exam-access`;
   assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: 'nope', reasonCode: 'APPROVED_RETAKE' } })).status, 400);
-  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: 'a'.repeat(24), reasonCode: 'APPROVED_RETAKE' } })).body.code, 'EXAM_NOT_FOUND');
+  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: 'a'.repeat(24), targetStandard: 10, reasonCode: 'APPROVED_RETAKE' } })).body.code, 'EXAM_NOT_FOUND');
   assert.equal((await call('POST', `/api/admin/students/${'b'.repeat(24)}/exam-access/grant`, { ...admin(), body: grantBody(S.exam) })).body.code, 'STUDENT_NOT_FOUND');
   assert.equal((await call('POST', `/api/admin/students/${S.teacher.user._id}/exam-access/grant`, { ...admin(), body: grantBody(S.exam) })).body.code, 'STUDENT_NOT_FOUND', 'a teacher id is not a student');
-  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: String(S.exam._id) } })).body.code, 'REASON_REQUIRED');
-  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: String(S.exam._id), reasonCode: 'WHATEVER' } })).body.code, 'REASON_REQUIRED');
+  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: String(S.exam._id), targetStandard: 10 } })).body.code, 'REASON_REQUIRED');
+  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: { examId: String(S.exam._id), targetStandard: 10, reasonCode: 'WHATEVER' } })).body.code, 'REASON_REQUIRED');
   assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: grantBody(S.exam, { reasonCode: 'OTHER' }) })).body.code, 'REASON_NOTE_REQUIRED');
   const std9 = await mkExam({ standard: 9 });
-  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: grantBody(std9) })).body.code, 'WRONG_STANDARD');
+  assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: grantBody(std9, { targetStandard: 10 }) })).body.code, 'STANDARD_MISMATCH', 'exam standard must equal the selected standard');
+  for (const bad of [0, 11, 4.5, 'x', null, undefined]) {
+    const r = await call('POST', `${base}/grant`, { ...admin(), body: grantBody(S.exam, { targetStandard: bad }) });
+    assert.equal(r.status, 400, `targetStandard ${bad}`);
+  }
   const eng = await mkExam({ examType: 'engineering', accessMode: 'approval', standard: 10 });
   assert.equal((await call('POST', `${base}/grant`, { ...admin(), body: grantBody(eng) })).body.code, 'NOT_SUPPORTED');
   const closed = await mkExam({ endDate: new Date(Date.now() - 1000), startDate: new Date(Date.now() - 86400e3) });
@@ -327,6 +331,100 @@ test('F: audit records carry admin, student, exam, reason, time, grant / attempt
     const r = await call(m, `/api/admin/students/${s.user._id}/exam-access`, { ...admin(), body: {} });
     assert.ok([404, 405].includes(r.status), `${m} -> ${r.status}`);
   }
+});
+
+
+// ── G. cross-standard exceptional access (registered standard != granted standard) ─────────────
+const mkStdExam = async (standard, extra = {}) => {
+  const e = await mkExam({ standard, title: `LearnIQ Practice Test – ${standard}th Standard`, ...extra });
+  for (const q of paper.questions.slice(0, 2)) await fake.OlympiadQuestion.create({ exam: e._id, ...q });
+  return e;
+};
+const grantStd = (stu, exam, extra = {}, who = S.admin) => call('POST', `/api/admin/students/${stu.user._id}/exam-access/grant`, { token: who.token, body: { examId: String(exam._id), targetStandard: exam.standard, reasonCode: 'VERIFIED_TECH_ISSUE', ...extra } });
+
+test('G: Std 4 student granted Std 4 / Std 8, Std 7 student granted Std 2 - registered standard never changes', async () => {
+  const e4 = await mkStdExam(4); const e8 = await mkStdExam(8); const e2 = await mkStdExam(2);
+  const s4 = await mkUser('student', 4, 'Kruti'); const s7 = await mkUser('student', 7, 'Seven');
+  assert.equal((await grantStd(s4, e4)).status, 201);
+  const r8 = await grantStd(s4, e8, { includesInterview: true });
+  assert.equal(r8.status, 201);
+  assert.equal(r8.body.message, 'Exceptional access granted successfully for the selected student and Standard 8 examination.');
+  assert.equal((await grantStd(s7, e2)).status, 201);
+  assert.equal((await fake.User.findById(s4.user._id)).currentStandard, 4, 'registered standard unchanged');
+  assert.equal((await fake.User.findById(s7.user._id)).currentStandard, 7);
+});
+
+test('G: the overview catalog follows the standard; a Std 8 exam cannot be granted while Std 4 is selected', async () => {
+  const e8 = await mkStdExam(8); const s = await mkUser('student', 4);
+  const ov = (await call('GET', `/api/admin/students/${s.user._id}/exam-access`, admin())).body;
+  assert.equal(ov.student.standard, 4);
+  assert.ok(ov.catalog.some((c) => c.examId === String(e8._id) && c.standard === 8 && c.purchase === 'NOT_PURCHASED'));
+  assert.ok(ov.catalog.every((c) => c.standard >= 1 && c.standard <= 10));
+  const bad = await grantStd(s, e8, { targetStandard: 4 });
+  assert.equal(bad.status, 400); assert.equal(bad.body.code, 'STANDARD_MISMATCH');
+  assert.equal(fake.OlympiadAccessGrant.docs.filter((g) => String(g.student) === String(s.user._id)).length, 0);
+});
+
+test('G: only an admin may grant cross-standard; a student or teacher cannot', async () => {
+  const e8 = await mkStdExam(8); const s = await mkUser('student', 4); const url = `/api/admin/students/${s.user._id}/exam-access/grant`;
+  const body = { examId: String(e8._id), targetStandard: 8, reasonCode: 'VERIFIED_TECH_ISSUE' };
+  assert.equal((await call('POST', url, { token: s.token, body })).status, 403);
+  assert.equal((await call('POST', url, { token: S.teacher.token, body })).status, 403);
+  assert.equal(fake.OlympiadAccessGrant.docs.filter((g) => String(g.student) === String(s.user._id)).length, 0);
+  // and a student cannot reach the exam by changing their own standard / guessing the id
+  assert.equal((await start(s, e8)).status, 403);
+});
+
+test('G: the cross-standard student sees and starts exactly the granted exam, free; everything else stays protected', async () => {
+  const e8 = await mkStdExam(8); const e8b = await mkStdExam(8); const e5 = await mkStdExam(5); const own = await mkStdExam(4);
+  const s = await mkUser('student', 4);
+  assert.equal((await start(s, e8)).status, 403, 'no grant yet -> WRONG_STANDARD');
+  assert.equal((await grantStd(s, e8)).status, 201);
+  const ids = (await examsOf(s)).map((e) => e._id);
+  assert.ok(ids.includes(String(e8._id)) && ids.includes(String(own._id)), 'granted + own standard');
+  assert.ok(!ids.includes(String(e8b._id)) && !ids.includes(String(e5._id)), 'no other exam of any other standard');
+  assert.equal(ids.filter((i) => i === String(e8._id)).length, 1, 'no duplicate cards');
+  assert.equal((await stateOf(s, e8)).state, 'ready');
+  assert.equal((await start(s, e8b)).status, 403); assert.equal((await start(s, e5)).status, 403);
+  const order = await call('POST', `/api/olympiad/exams/${e8b._id}/payment/order`, { token: s.token });
+  assert.notEqual(order.status, 200, 'a cross-standard payment is not possible');
+  const st = await start(s, e8); assert.equal(st.status, 200);
+  assert.ok(fake.OlympiadAttempt.docs.find((a) => String(a.student) === String(s.user._id) && String(a.exam) === String(e8._id)).accessGrant);
+  assert.equal((await stateOf(s, e8)).state, 'in_progress', 'persists across reload');
+  assert.equal((await start(s, own)).status, 402, 'own-standard exam is still payment protected');
+  assert.equal(fake.OlympiadPayment.docs.filter((p) => String(p.student) === String(s.user._id)).length, 0, 'no fake payment');
+  assert.equal(rzp.created.filter((o) => o.amount !== 2000).length, 0);
+});
+
+test('G: cross-standard interview follows the checkbox and a valid submission; audit holds both standards', async () => {
+  const e8 = await mkStdExam(8); const e6 = await mkStdExam(6);
+  const a = await mkUser('student', 4, 'With'); const b = await mkUser('student', 4, 'Without');
+  assert.equal((await grantStd(a, e8, { includesInterview: true })).status, 201);
+  assert.equal((await grantStd(b, e6, { includesInterview: false, reasonCode: 'OTHER', note: 'principal approved' })).status, 201);
+  await start(a, e8); await submit(a, e8);
+  await start(b, e6); await submit(b, e6);
+  assert.equal((await call('POST', '/api/interviews/request', { token: a.token, body: { examId: String(e8._id) } })).status, 201);
+  assert.equal((await call('POST', '/api/interviews/request', { token: b.token, body: { examId: String(e6._id) } })).status, 403);
+  const au = audits().find((x) => x.action === 'FREE_ACCESS_GRANTED' && String(x.student) === String(a.user._id));
+  assert.equal(au.registeredStandard, 4); assert.equal(au.grantedStandard, 8); assert.equal(String(au.exam), String(e8._id));
+  assert.equal(au.examTitle, e8.title); assert.equal(String(au.admin), String(S.admin.user._id)); assert.equal(au.includesInterview, true);
+  assert.ok(au.reason && au.at && au.grant);
+  const au2 = audits().find((x) => String(x.student) === String(b.user._id));
+  assert.equal(au2.includesInterview, false); assert.equal(au2.reasonNote, 'principal approved');
+  assert.doesNotMatch(JSON.stringify(au), /password|token|secret/i);
+  const ov = (await call('GET', `/api/admin/students/${a.user._id}/exam-access`, admin())).body;
+  assert.ok(ov.exams.some((r) => r.examId === String(e8._id)), 'granted cross-standard exam row is listed for reset');
+  assert.equal(ov.audit[0].registeredStandard, 4); assert.equal(ov.audit[0].grantedStandard, 8);
+});
+
+test('G: duplicate cross-standard grants are idempotent and the student payment flow is unchanged', async () => {
+  const e8 = await mkStdExam(8); const s = await mkUser('student', 3);
+  await grantStd(s, e8); const again = await grantStd(s, e8);
+  assert.equal(again.status, 200); assert.equal(again.body.alreadyGranted, true);
+  assert.equal(fake.OlympiadAccessGrant.docs.filter((g) => String(g.student) === String(s.user._id)).length, 1);
+  const own = await mkStdExam(3);
+  const o = await call('POST', `/api/olympiad/exams/${own._id}/payment/order`, { token: s.token });
+  assert.equal(o.status, 200); assert.equal(rzp.created[rzp.created.length - 1].amount, 2000);
 });
 
 // ── overview + student leak check ────────────────────────────────────────────────────────────
