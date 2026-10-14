@@ -31,6 +31,7 @@ router.post('/:id/join-request', ...student, perUser(30), ctrl.joinRequest);
 
 // Teacher (shared directory: every approved teacher sees the same eligible students)
 router.get('/teacher/directory', ...teacher, ctrl.directory);
+router.get('/teacher/student-details', ...teacher, perUser(60), ctrl.studentDetails);
 router.post('/teacher/start', ...teacher, perUser(30), ctrl.teacherStart);
 router.post('/:id/accept', ...teacher, perUser(30), ctrl.accept);
 router.post('/:id/approve', ...teacher, perUser(30), ctrl.approve);

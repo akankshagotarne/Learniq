@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Loader2, Mail, Phone, Search, Video } from 'lucide-react';
+import { Loader2, Search, Video } from 'lucide-react';
+import StudentDetailsDrawer from '../../components/interview/StudentDetailsDrawer';
 import Sidebar from '../../components/layout/Sidebar';
 import { fmtDateTime, staffStatusLabel, statusTone } from '../../components/interview/interviewLabels';
 import { DirectoryRow, InterviewView, interviewApi, interviewErrorMessage } from '../../services/interview';
@@ -19,6 +20,7 @@ const TeacherInterviewPage: React.FC = () => {
   const [standard, setStandard] = useState('');
   const [status, setStatus] = useState('');
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [details, setDetails] = useState<{ studentId: string; examId: string; name: string } | null>(null); // opening details only READS - the filters / list below stay untouched
 
   const load = useCallback(async () => {
     try { setDir(await interviewApi.directory({ q: q.trim() || undefined, standard: standard || undefined, status: status || undefined })); setError(null); }
@@ -66,6 +68,17 @@ const TeacherInterviewPage: React.FC = () => {
     if (s === 'COMPLETED') return <span className="text-xs text-text-muted">Completed</span>;
     return <span className="text-xs text-text-muted">With {row.assignedTeacher?.name || 'another teacher'}</span>;
   };
+
+  const marksOf = (r: DirectoryRow) => (r.evaluation?.state === 'SUBMITTED' ? `${r.evaluation.totalMarks}/${r.evaluation.maxMarks}` : r.interviewStatus === 'EVALUATION_PENDING' ? 'Pending' : '—');
+  const teacherOf = (r: DirectoryRow) => (r.assignedTeacher ? (r.assignedToMe ? 'You' : r.assignedTeacher.name) : '—');
+  const studentCell = (r: DirectoryRow) => (
+    <>
+      <button type="button" onClick={() => setDetails({ studentId: r.student._id, examId: r.exam._id, name: r.student.name })}
+        className="text-left font-semibold text-text-primary hover:text-brand-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50 rounded min-h-[44px] sm:min-h-0 break-words"
+        aria-label={`View details of ${r.student.name}`} data-testid="student-name">{r.student.name}</button>
+      <p className="text-xs text-text-muted" data-testid="student-standard">Standard {r.standard}</p>
+    </>
+  );
 
   const rows = dir?.rows || [];
   const counts = dir?.counts;
@@ -120,39 +133,32 @@ const TeacherInterviewPage: React.FC = () => {
               {rows.map((r) => (
                 <article key={r.student._id + r.exam._id} className="card-soft rounded-2xl border border-border-subtle p-4" data-testid="interview-row">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0"><p className="font-semibold text-text-primary break-words">{r.student.name}</p><p className="text-xs text-text-muted">Standard {r.standard}</p></div>
+                    <div className="min-w-0">{studentCell(r)}</div>
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${statusTone(r.interviewStatus)}`}>{staffStatusLabel(r.interviewStatus)}</span>
                   </div>
                   <dl className="mt-3 grid grid-cols-1 gap-1 text-xs text-text-secondary">
-                    <div className="break-all"><dt className="inline text-text-muted">Email: </dt><dd className="inline">{r.student.email || 'Not provided'}</dd></div>
-                    <div><dt className="inline text-text-muted">Phone: </dt><dd className="inline">{r.student.phone || 'Not provided'}</dd></div>
-                    <div className="break-words"><dt className="inline text-text-muted">Exam: </dt><dd className="inline">{r.exam.title}</dd></div>
-                    <div><dt className="inline text-text-muted">Exam: </dt><dd className="inline">Submitted · {fmtDateTime(r.submission.submittedAt)}</dd></div>
-                    <div><dt className="inline text-text-muted">Teacher: </dt><dd className="inline">{r.assignedTeacher ? (r.assignedToMe ? 'You' : r.assignedTeacher.name) : '—'}</dd></div>
-                    {r.evaluation?.state === 'SUBMITTED' && <div><dt className="inline text-text-muted">Interview marks: </dt><dd className="inline font-semibold">{r.evaluation.totalMarks}/{r.evaluation.maxMarks} ({r.evaluation.percentage}%)</dd></div>}
+                    <div><dt className="inline text-text-muted">Submitted: </dt><dd className="inline">Submitted · {fmtDateTime(r.submission.submittedAt)}</dd></div>
+                    <div><dt className="inline text-text-muted">Teacher: </dt><dd className="inline">{teacherOf(r)}</dd></div>
+                    <div><dt className="inline text-text-muted">Marks: </dt><dd className="inline font-semibold">{marksOf(r)}</dd></div>
                   </dl>
                   <div className="mt-3 flex">{action(r)}</div>
                 </article>
               ))}
             </div>
             <div className="hidden md:block card-soft rounded-2xl border border-border-subtle overflow-x-auto">
-              <table className="w-full text-sm min-w-[1040px]" data-testid="interview-table">
+              <table className="w-full text-sm" data-testid="interview-table">
                 <thead><tr className="text-left text-[11px] uppercase tracking-wide text-text-muted border-b border-border-subtle">
-                  {['Student', 'Std', 'Email', 'Phone', 'Examination', 'Submitted', 'Request', 'Teacher', 'Marks', 'Action'].map((h) => <th key={h} className="px-3 py-3 font-semibold">{h}</th>)}
+                  {['Student', 'Submitted', 'Request', 'Teacher', 'Marks', 'Action'].map((h) => <th key={h} scope="col" className="px-4 py-3 font-semibold">{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.student._id + r.exam._id} className="border-b border-border-subtle last:border-0 align-middle" data-testid="interview-row">
-                      <td className="px-3 py-3 font-medium text-text-primary">{r.student.name}</td>
-                      <td className="px-3 py-3 text-text-secondary">{r.standard}</td>
-                      <td className="px-3 py-3 text-text-secondary"><span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" aria-hidden="true" />{r.student.email || 'Not provided'}</span></td>
-                      <td className="px-3 py-3 text-text-secondary"><span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" aria-hidden="true" />{r.student.phone || 'Not provided'}</span></td>
-                      <td className="px-3 py-3 text-text-secondary max-w-[200px] truncate" title={r.exam.title}>{r.exam.title}</td>
-                      <td className="px-3 py-3 text-text-secondary whitespace-nowrap">Submitted · {fmtDateTime(r.submission.submittedAt)}</td>
-                      <td className="px-3 py-3"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusTone(r.interviewStatus)}`}>{staffStatusLabel(r.interviewStatus)}</span></td>
-                      <td className="px-3 py-3 text-text-secondary">{r.assignedTeacher ? (r.assignedToMe ? 'You' : r.assignedTeacher.name) : '—'}</td>
-                      <td className="px-3 py-3 text-text-secondary whitespace-nowrap">{r.evaluation?.state === 'SUBMITTED' ? `${r.evaluation.totalMarks}/${r.evaluation.maxMarks} (${r.evaluation.percentage}%)` : r.interviewStatus === 'EVALUATION_PENDING' ? 'Evaluation pending' : '—'}</td>
-                      <td className="px-3 py-3">{action(r)}</td>
+                      <td className="px-4 py-3 max-w-[220px]">{studentCell(r)}</td>
+                      <td className="px-4 py-3 text-text-secondary">Submitted · {fmtDateTime(r.submission.submittedAt)}</td>
+                      <td className="px-4 py-3"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${statusTone(r.interviewStatus)}`}>{staffStatusLabel(r.interviewStatus)}</span></td>
+                      <td className="px-4 py-3 text-text-secondary">{teacherOf(r)}</td>
+                      <td className="px-4 py-3 text-text-secondary whitespace-nowrap" data-testid="row-marks">{marksOf(r)}</td>
+                      <td className="px-4 py-3">{action(r)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -162,6 +168,7 @@ const TeacherInterviewPage: React.FC = () => {
           )}
         </div>
       </main>
+      {details && <StudentDetailsDrawer key={details.studentId + details.examId} studentId={details.studentId} examId={details.examId} studentName={details.name} onClose={() => setDetails(null)} />}
     </div>
   );
 };
