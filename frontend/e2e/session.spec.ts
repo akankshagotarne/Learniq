@@ -178,3 +178,44 @@ for (const vp of [{ width: 360, height: 740 }, { width: 768, height: 1024 }, { w
     }
   });
 }
+
+// ── "Email or Phone Number" login ──
+test('login box: one field labelled "Email or Phone Number"; e-mail and phone both go to the server as `identifier`', async ({ page }) => {
+  const sent: any[] = [];
+  await mockApi(page, 'guest', (method, path) => {
+    if (method === 'POST' && path === '/auth/login') return { status: 200, body: { success: true, token: 'phone-token', user: users.student } };
+    return undefined;
+  });
+  await page.route('**/api/auth/login', async (route) => { sent.push(route.request().postDataJSON()); await route.fallback(); });
+  await page.goto('/login');
+  const box = page.getByLabel('Email or Phone Number');
+  await expect(box).toBeVisible();
+  await expect(page.getByLabel('Email Address')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Sign In as/ })).toBeVisible();
+  await expect(page.getByText('Forgot password?')).toBeVisible();
+
+  await box.fill('+91 98765 43210');
+  await page.getByPlaceholder('Your password').fill('Str0ngPass1');
+  await page.getByRole('button', { name: /^Sign In as/ }).click();
+  await expect(page).toHaveURL(/\/student$/);
+  expect(sent).toEqual([{ identifier: '+91 98765 43210', password: 'Str0ngPass1' }]);
+});
+
+test('login box: clear validation messages, nothing is sent for an obviously invalid value', async ({ page }) => {
+  const sent: any[] = [];
+  await mockApi(page, 'guest');
+  await page.route('**/api/auth/login', async (route) => { sent.push(1); await route.fallback(); });
+  await page.goto('/login');
+  const box = page.getByLabel('Email or Phone Number');
+  const submit = page.getByRole('button', { name: /^Sign In as/ });
+  await page.getByPlaceholder('Your password').fill('x');
+  const cases: [string, string][] = [['', 'Enter your email or phone number.'], ['user@', 'Enter a valid email address.'], ['12345', 'Enter a valid phone number'], ['hello', 'Enter a valid email address or phone number.']];
+  for (const [value, msg] of cases) {
+    await box.fill(value);
+    await submit.click();
+    await expect(page.locator('#login-identifier-error')).toContainText(msg);
+  }
+  expect(sent).toHaveLength(0);
+  await box.fill('9876543210');
+  await expect(page.locator('#login-identifier-error')).toHaveCount(0);
+});

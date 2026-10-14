@@ -17,7 +17,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<LoginResult>;
+  /** `identifier` = e-mail address OR phone number */
+  login: (identifier: string, password: string) => Promise<LoginResult>;
   /** "Log out other device & continue" */
   takeoverSession: (takeoverToken: string) => Promise<User>;
   /** "Cancel": the other device stays signed in; the takeover token is voided on the server */
@@ -72,9 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(newUser);
   };
 
-  const login = async (email: string, password: string): Promise<LoginResult> => {
+  const login = async (identifier: string, password: string): Promise<LoginResult> => {
     try {
-      const res = await api.post('/auth/login', { email, password });
+      const res = await api.post('/auth/login', { identifier, password });
       completeSignIn(res.data.token, res.data.user);
       return { status: 'ok', user: res.data.user };
     } catch (err: any) {
