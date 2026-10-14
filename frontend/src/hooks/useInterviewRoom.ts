@@ -1,34 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSocket } from '../services/socket';
 import { interviewApi } from '../services/interview';
+import { diag, InterviewMediaError, mediaPool, mediaProblemMessage, MediaProblem, TimeoutError, withTimeout, type MediaLease } from '../services/interviewMedia';
 
 /**
  * Two-way camera + microphone for ONE interview (browser WebRTC, peer to peer, nothing recorded).
  * The teacher is the offerer, the student the answerer. Authorisation is decided by the backend: room-access (HTTP) and
  * 'interview:join' (socket) both re-check who the caller is and the interview's status.
+ *
+ * Lifecycle rules (see docs/INTERVIEW_ROOM_STABILITY.md): every wait is finite; the camera is acquired through the shared
+ * single-flight pool (never two concurrent getUserMedia); a run that was cancelled never touches state or the socket room
+ * of a newer run; reconnection attempts are capped; cleanup is idempotent and only releases what THIS run owns.
  */
 export type RoomPhase =
-  | 'idle' | 'preparing' | 'media-error' | 'joining' | 'waiting-peer' | 'connecting' | 'connected'
+  | 'idle' | 'preparing' | 'awaiting-permission' | 'media-error' | 'joining' | 'waiting-peer' | 'connecting' | 'connected'
   | 'reconnecting' | 'ended' | 'replaced' | 'error';
 
-export type MediaProblem = 'unsupported' | 'insecure' | 'denied' | 'no-device' | 'busy' | 'failed';
+export { mediaProblemMessage };
+export type { MediaProblem };
 
-export const mediaProblemMessage = (p: MediaProblem): string => ({
-  unsupported: 'This browser cannot use the camera and microphone. Please use the latest Chrome, Edge, Firefox or Safari.',
-  insecure: 'The camera and microphone only work on a secure (https) page.',
-  denied: 'Camera or microphone permission was blocked. Allow access in your browser settings (lock icon in the address bar), then try again.',
-  'no-device': 'No camera or microphone was found. Connect one and try again.',
-  busy: 'Your camera or microphone is being used by another app. Close it and try again.',
-  failed: 'Could not start your camera and microphone. Please check your devices and try again.',
-}[p]);
+const ROOM_ACCESS_TIMEOUT_MS = 15000;
+const JOIN_TIMEOUT_MS = 12000;
+const MAX_RECONNECTS = 4;          // after this many failed recoveries in a row the user gets a clear error + Try again, never an endless loop
+const DISCONNECT_GRACE_MS = 3000;  // a 'disconnected' ICE state often heals itself; only restart if it persists
 
-const classifyMediaError = (err: any): MediaProblem => {
-  const name = err && err.name;
-  if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') return 'denied';
-  if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') return 'no-device';
-  if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') return 'busy';
-  return 'failed';
-};
+/** who currently owns the socket room of an interview in this tab (a stale run must not leave a room a newer run joined) */
+const roomOwners = new Map<string, symbol>();
 
 interface Options {
   interviewId: string | null;
@@ -53,23 +50,44 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
 
   useEffect(() => {
     if (!enabled || !interviewId) return undefined;
-    let cancelled = false;
+    const owner = Symbol(interviewId);
+    roomOwners.set(interviewId, owner);
+    let cancelled = false;          // this run was cleaned up: nothing it still has in flight may touch state or the socket
+    let cleaned = false;
+    let lease: MediaLease | null = null;
     let stream: MediaStream | null = null;
     let pc: RTCPeerConnection | null = null;
     let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
     let pendingCandidates: RTCIceCandidateInit[] = [];
     let remoteSet = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
     let peerHere = false;
     let joined = false;
+    let recoveries = 0;
     const socket = getSocket();
+    const alive = () => !cancelled;
+    const ctx = { interviewId, role };
 
     const signal = (data: any) => socket.emit('interview:signal', { data });
 
     const closePeer = () => {
+      if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
       if (pc) { pc.ontrack = null; pc.onicecandidate = null; pc.onconnectionstatechange = null; try { pc.close(); } catch { /* ignore */ } }
       pc = null; remoteSet = false; pendingCandidates = [];
-      setRemoteStream(null);
+      if (alive()) setRemoteStream(null);
+    };
+
+    const fail = (message: string) => { if (!alive()) return; diag('connection-error', { ...ctx, message }); setError(message); setPhase('error'); };
+
+    /** one bounded recovery step; after MAX_RECONNECTS in a row the user gets an error + Try again instead of an endless loop */
+    const recover = (why: string, action: () => Promise<void> | void) => {
+      if (!alive()) return;
+      recoveries += 1;
+      if (recoveries > MAX_RECONNECTS) { closePeer(); fail('The connection could not be restored. Check your internet connection and try again.'); return; }
+      diag('recovery', { ...ctx, why, attempt: recoveries });
+      setPhase('reconnecting');
+      Promise.resolve(action()).catch((e) => diag('recovery-failed', { ...ctx, why, message: e && e.message }));
     };
 
     const makePeer = (): RTCPeerConnection => {
@@ -79,29 +97,39 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
       const remote = new MediaStream();
       setRemoteStream(remote);
       stream?.getTracks().forEach((t) => conn.addTrack(t, stream as MediaStream));
-      conn.ontrack = (e) => { e.streams[0]?.getTracks().forEach((t) => { if (!remote.getTracks().includes(t)) remote.addTrack(t); }); setRemoteStream(new MediaStream(remote.getTracks())); };
-      conn.onicecandidate = (e) => { if (e.candidate) signal({ candidate: e.candidate.toJSON() }); };
+      conn.ontrack = (e) => {
+        if (!alive() || pc !== conn) return;
+        e.streams[0]?.getTracks().forEach((t) => { if (!remote.getTracks().includes(t)) remote.addTrack(t); });
+        diag('remote-track', { ...ctx, kind: e.track.kind });
+        setRemoteStream(new MediaStream(remote.getTracks()));
+      };
+      conn.onicecandidate = (e) => { if (e.candidate && alive() && pc === conn) signal({ candidate: e.candidate.toJSON() }); };
       conn.onconnectionstatechange = () => {
-        if (cancelled || pc !== conn) return;
-        const s = conn.connectionState;
-        if (s === 'connected') { setPhase('connected'); socket.emit('interview:connected'); }
-        else if (s === 'connecting') setPhase((p) => (p === 'connected' ? 'reconnecting' : 'connecting'));
-        else if (s === 'disconnected') {
+        if (!alive() || pc !== conn) return;
+        const st = conn.connectionState;
+        if (st === 'connected') {
+          if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+          recoveries = 0; diag('peer-connected', ctx); setPhase('connected'); socket.emit('interview:connected');
+        } else if (st === 'connecting') setPhase((p) => (p === 'connected' ? 'reconnecting' : 'connecting'));
+        else if (st === 'disconnected') {
           setPhase('reconnecting');
-          if (role === 'teacher') offer(true).catch(() => {}); // try an ICE restart
-        } else if (s === 'failed') {
-          setPhase('reconnecting');
-          if (role === 'teacher' && peerHere) startOffer().catch(() => {});
+          if (role === 'teacher' && !graceTimer) { // wait: 'disconnected' frequently heals itself
+            graceTimer = setTimeout(() => { graceTimer = null; if (pc === conn && conn.connectionState === 'disconnected') recover('ice-disconnected', () => offer(true)); }, DISCONNECT_GRACE_MS);
+          }
+        } else if (st === 'failed') {
+          if (role === 'teacher' && peerHere) recover('ice-failed', () => startOffer());
+          else setPhase('reconnecting'); // the student side waits for the teacher's new offer
         }
       };
       return conn;
     };
 
     const offer = async (iceRestart = false) => {
-      if (!pc) return;
-      const o = await pc.createOffer({ iceRestart });
-      await pc.setLocalDescription(o);
-      signal({ sdp: pc.localDescription });
+      const conn = pc; if (!conn) return;
+      const o = await conn.createOffer({ iceRestart });
+      if (!alive() || pc !== conn) return;
+      await conn.setLocalDescription(o);
+      signal({ sdp: conn.localDescription });
     };
     const startOffer = async () => { makePeer(); setPhase('connecting'); await offer(false); };
 
@@ -111,45 +139,57 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
     };
 
     const onSignal = async ({ data }: { data: any }) => {
+      if (!alive()) return;
       try {
         if (data.sdp) {
           if (data.sdp.type === 'offer' && role === 'student') {
             if (!pc || pc.signalingState !== 'stable') makePeer();
-            await pc!.setRemoteDescription(data.sdp); remoteSet = true; await flushCandidates();
-            const a = await pc!.createAnswer(); await pc!.setLocalDescription(a);
-            signal({ sdp: pc!.localDescription }); setPhase((p) => (p === 'connected' ? p : 'connecting'));
+            const conn = pc!;
+            await conn.setRemoteDescription(data.sdp); remoteSet = true; await flushCandidates();
+            const a = await conn.createAnswer(); if (!alive() || pc !== conn) return; await conn.setLocalDescription(a);
+            signal({ sdp: conn.localDescription }); setPhase((p) => (p === 'connected' ? p : 'connecting'));
           } else if (data.sdp.type === 'answer' && role === 'teacher' && pc) {
             await pc.setRemoteDescription(data.sdp); remoteSet = true; await flushCandidates();
           }
         } else if (data.candidate) {
           if (pc && remoteSet) await pc.addIceCandidate(data.candidate); else pendingCandidates.push(data.candidate);
         }
-      } catch (e) { console.warn('[interview] signalling error', e); }
+      } catch (e: any) { diag('signalling-error', { ...ctx, message: e && e.message }); }
     };
 
     const onPeerJoined = () => {
-      peerHere = true;
-      if (role === 'teacher') startOffer().catch(() => setPhase('error')); // fresh connection each time the student (re)joins
+      if (!alive()) return;
+      peerHere = true; diag('peer-joined', ctx);
+      if (role === 'teacher') startOffer().catch((e) => fail(e?.message || 'Could not start the video connection.')); // fresh connection each time the student (re)joins
       else { closePeer(); setPhase('connecting'); }
     };
-    const onPeerLeft = () => { peerHere = false; closePeer(); setPhase('waiting-peer'); };
-    const onEnd = () => { setPhase('ended'); cleanup(); endedRef.current?.(); };
-    const onReplaced = () => { setPhase('replaced'); cleanup(); };
-    const onMediaState = (m: { camera: boolean; mic: boolean }) => setPeerMedia({ camera: !!m.camera, mic: !!m.mic });
+    const onPeerLeft = () => { if (!alive()) return; peerHere = false; diag('peer-left', ctx); closePeer(); setPhase('waiting-peer'); };
+    const onEnd = () => { if (!alive()) return; diag('ended', ctx); setPhase('ended'); cleanup(); endedRef.current?.(); };
+    const onReplaced = () => { if (!alive()) return; diag('replaced', ctx); setPhase('replaced'); cleanup(); };
+    const onMediaState = (m: { camera: boolean; mic: boolean }) => { if (alive()) setPeerMedia({ camera: !!m.camera, mic: !!m.mic }); };
 
-    const join = () => new Promise<void>((resolve, reject) => {
+    const join = () => { let timedOut = false; return withTimeout(new Promise<void>((resolve, reject) => {
       socket.emit('interview:join', { interviewId }, (res: any) => {
         if (!res || !res.ok) return reject(new Error((res && res.message) || 'Could not join the interview.'));
-        joined = true; peerHere = !!res.peerPresent;
-        if (res.peerPresent) { if (role === 'teacher') startOffer().catch(() => setPhase('error')); else setPhase('connecting'); }
+        joined = true;
+        if (timedOut) return resolve(); // the user already saw the timeout error; cleanup (Try again / leave) will release this join
+        if (cancelled) { // we left while the server was answering: undo OUR join, unless a newer run of this page already owns the room
+          if (!roomOwners.has(interviewId)) socket.emit('interview:leave');
+          return resolve();
+        }
+        peerHere = !!res.peerPresent;
+        if (res.peerPresent) { if (role === 'teacher') startOffer().catch((e) => fail(e?.message || 'Could not start the video connection.')); else setPhase('connecting'); }
         else setPhase('waiting-peer');
         resolve();
       });
-    });
+    }), JOIN_TIMEOUT_MS, 'join').catch((e) => { if (e instanceof TimeoutError) timedOut = true; throw e; }); };
+    const joinError = (e: any) => (e instanceof TimeoutError ? 'The interview server did not answer in time. Check your connection and try again.' : (e && e.message) || 'Could not join the interview.');
 
-    const onReconnect = () => { if (joined && !cancelled) join().catch((e) => { setError(e.message); setPhase('error'); }); };
+    const onReconnect = () => { if (joined && alive()) join().catch((e) => fail(joinError(e))); };
 
     function cleanup() {
+      if (cleaned) return; cleaned = true;
+      diag('cleanup-start', ctx);
       if (heartbeat) clearInterval(heartbeat);
       heartbeat = null;
       socket.off('interview:signal', onSignal);
@@ -159,36 +199,45 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
       socket.off('interview:replaced', onReplaced);
       socket.off('interview:media-state', onMediaState);
       socket.off('connect', onReconnect);
-      if (joined) socket.emit('interview:leave');
+      if (roomOwners.get(interviewId) === owner) roomOwners.delete(interviewId);
+      if (joined) socket.emit('interview:leave');   // only THIS interview's room (the server resolves it from the socket)
       joined = false;
       closePeer();
-      stream?.getTracks().forEach((t) => t.stop());
-      stream = null;
-      setLocalStream(null);
+      stream?.getTracks().forEach((t) => { t.onended = null; });
+      if (!cancelled) setLocalStream(null);
+      lease?.release();   // the pool stops the camera only when no other holder needs it
+      lease = null; stream = null;
+      diag('cleanup-done', ctx);
     }
 
     (async () => {
-      setError(null); setMediaProblem(null); setPhase('preparing');
-      if (!window.isSecureContext && location.hostname !== 'localhost') { setMediaProblem('insecure'); setPhase('media-error'); return; }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof RTCPeerConnection === 'undefined') { setMediaProblem('unsupported'); setPhase('media-error'); return; }
+      diag('init', ctx);
+      setError(null); setMediaProblem(null); setLocalStream(null); setPhase('preparing');
       try {
-        const access = await interviewApi.roomAccess(interviewId);
-        if (cancelled) return;
+        const access = await withTimeout(interviewApi.roomAccess(interviewId), ROOM_ACCESS_TIMEOUT_MS, 'room-access');
+        if (!alive()) return;
         if (access.iceServers && access.iceServers.length) iceServers = access.iceServers;
+        diag('room-access-ok', ctx);
       } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.response?.data?.message || 'You cannot join this interview right now.'); setPhase('error'); return;
+        if (!alive()) return;
+        fail(e instanceof TimeoutError ? 'The interview server did not answer in time. Check your connection and try again.' : e?.response?.data?.message || 'You cannot join this interview right now.');
+        return;
       }
+      lease = mediaPool.acquire({ onAwaitingPermission: () => { if (alive()) setPhase((p) => (p === 'preparing' ? 'awaiting-permission' : p)); } });
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+        stream = await lease.promise;
       } catch (e) {
-        if (cancelled) return;
-        setMediaProblem(classifyMediaError(e)); setPhase('media-error'); return;
+        if (!alive()) return;
+        const problem: MediaProblem = e instanceof InterviewMediaError ? e.problem : { code: 'failed', device: 'unknown' };
+        diag('media-failed', { ...ctx, code: problem.code, device: problem.device });
+        lease.release(); lease = null;
+        setMediaProblem(problem); setPhase('media-error'); return;
       }
-      if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+      if (!alive()) return;
+      diag('media-ready', { ...ctx, video: stream.getVideoTracks().length, audio: stream.getAudioTracks().length });
       setLocalStream(stream); setMicOn(true); setCamOn(true);
       // a device unplugged mid-call ends its track: tell the user instead of failing silently
-      stream.getTracks().forEach((t) => { t.onended = () => { if (!cancelled) { if (t.kind === 'video') setCamOn(false); else setMicOn(false); } }; });
+      stream.getTracks().forEach((t) => { t.onended = () => { if (alive()) { diag('track-ended', { ...ctx, kind: t.kind }); if (t.kind === 'video') setCamOn(false); else setMicOn(false); } }; });
 
       socket.on('interview:signal', onSignal);
       socket.on('interview:peer-joined', onPeerJoined);
@@ -197,11 +246,12 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
       socket.on('interview:replaced', onReplaced);
       socket.on('interview:media-state', onMediaState);
       socket.on('connect', onReconnect);
-      setPhase('joining');
-      try { await join(); } catch (e: any) { if (!cancelled) { setError(e.message); setPhase('error'); } return; }
+      setPhase('joining'); diag('joining', ctx);
+      try { await join(); } catch (e: any) { fail(joinError(e)); return; }
+      if (!alive()) return;
       heartbeat = setInterval(() => socket.emit('interview:heartbeat'), 20000);
       socket.emit('interview:heartbeat');
-    })();
+    })().catch((e) => { fail((e && e.message) || 'Something went wrong while joining.'); });
 
     return () => { cancelled = true; cleanup(); };
   }, [enabled, interviewId, role, attempt]);

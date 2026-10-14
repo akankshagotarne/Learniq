@@ -43,6 +43,10 @@ const setupInterviewSockets = (io) => {
     if (user.role === 'admin') socket.join('iv:admins');
 
     let lastBeat = 0;
+    // join / leave of ONE socket run strictly one after the other. A page that is left and re-entered (Try again, quick
+    // navigation) sends leave + join back to back; interleaved, the late "leave" bookkeeping marked the re-joined participant absent.
+    let queue = Promise.resolve();
+    const serial = (fn) => { queue = queue.then(fn, fn).catch(() => {}); return queue; };
     const current = () => socket.data && socket.data.interviewId;
 
     const leaveRoom = async ({ notify = true } = {}) => {
@@ -61,7 +65,7 @@ const setupInterviewSockets = (io) => {
       }
     };
 
-    socket.on('interview:join', async (msg, ack) => {
+    socket.on('interview:join', (msg, ack) => serial(async () => {
       const reply = typeof ack === 'function' ? ack : () => {};
       try {
         const interviewId = msg && msg.interviewId;
@@ -95,7 +99,7 @@ const setupInterviewSockets = (io) => {
         console.error('[interview-socket] join:', err && err.message);
         reply({ ok: false, code: 'ERROR', message: 'Could not join the interview.' });
       }
-    });
+    }));
 
     // offer / answer / ICE relay - only to the other member of THIS socket's own interview room
     socket.on('interview:signal', (msg) => {
@@ -123,8 +127,8 @@ const setupInterviewSockets = (io) => {
       await svc.touch(id).catch(() => {});
     });
 
-    socket.on('interview:leave', () => { leaveRoom().catch(() => {}); });
-    socket.on('disconnect', () => { leaveRoom().catch(() => {}); });
+    socket.on('interview:leave', () => { serial(() => leaveRoom()); });
+    socket.on('disconnect', () => { serial(() => leaveRoom()); });
   });
 };
 
