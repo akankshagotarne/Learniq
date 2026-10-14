@@ -63,14 +63,15 @@ test.beforeEach(reset);
 
 const PASSWORD = 'Str0ngPass1';
 let n = 0;
-const body = (over = {}) => { n += 1; return { name: `User ${n}`, email: `user${n}@example.com`, password: PASSWORD, role: 'student', phone: '', ...over }; };
+// every body gets its own unique phone (students must have one now); tests that care about the phone pass their own
+const body = (over = {}) => { n += 1; return { name: `User ${n}`, email: `user${n}@example.com`, password: PASSWORD, role: 'student', phone: `+9170000${String(10000 + n)}`, ...over }; };
 const post = async (url, payload, headers = {}) => {
   const res = await fetch(`${base}${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(payload) });
   return { status: res.status, json: await res.json() };
 };
 const register = (over) => post('/register', body(over));
-const EMAIL_MSG = 'This email address is already registered. Please use a different email or log in to your existing account.';
-const PHONE_MSG = 'This phone number is already registered. Please use a different phone number or log in to your existing account.';
+const EMAIL_MSG = 'This email address is already registered. Please log in or use a different email address.';
+const PHONE_MSG = 'This phone number is already registered. Please log in or use a different phone number.';
 const count = async () => (REAL_MONGO ? User().countDocuments() : fake.User.docs.length);
 
 const expectEmailConflict = (r) => {
@@ -145,7 +146,7 @@ test('13: email AND phone both taken -> both are reported', async () => {
   assert.equal(r.status, 409);
   assert.equal(r.json.code, 'EMAIL_AND_PHONE_ALREADY_EXIST');
   assert.deepEqual(r.json.errors.map((e) => e.field).sort(), ['email', 'phone']);
-  assert.equal(r.json.message, 'This email address and phone number are already registered. Please check your details or log in to your existing account.');
+  assert.equal(r.json.message, 'An account with this email address and phone number already exists. Please log in instead.');
 });
 
 test('13b: two different accounts - email from one, phone from the other - are both reported', async () => {
@@ -193,11 +194,19 @@ test('17b: the database constraint alone rejects the loser even if the pre-check
   await assert.rejects(U.create({ ...base, email: 'db1@example.com' }), (e) => e.code === 11000);
 });
 
-test('17c: accounts WITHOUT a phone never collide with each other', async () => {
-  assert.equal((await register({ phone: '' })).status, 201);
-  assert.equal((await register({ phone: '' })).status, 201);
-  assert.equal((await register({ phone: undefined })).status, 201);
+test('17c: accounts WITHOUT a phone (teachers may omit it) never collide with each other', async () => {
+  assert.equal((await register({ role: 'teacher', phone: '' })).status, 201);
+  assert.equal((await register({ role: 'teacher', phone: '' })).status, 201);
+  assert.equal((await register({ role: 'teacher', phone: undefined })).status, 201);
   assert.equal(await count(), 3);
+});
+
+test('17d: students WITHOUT an email never collide with each other (phone is their identity)', async () => {
+  assert.equal((await register({ email: undefined })).status, 201);
+  assert.equal((await register({ email: '' })).status, 201);
+  assert.equal((await register({ email: '   ' })).status, 201);
+  assert.equal(await count(), 3);
+  assert.ok(User().docs ? User().docs.every((d) => d.email === undefined) : true, 'no empty-string email is ever stored');
 });
 
 test('a race that slips past the pre-check is answered with the same clean 409, not a 500', async () => {
@@ -220,6 +229,8 @@ test('invalid input is a 400 with the right field, and creates nothing', async (
   assert.equal(r.status, 400); assert.equal(r.json.field, 'phone'); assert.equal(r.json.code, 'INVALID_PHONE');
   r = await register({ email: { $ne: '' } });
   assert.equal(r.status, 400);
+  r = await register({ phone: '' });
+  assert.equal(r.status, 400); assert.equal(r.json.field, 'phone'); assert.equal(r.json.code, 'PHONE_REQUIRED');
   r = await register({ password: 'weak' });
   assert.equal(r.status, 400);
   assert.equal(await count(), 0);
@@ -228,8 +239,11 @@ test('invalid input is a 400 with the right field, and creates nothing', async (
 test('20: normal registration keeps working - teacher needs approval, role is whitelisted, password is not stored in the response', async () => {
   const t = await register({ role: 'teacher' });
   assert.equal(t.status, 201);
-  assert.equal(t.json.user.role, 'teacher');
-  assert.equal(t.json.user.isApproved, false);
+  assert.equal(t.json.pendingApproval, true);
+  assert.equal(t.json.token, undefined, 'a pending teacher never receives a session token');
+  assert.equal(t.json.user, undefined);
+  const stored = User().docs ? User().docs.find((d) => d.role === 'teacher') : null;
+  if (stored) { assert.equal(stored.isApproved, false); assert.equal(stored.approvalStatus, 'PENDING'); }
   const admin = await register({ role: 'admin' });
   assert.equal(admin.json.user.role, 'student', 'cannot self-register as admin');
 });

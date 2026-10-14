@@ -66,6 +66,7 @@ const matchCond = (v, cond) => {
   return eq(v, cond);
 };
 const matches = (doc, filter = {}) => Object.entries(filter).every(([k, c]) => {
+  if (k === '$nor') return !c.some((sub) => matches(doc, sub));
   if (k === '$or') return c.some((sub) => matches(doc, sub));
   if (k === '$and') return c.every((sub) => matches(doc, sub));
   return matchCond(getPath(doc, k), c);
@@ -362,8 +363,8 @@ const createFakeDb = () => {
   const EngineeringAudit = new FakeModel('EngineeringAudit', { registry, defaults: () => ({ at: new Date(), details: {} }) });
   const User = new FakeModel('User', {
     registry, hidden: ['password'],
-    // same indexes as models/User.js: unique email + PARTIAL unique phoneNormalized (only real string values)
-    unique: [{ fields: ['email'] }, { fields: ['phoneNormalized'], where: (d) => typeof d.phoneNormalized === 'string' }],
+    // same indexes as models/User.js: PARTIAL unique email + PARTIAL unique phoneNormalized (only real string values)
+    unique: [{ fields: ['email'], where: (d) => typeof d.email === 'string' && d.email !== '' }, { fields: ['phoneNormalized'], where: (d) => typeof d.phoneNormalized === 'string' }],
     defaults: () => ({ role: 'student', isActive: true }),
   });
   const Notification = new FakeModel('Notification', { registry });
@@ -411,6 +412,11 @@ const createFakeDb = () => {
     unique: [{ fields: ['interview'] }],
     defaults: () => ({ state: 'DRAFT', maxMarks: 50, totalMarks: 0, percentage: 0, remarks: '', strengths: '', improvements: '', revisions: [], scores: {} }),
   });
+  // interview schedule / slots / reminders (models/InterviewSchedule.js) - same unique indexes as the real schema
+  const InterviewSchedule = new FakeModel('InterviewSchedule', { registry, refs: { exam: 'OlympiadExam' }, unique: [{ fields: ['exam'] }] });
+  const InterviewSlot = new FakeModel('InterviewSlot', { registry, refs: { student: 'User', teacher: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam'] }], defaults: () => ({ status: 'SCHEDULED' }) });
+  const InterviewReminder = new FakeModel('InterviewReminder', { registry, unique: [{ fields: ['dedupeKey'] }], defaults: () => ({ status: 'PENDING', attempts: 0 }) });
+  const scheduleModels = { ...require('../../models/InterviewSchedule'), InterviewSchedule, InterviewSlot, InterviewReminder };
   const InterviewSetting = new FakeModel('InterviewSetting', { registry, unique: [{ fields: ['key'] }], defaults: () => ({ key: 'global', requestsEnabled: true }) });
 
   // teaching content (used by the admin teacher profile counts)
@@ -442,7 +448,7 @@ const createFakeDb = () => {
 
   const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
 
-  return { TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**

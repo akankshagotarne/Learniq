@@ -1,9 +1,14 @@
 export interface User {
   _id: string;
   name: string;
-  email: string;
+  /** optional: a student may register with a phone number only */
+  email?: string;
   role: 'student' | 'teacher' | 'admin';
   phone?: string;
+  /** teachers: PENDING until an administrator approves (undefined on legacy accounts - use isApproved) */
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedAt?: string;
+  reviewNote?: string;
   avatar?: string;
   isActive: boolean;
   isApproved: boolean;

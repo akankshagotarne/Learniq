@@ -13,6 +13,7 @@ import RegisterPage from './pages/RegisterPage';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const PendingApprovalPage = lazy(() => import('./pages/PendingApprovalPage'));
 const CoursesPage = lazy(() => import('./pages/CoursesPage'));
 const CourseDetailPage = lazy(() => import('./pages/CourseDetailPage'));
 const LiveSessionsListPage = lazy(() => import('./pages/LiveSessionsListPage'));
@@ -65,6 +66,7 @@ const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
 const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
+const AdminInterviewSchedule = lazy(() => import('./pages/admin/AdminInterviewSchedule'));
 const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
 
 // Loading fallback
@@ -91,6 +93,9 @@ const ProtectedRoute: React.FC<{
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // An unapproved teacher never sees a teacher page (the backend refuses their API calls too).
+  if (user.role === 'teacher' && user.isApproved !== true) return <Navigate to="/pending-approval" replace />;
+
   if (roles && !roles.includes(user.role)) {
     if (user.role === 'student') return <Navigate to="/student" replace />;
     if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
@@ -106,7 +111,7 @@ const DashboardRedirect: React.FC = () => {
   if (isLoading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'student') return <Navigate to="/student" replace />;
-  if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
+  if (user.role === 'teacher') return <Navigate to={user.isApproved === true ? '/teacher' : '/pending-approval'} replace />;
   if (user.role === 'admin') return <Navigate to="/admin" replace />;
   return <Navigate to="/" replace />;
 };
@@ -124,6 +129,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
@@ -359,6 +365,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/interviews" element={
         <ProtectedRoute roles={['admin']}>
           <AdminInterviews />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/interview-schedule" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminInterviewSchedule />
         </ProtectedRoute>
       } />
       <Route path="/admin/engineering" element={

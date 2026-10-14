@@ -9,8 +9,12 @@ const find = (key) => User.schema.indexes().find(([fields]) => Object.keys(field
 const mk = (over) => new User({ name: 'A', email: 'a@example.com', password: 'Str0ngPass1', ...over });
 
 test('schema declares the global unique indexes', () => {
-  const [, emailOpts] = find('email');
-  assert.equal(emailOpts?.unique ?? User.schema.path('email').options.unique, true);
+  const [emailFields, emailOpts] = find('email');
+  assert.deepEqual(emailFields, { email: 1 });
+  assert.equal(emailOpts.unique, true);
+  assert.deepEqual(emailOpts.partialFilterExpression, { email: { $type: 'string' } }, 'partial: phone-only students (no email) never collide');
+  assert.equal(emailOpts.name, 'uniq_email');
+  assert.ok(!User.schema.path('email').isRequired, 'email is optional at the schema level (the controller requires it per role)');
   const [fields, opts] = find('phoneNormalized');
   assert.deepEqual(fields, { phoneNormalized: 1 });
   assert.equal(opts.unique, true);

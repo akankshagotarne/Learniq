@@ -33,7 +33,16 @@ export type WorkflowStage = 'LOCKED' | 'AVAILABLE' | 'REQUESTED' | 'IN_PROGRESS'
 
 export interface EvaluationSummary { state: 'DRAFT' | 'SUBMITTED'; totalMarks?: number; maxMarks?: number; percentage?: number; submittedAt?: string }
 
+/** What the student is told about the interview time. Built by the backend from what is REALLY configured - never invented. */
+export interface ScheduleSummary {
+  scope: 'general' | 'individual';
+  interviewDate: string; startTime: string | null; endTime: string | null;
+  dayLabel: string; timeLabel: string | null; teacherName: string | null; note: string | null;
+}
+export interface ScheduleInfo { summary: ScheduleSummary | null; configured: boolean; past?: boolean; headline: string; detail: string; when: string | null }
+
 export interface StudentExamInterview {
+  schedule?: ScheduleInfo;
   stage: WorkflowStage;
   workflowComplete: boolean;
   evaluation: EvaluationSummary | null;
@@ -107,6 +116,20 @@ export interface AdminTeacher {
   _id: string; name: string; email: string; available: boolean; current: { interview: string; status: InterviewStatus } | null; completed: number;
 }
 
+export interface AdminScheduleData {
+  timezone: string; today: string;
+  exams: { _id: string; title: string; standard: number; schedule: { interviewDate: string; startTime: string | null; endTime: string | null; note: string | null } | null }[];
+  slots: { _id: string; exam: string; student: string; studentName: string; teacherName: string | null; startAt: string; endAt: string }[];
+  submitted: { exam: string; student: string; studentName: string }[];
+  teachers: { _id: string; name: string }[];
+}
+export interface ReminderOverview {
+  provider: { whatsappConfigured: boolean; smsConfigured: boolean; activeChannel: 'whatsapp' | 'sms'; leadMinutes: number; voiceCalls: boolean };
+  automated: boolean;
+  counts: Record<'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'EXPIRED', number>;
+  attention: { _id: string; student: string; status: string; channel: string; startAt: string; dueAt: string; attempts: number; lastError: string | null }[];
+}
+
 export const interviewErrorMessage = (err: any, fallback = 'Something went wrong. Please try again.'): string => {
   const m = err?.response?.data?.message;
   if (m) return m;
@@ -156,5 +179,13 @@ export const interviewApi = {
   adminCorrect: async (id: string, body: EvaluationPayload & { reason: string }): Promise<EvaluationView> => (await api.put(`${base}/admin/${id}/evaluation`, body)).data.evaluation,
   adminRecoverStale: async (): Promise<{ recovered: number }> => (await api.post(`${base}/admin/recover-stale`, {})).data,
   adminSetRequestsEnabled: async (requestsEnabled: boolean) => (await api.put(`${base}/admin/settings`, { requestsEnabled })).data.settings as { requestsEnabled: boolean },
+  // admin: schedule + reminders
+  adminSchedule: async (): Promise<AdminScheduleData> => (await api.get(`${base}/admin/schedule`)).data,
+  adminSetSchedule: async (body: { examIds: string[] | 'all'; interviewDate: string; startTime?: string; endTime?: string; note?: string }): Promise<{ updated: number }> => (await api.put(`${base}/admin/schedule`, body)).data,
+  adminClearSchedule: async (examId: string): Promise<void> => { await api.delete(`${base}/admin/schedule/${examId}`); },
+  adminSetSlot: async (body: { studentId: string; examId: string; startAt: string; durationMinutes?: number; teacherId?: string }): Promise<{ reminderQueued: boolean; reminderNote: string | null }> => (await api.put(`${base}/admin/slot`, body)).data,
+  adminCancelSlot: async (slotId: string): Promise<void> => { await api.delete(`${base}/admin/slot/${slotId}`); },
+  adminReminders: async (): Promise<ReminderOverview> => (await api.get(`${base}/admin/reminders`)).data,
+  adminRunReminders: async (): Promise<{ sent: number; failed: number; retrying: number; expired: number; providerConfigured: boolean }> => (await api.post(`${base}/admin/reminders/run`, {})).data.result,
   adminExport: async (params: Record<string, string | undefined>): Promise<Blob> => (await api.get(`${base}/admin/export`, { params, responseType: 'blob' })).data,
 };

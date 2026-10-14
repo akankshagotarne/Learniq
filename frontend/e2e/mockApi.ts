@@ -286,7 +286,7 @@ const EMPTY = { success: true, courses: [], sessions: [], exams: [], users: [], 
 export interface MockLog { method: string; path: string }
 
 /** Installs the mock on a page. Sets the session token for signed-in roles. Returns a log of every API call. */
-export type Override = (method: string, path: string) => { status?: number; body: unknown } | undefined;
+export type Override = (method: string, path: string, body?: any) => { status?: number; body: unknown } | undefined;
 
 export async function mockApi(page: Page, role: Role, override?: Override): Promise<MockLog[]> {
   const log: MockLog[] = [];
@@ -301,7 +301,7 @@ export async function mockApi(page: Page, role: Role, override?: Override): Prom
     const url = new URL(req.url());
     const path = url.pathname.replace(/^.*?\/api/, '');
     log.push({ method: req.method(), path });
-    const custom = override?.(req.method(), path);
+    const custom = override?.(req.method(), path, (() => { try { return req.postDataJSON(); } catch { return undefined; } })());
     if (custom) return route.fulfill({ status: custom.status ?? 200, contentType: 'application/json', body: JSON.stringify(custom.body) });
     const body = respond(req.method(), path, role);
     if (path === '/auth/me' && !body) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ success: false, message: 'Not authorized.' }) });

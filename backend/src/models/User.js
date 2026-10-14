@@ -5,7 +5,9 @@ const { STUDENT_STANDARDS } = require('../constants/standards');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  // Optional for students (phone is their required contact). When present it is canonical (trim + lower-case) and globally unique -
+  // see the PARTIAL unique index `uniq_email` below. Never stored as '' (accounts without an email simply have no email field).
+  email: { type: String, lowercase: true, trim: true, default: undefined },
   password: { type: String, required: true, minlength: 6 },
   role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
   phone: { type: String, trim: true },
@@ -14,7 +16,15 @@ const userSchema = new mongoose.Schema({
   phoneNormalized: { type: String, default: undefined },
   avatar: { type: String, default: null },
   isActive: { type: Boolean, default: true },
-  isApproved: { type: Boolean, default: true }, // teachers need approval
+  isApproved: { type: Boolean, default: true }, // teachers need approval (the flag every guard checks)
+  // Teacher approval workflow. `isApproved` stays the single source of truth for access; these fields add the audit trail.
+  // Legacy teachers (no approvalStatus) are read through approvalStatusOf(): isApproved ? APPROVED : PENDING.
+  approvalStatus: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: undefined },
+  approvedAt: { type: Date, default: undefined },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+  reviewedAt: { type: Date, default: undefined },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+  reviewNote: { type: String, trim: true, maxlength: 500, default: undefined },
   resetPasswordToken: { type: String },
   resetPasswordExpire: { type: Date },
   lastLogin: { type: Date },
@@ -37,8 +47,14 @@ const userSchema = new mongoose.Schema({
   lastActiveDate: { type: Date },
 }, { timestamps: true });
 
-// Global uniqueness (students + teachers + admins share this collection). `email` is unique via the field definition above
-// (lower-cased + trimmed by the schema). The phone index is PARTIAL: only real string values are indexed.
+// Global uniqueness (students + teachers + admins share this collection). Both indexes are PARTIAL: only real string values are
+// indexed, so accounts without an email (phone-only students) or without a phone never collide with each other.
+// `uniq_email` replaces the old non-partial `email_1`, which would have allowed only ONE account without an email; server.js
+// drops `email_1` once `uniq_email` exists (see migrateEmailIndex) - existing accounts all have emails, so nothing can conflict.
+userSchema.index(
+  { email: 1 },
+  { unique: true, name: 'uniq_email', partialFilterExpression: { email: { $type: 'string' } } },
+);
 userSchema.index(
   { phoneNormalized: 1 },
   { unique: true, name: 'uniq_phoneNormalized', partialFilterExpression: { phoneNormalized: { $type: 'string' } } },

@@ -50,7 +50,8 @@ const getStudents = async (req, res) => {
       const term = search.toLowerCase();
       students = students.filter(s =>
         s.student.name.toLowerCase().includes(term) ||
-        s.student.email.toLowerCase().includes(term)
+        (s.student.email || '').toLowerCase().includes(term) ||
+        (s.student.phone || '').includes(term)
       );
     }
 
@@ -194,10 +195,14 @@ const getAllUsers = async (req, res) => {
         filter.currentStandard = std;
       }
     }
-    if (search) filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-    ];
+    if (search) {
+      const rx = String(search).slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // literal text, never a user-supplied pattern
+      filter.$or = [
+        { name: { $regex: rx, $options: 'i' } },
+        { email: { $regex: rx, $options: 'i' } },
+        { phone: { $regex: rx, $options: 'i' } },
+      ];
+    }
 
     const users = await User.find(filter)
       .select('-password')
@@ -214,15 +219,35 @@ const getAllUsers = async (req, res) => {
 };
 
 // PUT /api/admin/users/:id
+// Admin-only. Approving / rejecting a teacher is recorded (who, when) and a rejection or deactivation signs the account out
+// everywhere, so the restriction takes effect immediately. The Admin role can never be granted through this endpoint.
 const updateUserAdmin = async (req, res) => {
   try {
-    const { isActive, isApproved, role } = req.body;
+    const { isActive, isApproved, role, note } = req.body || {};
+    if (role !== undefined && !['student', 'teacher'].includes(role)) {
+      return res.status(400).json({ success: false, code: 'ROLE_NOT_ALLOWED', message: 'The Admin role cannot be assigned here.' });
+    }
+    const target = await User.findById(req.params.id).select('role isApproved isActive approvalStatus');
+    if (!target) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (target.role === 'admin') return res.status(403).json({ success: false, code: 'ADMIN_PROTECTED', message: 'Administrator accounts cannot be changed here.' });
+
     const update = {};
-    if (isActive !== undefined) update.isActive = isActive;
-    if (isApproved !== undefined) update.isApproved = isApproved;
+    if (isActive !== undefined) update.isActive = !!isActive;
     if (role) update.role = role;
+    let revoke = update.isActive === false;
+    if (isApproved !== undefined) {
+      update.isApproved = !!isApproved;
+      const now = new Date();
+      if (target.role === 'teacher' || role === 'teacher') {
+        update.reviewedAt = now; update.reviewedBy = req.user._id;
+        if (typeof note === 'string' && note.trim()) update.reviewNote = note.trim().slice(0, 500);
+        if (isApproved) { update.approvalStatus = 'APPROVED'; update.approvedAt = now; update.approvedBy = req.user._id; }
+        else { update.approvalStatus = 'REJECTED'; revoke = true; }
+      }
+    }
 
     const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
+    if (revoke) await require('../services/authSessions').endAllSessions(req.params.id, 'access_revoked').catch(() => {});
     res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });

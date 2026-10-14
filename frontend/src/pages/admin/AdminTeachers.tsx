@@ -7,7 +7,9 @@ import { User } from '../../types';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '../../components/admin/ProfileParts';
 
-type FilterMode = 'all' | 'pending' | 'approved';
+type FilterMode = 'all' | 'pending' | 'approved' | 'rejected';
+/** PENDING / APPROVED / REJECTED, read the same way the backend does (legacy teachers only have the isApproved flag) */
+const statusOf = (t: User): 'PENDING' | 'APPROVED' | 'REJECTED' => t.approvalStatus || (t.isApproved ? 'APPROVED' : 'PENDING');
 
 const AdminTeachers: React.FC = () => {
   const navigate = useNavigate();
@@ -39,9 +41,10 @@ const AdminTeachers: React.FC = () => {
 
   const setApproval = async (teacher: User, approve: boolean) => {
     try {
-      await api.put(`/admin/users/${teacher._id}`, { isApproved: approve });
-      setTeachers(prev => prev.map(t => t._id === teacher._id ? { ...t, isApproved: approve } : t));
-      toast.success(approve ? 'Teacher approved!' : 'Teacher rejected.');
+      const res = await api.put(`/admin/users/${teacher._id}`, { isApproved: approve });
+      const saved = res.data?.user || {};
+      setTeachers(prev => prev.map(t => t._id === teacher._id ? { ...t, isApproved: approve, approvalStatus: saved.approvalStatus || (approve ? 'APPROVED' : 'REJECTED'), approvedAt: saved.approvedAt || t.approvedAt } : t));
+      toast.success(approve ? 'Teacher approved! They can log in now.' : 'Teacher request rejected.');
     } catch {
       toast.error('Failed to update teacher.');
     }
@@ -57,8 +60,9 @@ const AdminTeachers: React.FC = () => {
     }
   };
 
-  const filtered = teachers.filter(t => filter === 'all' ? true : filter === 'pending' ? !t.isApproved : t.isApproved);
-  const pendingCount = teachers.filter(t => !t.isApproved).length;
+  const filtered = teachers.filter(t => filter === 'all' ? true : statusOf(t) === filter.toUpperCase());
+  const pendingCount = teachers.filter(t => statusOf(t) === 'PENDING').length;
+  const approvedCount = teachers.filter(t => statusOf(t) === 'APPROVED').length;
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -76,7 +80,7 @@ const AdminTeachers: React.FC = () => {
             {[
               { label: 'Total Teachers', value: teachers.length, icon: Award, iconBg: 'bg-[#EDE9FE] text-[#6C63F2]' },
               { label: 'Pending Approval', value: pendingCount, icon: Clock, iconBg: 'bg-[#FEF3C7] text-[#D97706]' },
-              { label: 'Approved', value: teachers.length - pendingCount, icon: UserCheck, iconBg: 'bg-[#DCFCE7] text-[#16A34A]' },
+              { label: 'Approved', value: approvedCount, icon: UserCheck, iconBg: 'bg-[#DCFCE7] text-[#16A34A]' },
             ].map(({ label, value, icon: Icon, iconBg }) => (
               <div key={label} className="card-soft p-4 flex flex-col justify-between">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconBg}`}>
@@ -98,12 +102,12 @@ const AdminTeachers: React.FC = () => {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name or email..."
+                placeholder="Search by name, email or phone..."
                 className="input-field pl-9"
               />
             </div>
             <div className="flex gap-2">
-              {(['all', 'pending', 'approved'] as FilterMode[]).map(m => (
+              {(['all', 'pending', 'approved', 'rejected'] as FilterMode[]).map(m => (
                 <button
                   key={m}
                   onClick={() => setFilter(m)}
@@ -145,16 +149,19 @@ const AdminTeachers: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-text-primary font-semibold text-sm font-heading">{teacher.name}</p>
-                        {teacher.isApproved ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#DCFCE7] text-[#16A34A]">Approved</span>
+                        {statusOf(teacher) === 'APPROVED' ? (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#DCFCE7] text-[#15803D]" data-testid="teacher-status">Approved</span>
+                        ) : statusOf(teacher) === 'REJECTED' ? (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FFE4EC] text-[#BE185D]" data-testid="teacher-status">Rejected</span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FEF3C7] text-[#D97706]">Pending</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FEF3C7] text-[#92400E]" data-testid="teacher-status">Pending approval</span>
                         )}
                         {!teacher.isActive && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#FFE4EC] text-[#E1447A]">Inactive</span>
                         )}
                       </div>
-                      <p className="text-text-secondary text-xs truncate">{teacher.email}{teacher.phone ? ` • ${teacher.phone}` : ''}</p>
+                      <p className="text-text-secondary text-xs truncate">{[teacher.email, teacher.phone].filter(Boolean).join(' • ') || 'No contact details'}</p>
+                      <p className="text-text-muted text-xs">Registered {new Date(teacher.createdAt).toLocaleDateString('en-IN')}{teacher.approvedAt ? ` • Approved ${new Date(teacher.approvedAt).toLocaleDateString('en-IN')}` : ''}</p>
                       {(teacher.subjects?.length || teacher.standards?.length) && (
                         <p className="text-text-muted text-xs mt-1 flex items-center gap-1">
                           <BookOpen className="w-3.5 h-3.5" />
@@ -173,10 +180,12 @@ const AdminTeachers: React.FC = () => {
                             className="flex items-center gap-1 px-3 py-1.5 bg-[#DCFCE7] text-[#16A34A] border border-[#DCFCE7] rounded-lg text-xs font-medium hover:bg-[#DCFCE7]/80 transition-all">
                             <UserCheck className="w-3.5 h-3.5" /> Approve
                           </button>
-                          <button onClick={() => setApproval(teacher, false)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-[#FFE4EC] text-[#E1447A] border border-[#FFE4EC] rounded-lg text-xs font-medium hover:bg-[#FFE4EC]/80 transition-all">
-                            <UserX className="w-3.5 h-3.5" /> Reject
-                          </button>
+                          {statusOf(teacher) !== 'REJECTED' && (
+                            <button onClick={() => setApproval(teacher, false)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-[#FFE4EC] text-[#E1447A] border border-[#FFE4EC] rounded-lg text-xs font-medium hover:bg-[#FFE4EC]/80 transition-all">
+                              <UserX className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <button

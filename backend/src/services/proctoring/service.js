@@ -135,9 +135,8 @@ const startSession = async ({ kind, user, examId, attemptId, consent, precheck =
   if (policy.desktopRequired && mobile) {
     throw new ProctoringError(403, 'This exam must be taken on a desktop or laptop computer with a webcam.', 'DESKTOP_REQUIRED');
   }
-  if (policy.cameraRequired && !(Number(precheck.faceCount) === 1)) {
-    throw new ProctoringError(400, 'The camera check must show exactly one face before the exam can start.', 'PRECHECK_REQUIRED');
-  }
+  // No separate pre-exam face check any more: the camera is switched on by the student and the exam starts. Face-absence and
+  // multiple-face monitoring continue DURING the exam (see the event rules below); `precheck.faceCount` is only recorded if sent.
   if (policy.fullscreenRequired && precheck.fullscreen !== true) {
     throw new ProctoringError(400, 'The exam must be started in fullscreen mode.', 'FULLSCREEN_REQUIRED');
   }

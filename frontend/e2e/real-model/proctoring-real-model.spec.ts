@@ -35,12 +35,12 @@ const openGate = async (page: import('@playwright/test').Page) => {
 
 test.describe('real model: one face', () => {
   test.skip(!existsSync(scene('one-face')), 'run node e2e/real-model/prepare-fixtures.mjs first');
-  test('passes the face check, starts, monitors (and reports inference time)', async ({ playwright, baseURL }) => {
+  test('camera ready (no separate face check), starts, monitors (and reports inference time)', async ({ playwright, baseURL }) => {
     const { page, close } = await pageWithCamera(playwright, 'one-face', baseURL!);
     try {
     test.setTimeout(180_000);
     const server = await openGate(page);
-    await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
     await page.getByTestId('start-secure-exam').click();
     const panel = page.getByTestId('proctoring-panel');
     await expect(panel).toHaveAttribute('data-face-count', '1', { timeout: 20_000 });
@@ -57,38 +57,40 @@ test.describe('real model: one face', () => {
 
 test.describe('real model: two faces', () => {
   test.skip(!existsSync(scene('two-faces')), 'run node e2e/real-model/prepare-fixtures.mjs first');
-  test('blocks the start with the multiple-faces message', async ({ playwright, baseURL }) => {
+  test('the gate has no face check: the start is allowed, the in-exam monitoring handles the second person', async ({ playwright, baseURL }) => {
     const { page, close } = await pageWithCamera(playwright, 'two-faces', baseURL!);
     try {
     test.setTimeout(180_000);
     await openGate(page);
-    await expect(page.getByTestId('face-message')).toHaveText('Multiple faces detected. Only the examinee should be visible.', { timeout: MODEL_TIMEOUT });
-    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('check-face')).toHaveCount(0);
+    await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
     } finally { await close(); }
   });
 });
 
 test.describe('real model: nobody in front of the camera', () => {
   test.skip(!existsSync(scene('no-face')), 'run node e2e/real-model/prepare-fixtures.mjs first');
-  test('blocks the start with the no-face message', async ({ playwright, baseURL }) => {
+  test('the gate has no face check: the start is allowed, absence is handled during the exam', async ({ playwright, baseURL }) => {
     const { page, close } = await pageWithCamera(playwright, 'no-face', baseURL!);
     try {
     test.setTimeout(180_000);
     await openGate(page);
-    await expect(page.getByTestId('face-message')).toHaveText('No face detected. Please adjust your position or lighting.', { timeout: MODEL_TIMEOUT });
-    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('check-face')).toHaveCount(0);
+    await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
     } finally { await close(); }
   });
 });
 
 test.describe('real model: student with a phone', () => {
   test.skip(!existsSync(scene('face-and-phone')), 'run node e2e/real-model/prepare-fixtures.mjs first');
-  test('passes the face check, then the phone is detected and warned about', async ({ playwright, baseURL }) => {
+  test('camera ready (no separate face check), then the phone is detected and warned about', async ({ playwright, baseURL }) => {
     const { page, close } = await pageWithCamera(playwright, 'face-and-phone', baseURL!);
     try {
     test.setTimeout(180_000);
     const server = await openGate(page);
-    await expect(page.getByTestId('face-message')).toHaveText('Camera verification successful.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
     await page.getByTestId('start-secure-exam').click();
     await expect(page.getByTestId('proctoring-warning-text')).toHaveText('Warning 1/2: A possible mobile phone has been detected. Please remove it from your examination area.', { timeout: 30_000 });
     const ev = server.events.find((e) => e.type === 'MOBILE_PHONE_DETECTED');

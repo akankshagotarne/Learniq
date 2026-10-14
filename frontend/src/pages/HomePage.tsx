@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
-import OlympiadShowcase from '../components/olympiad/promo/OlympiadShowcase';
 import api from '../services/api';
 import { Course, LiveSession } from '../types';
 import { getCourseThumbnail } from '../utils/courseImage';
@@ -68,11 +67,8 @@ const HomePage: React.FC = () => {
     <div className="min-h-screen bg-[#F8F8FC] dark:bg-[#12121F] text-[#22243A] dark:text-[#F4F4FA]">
       <Navbar />
 
-      {/* All India Olympiad Test 2026 — top promotional banner (directly under the navbar) */}
-      <OlympiadShowcase />
-
-      {/* Section 6.6 Hero Section (the banner above already clears the fixed navbar) */}
-      <section className="relative flex items-center pt-2 pb-16 overflow-hidden bg-[#F8F8FC] dark:bg-[#12121F]">
+      {/* Section 6.6 Hero Section (top padding clears the fixed navbar) */}
+      <section className="relative flex items-center pt-20 sm:pt-24 pb-16 overflow-hidden bg-[#F8F8FC] dark:bg-[#12121F]">
         {/* Soft pastel blur blobs */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-12 left-10 w-96 h-96 bg-[#6C63F2]/10 dark:bg-[#8B82FF]/15 rounded-full blur-3xl animate-pulse-slow" />
@@ -101,22 +97,29 @@ const HomePage: React.FC = () => {
                 Connect with expert teachers for interactive live classes, crystal-clear recorded lectures, active recall flashcards, and gamified quizzes designed for school champions.
               </p>
 
-              {/* CTAs */}
-              <div className="flex flex-wrap items-center gap-4 pt-2">
+              {/* CTAs: existing routes only */}
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2" data-testid="hero-ctas">
                 <Link
                   to="/register"
-                  className="btn-primary rounded-full px-8 py-4 text-base font-bold shadow-[0_6px_20px_rgba(108,99,242,0.3)] hover:shadow-[0_8px_25px_rgba(108,99,242,0.45)]"
+                  data-testid="cta-get-started"
+                  className="btn-primary rounded-full px-8 py-4 min-h-[48px] text-base font-bold shadow-[0_6px_20px_rgba(108,99,242,0.3)] hover:shadow-[0_8px_25px_rgba(108,99,242,0.45)] w-full sm:w-auto justify-center"
                 >
-                  <span>Start Learning Free</span>
+                  <span>Get Started</span>
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
-
                 <Link
-                  to="/live-sessions"
-                  className="btn-secondary rounded-full px-8 py-4 text-base font-semibold border-[#E7E7F2] dark:border-[#2E2F4A] hover:border-[#6C63F2]/40 text-[#6C63F2] dark:text-[#8B82FF] flex items-center gap-2"
+                  to="/login"
+                  data-testid="cta-log-in"
+                  className="btn-secondary rounded-full px-8 py-4 min-h-[48px] text-base font-semibold border-[#6C63F2]/40 text-[#6C63F2] dark:text-[#8B82FF] flex items-center justify-center flex-1 sm:flex-none"
                 >
-                  <Radio className="w-4 h-4 text-[#E1447A] animate-pulse" />
-                  <span>Join Live Class</span>
+                  Log In
+                </Link>
+                <Link
+                  to="/register"
+                  data-testid="cta-sign-up"
+                  className="btn-secondary rounded-full px-8 py-4 min-h-[48px] text-base font-semibold border-[#6C63F2]/40 text-[#6C63F2] dark:text-[#8B82FF] flex items-center justify-center flex-1 sm:flex-none"
+                >
+                  Sign Up
                 </Link>
               </div>
 

@@ -863,7 +863,8 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     assert.equal(r.body.exams.length, 1, `std ${std} sees exactly one exam`);
     const e = r.body.exams[0];
     assert.equal(e.standard, std);
-    assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026');
+    assert.equal(e.title, require('../seed/olympiadTitles').examTitleFor(std));
+    assert.match(e.title, /^LearnIQ Practice Test – \d+(st|nd|rd|th) Standard$/);
     assert.equal(e.fee, 20);
     assert.equal(e.totalQuestions, QUESTIONS_IN(std));
     assert.equal(e.totalMarks, QUESTIONS_IN(std));

@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/interviewController');
+const sched = require('../controllers/interviewScheduleController');
 
 const perUser = (max, windowMs = 60 * 1000) =>
   rateLimit({
@@ -47,6 +48,13 @@ router.get('/admin/export', ...admin, perUser(10), ctrl.adminExport);
 router.get('/admin/settings', ...admin, ctrl.adminSettings);
 router.put('/admin/settings', ...admin, perUser(20), ctrl.adminUpdateSettings);
 router.post('/admin/recover-stale', ...admin, perUser(10), ctrl.adminRecover);
+router.get('/admin/schedule', ...admin, sched.overview);
+router.put('/admin/schedule', ...admin, perUser(20), sched.setSchedule);
+router.delete('/admin/schedule/:examId', ...admin, perUser(20), sched.clearSchedule);
+router.put('/admin/slot', ...admin, perUser(30), sched.setSlot);
+router.delete('/admin/slot/:slotId', ...admin, perUser(30), sched.cancelSlot);
+router.get('/admin/reminders', ...admin, sched.reminders);
+router.post('/admin/reminders/run', ...admin, perUser(5), sched.runReminders);
 router.get('/admin/:id', ...admin, ctrl.adminDetail);
 router.post('/admin/:id/assign', ...admin, perUser(30), ctrl.adminAssign);
 router.put('/admin/:id/evaluation', ...admin, perUser(20), ctrl.adminCorrect); // audited correction of a final evaluation

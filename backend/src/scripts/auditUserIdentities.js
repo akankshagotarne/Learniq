@@ -33,6 +33,7 @@ const analyzeUsers = (users) => {
 
   const byEmail = new Map();
   for (const u of users) {
+    if (u.email === undefined || u.email === null || u.email === '') continue; // phone-only accounts have no email: that is allowed
     const canon = normalizeEmail(u.email);
     if (!canon) { report.invalidEmail.push({ id: String(u._id), role: u.role }); continue; }
     if (!byEmail.has(canon)) byEmail.set(canon, []);
@@ -73,7 +74,7 @@ const analyzeUsers = (users) => {
 const printReport = (r) => {
   const line = (label, list) => console.log(`  ${list.length === 0 ? 'OK ' : '!! '} ${label}: ${list.length}`);
   console.log(`\nAccounts scanned: ${r.total}`);
-  line('invalid / missing email', r.invalidEmail);
+  line('invalid email (accounts with no email are fine)', r.invalidEmail);
   line('email not in canonical form (would be fixed)', r.emailNeedsNormalising);
   line('EMAIL CONFLICTS after normalising (need your decision)', r.emailConflicts);
   line('invalid phone numbers (left untouched)', r.invalidPhone);
@@ -107,11 +108,10 @@ const main = async () => {
     for (const f of report.safePhoneFixes) { await User.collection.updateOne({ _id: users.find((u) => String(u._id) === f.id)._id }, { $set: { phoneNormalized: f.phoneNormalized } }); done += 1; }
     console.log(`\nUpdated ${done} account field(s). Nothing was deleted or merged.`);
     try {
-      await User.createIndexes();
-      const after = (await User.collection.indexes()).map((i) => i.name);
-      const missing = ['email_1', 'uniq_phoneNormalized'].filter((n) => !after.includes(n));
+      const { present, dropped } = await require('../services/identity').migrateEmailIndex(User);
+      const missing = ['uniq_email', 'uniq_phoneNormalized'].filter((n) => !present.includes(n));
       if (missing.length) throw new Error(`index(es) not present: ${missing.join(', ')}`);
-      console.log('Index check PASSED: email_1 and uniq_phoneNormalized exist.');
+      console.log(`Index check PASSED: uniq_email and uniq_phoneNormalized exist${dropped ? ' (the old email_1 index was replaced)' : ''}.`);
     } catch (err) {
       console.error(`Index build FAILED: ${err.message}\nResolve the conflicts listed above, then run this script again.`);
       process.exitCode = 1;

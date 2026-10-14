@@ -7,15 +7,17 @@
 // (src/scripts/setOlympiadFee.js) — the server always charges the fee stored on the exam record.
 const OLYMPIAD_FEE = 20;
 
+const { examTitleFor, slugFor } = require('./olympiadTitles');
+
 const STANDARDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const configFor = (standard) => {
   const data = require(`../data/olympiad${standard}Questions`);
   const subjects = data.sections.map((s) => s.name).join(', ');
   return {
-    slug: `learniq-all-india-olympiad-2026-std-${standard}`,
+    slug: slugFor(standard),
     standard,
-    title: 'LearnIQ – All India Olympiad Examination 2026',
+    title: examTitleFor(standard), // e.g. "LearnIQ Practice Test – 4th Standard" (seed/olympiadTitles.js)
     description: `Standard ${standard} Olympiad covering ${subjects}. Exam by Nikhil Sir.`,
     durationEnv: `OLYMPIAD_${standard}_DURATION_MINUTES`,
     fee: OLYMPIAD_FEE,

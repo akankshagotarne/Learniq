@@ -336,7 +336,7 @@ test('15. tokens that are not bound to a live session are rejected (legacy token
 });
 
 test('16. every sign-in path goes through the same rule: register creates the single session; password reset ends all sessions', async () => {
-  const reg = await req('POST', '/auth/register', { body: { name: 'New Student', email: 'new.student@example.com', password: PASSWORD, role: 'student' }, ua: WIN_CHROME });
+  const reg = await req('POST', '/auth/register', { body: { name: 'New Student', email: 'new.student@example.com', password: PASSWORD, role: 'student', phone: '+91 98765 43210' }, ua: WIN_CHROME });
   assert.equal(reg.status, 201);
   const user = fake.User.docs.find((d) => d.email === 'new.student@example.com');
   PASSWORDS.set(String(user._id), PASSWORD);

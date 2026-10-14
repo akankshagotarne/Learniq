@@ -23,15 +23,18 @@ interface AuthContextType {
   takeoverSession: (takeoverToken: string) => Promise<User>;
   /** "Cancel": the other device stays signed in; the takeover token is voided on the server */
   cancelTakeover: (takeoverToken: string) => void;
-  register: (data: RegisterData) => Promise<void>;
+  /** Students are signed in at once; a teacher is only a pending request (no session) until an administrator approves it. */
+  register: (data: RegisterData) => Promise<RegisterResult>;
   logout: () => void;
   updateUser: (user: User) => void;
   updateStandard: (standard: number) => Promise<void>;
 }
 
+export type RegisterResult = { pendingApproval: false; user: User } | { pendingApproval: true; message: string };
+
 interface RegisterData {
   name: string;
-  email: string;
+  email?: string;
   password: string;
   role: string;
   phone?: string;
@@ -97,12 +100,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void api.post('/auth/session/takeover/cancel', { takeoverToken }).catch(() => { /* it expires on its own in ~2 minutes */ });
   };
 
-  const register = async (data: RegisterData) => {
+  const register = async (data: RegisterData): Promise<RegisterResult> => {
+    // never leave a previous account's token / user behind
+    localStorage.removeItem('learniq_token');
     const res = await api.post('/auth/register', data);
-    const { token: newToken, user: newUser } = res.data;
-    localStorage.setItem('learniq_token', newToken);
-    setToken(newToken);
-    setUser(newUser);
+    if (res.data.pendingApproval || !res.data.token) return { pendingApproval: true, message: res.data.message };
+    completeSignIn(res.data.token, res.data.user);
+    return { pendingApproval: false, user: res.data.user };
   };
 
   const logout = async () => {

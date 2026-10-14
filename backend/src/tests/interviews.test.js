@@ -33,6 +33,7 @@ const overrides = {
   },
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'TeacherInterview.js')]: fake.interviewModels,
+  [path.join(SRC, 'models', 'InterviewSchedule.js')]: fake.scheduleModels,
 };
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {

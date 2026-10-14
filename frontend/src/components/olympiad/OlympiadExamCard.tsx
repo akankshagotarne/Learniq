@@ -221,6 +221,11 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
         )}
         {interview && !approval && (
           <div className="mt-2" data-testid="interview-action" data-stage={interview.stage}>
+            {interview.schedule?.configured && interview.schedule.when && !interview.locked && !interview.workflowComplete && (
+              <p className="mb-2 text-[11px] text-text-secondary text-center" data-testid="interview-when">
+                Interview: <span className="font-semibold text-text-primary">{interview.schedule.when}</span>
+              </p>
+            )}
             {interview.stage === 'COMPLETED' ? (
               <Link
                 to="/student/interview-results"
