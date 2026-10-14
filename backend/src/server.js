@@ -176,6 +176,25 @@ const backfillLegacyPhones = async () => {
   }
 };
 
+// TEMPORARY one-shot (env-gated): provisions ONE administrator when BOOTSTRAP_ADMIN_* variables are present, then does nothing.
+// Idempotent (scripts/createAdmin.js): never duplicates, never touches other accounts. Remove the variables and this block afterwards.
+const bootstrapAdminOnce = async () => {
+  const { BOOTSTRAP_ADMIN_EMAIL: email, BOOTSTRAP_ADMIN_PHONE: phone, BOOTSTRAP_ADMIN_PASSWORD: password, BOOTSTRAP_ADMIN_NAME: name } = process.env;
+  if (!email || !phone || !password) return;
+  try {
+    const User = require('./models/User'); const identity = require('./services/identity'); const { run } = require('./scripts/createAdmin');
+    const input = { email, phone, password, name };
+    const log = (m) => console.log(`🔐 Admin bootstrap: ${m}`);
+    const c = await run({ User, identity, input, check: true, log });
+    const r = c.report && c.report.exists && process.env.BOOTSTRAP_ADMIN_SET_PASSWORD === 'true'
+      ? await run({ User, identity, input, setPassword: true, log })
+      : await run({ User, identity, input, apply: true, log });
+    console.log(`🔐 Admin bootstrap result: ${r.status}${r.reason ? ` (${r.reason})` : ''}`);
+  } catch (err) {
+    console.error(`⚠️  Admin bootstrap failed (${err.message})`);
+  }
+};
+
 // "One active login per account" is enforced by a partial unique index on AuthSession (models/AuthSession.js).
 const verifySessionIndexes = async () => {
   const { AuthSession, SessionTakeover } = require('./models/AuthSession');
@@ -196,6 +215,7 @@ const startServer = async () => {
     await connectDB();
     await verifyUserIndexes();
     await backfillLegacyPhones();
+    await bootstrapAdminOnce();
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
