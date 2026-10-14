@@ -31,6 +31,7 @@ const adminRoutes = require('./routes/admin');
 const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
+const interviewRoutes = require('./routes/interviews');
 const engineeringRoutes = require('./routes/engineering');
 const certificateRoutes = require('./routes/certificates');
 const aiInterviewRoutes = require('./routes/aiInterviews');
@@ -106,6 +107,7 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
+app.use('/api/interviews', interviewRoutes); // teacher-led interviews (separate from the AI interview)
 app.use('/api/engineering', engineeringRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/ai-interviews', aiInterviewRoutes);
@@ -128,6 +130,7 @@ app.use((err, req, res, next) => {
 
 // Setup Socket.IO
 setupSocket(io);
+require('./services/interviewSocket')(io); // private 1:1 interview rooms (signalling only)
 
 const PORT = process.env.PORT || 5000;
 
@@ -198,6 +201,7 @@ const startServer = async () => {
     await backfillLegacyPhones();
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
+    require('./services/interviews').startInterviewSweeper(); // frees stale interview sessions (nobody present for INTERVIEW_STALE_MINUTES)
     startExamSweeper(); // same for teacher exams (server-owned deadline)
     // Payments never stay PENDING: ~5 minutes after checkout the server asks Razorpay and finalises the record
     const reconciler = startPaymentReconciler();

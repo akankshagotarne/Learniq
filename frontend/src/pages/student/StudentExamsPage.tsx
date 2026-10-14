@@ -10,6 +10,9 @@ import api from '../../services/api';
 import { Exam } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { olympiadApi } from '../../services/olympiad';
+import { interviewApi, interviewErrorMessage, StudentExamInterview } from '../../services/interview';
+import { useInterviewLive } from '../../hooks/useInterviewLive';
+import toast from 'react-hot-toast';
 import { OlympiadExam } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
 import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
@@ -32,6 +35,25 @@ const StudentExamsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'available' | 'upcoming' | 'completed'>('available');
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [interviews, setInterviews] = useState<Record<string, StudentExamInterview>>({});
+  const [interviewBusyId, setInterviewBusyId] = useState<string | null>(null);
+
+  const loadInterviews = async () => {
+    try { setInterviews((await interviewApi.mine()).byExam || {}); } catch { /* the card simply shows no interview offer */ }
+  };
+  useEffect(() => { loadInterviews(); }, [user]);
+  useInterviewLive(loadInterviews, { pollMs: 20000 });
+
+  const startInterview = async (exam: OlympiadExam) => {
+    setInterviewBusyId(exam._id);
+    try {
+      const iv = await interviewApi.request(exam._id);
+      navigate(`/student/interview/${iv._id}`);
+    } catch (err) {
+      toast.error(interviewErrorMessage(err));
+      loadInterviews();
+    } finally { setInterviewBusyId(null); }
+  };
 
   useEffect(() => {
     fetchExams();
@@ -319,6 +341,9 @@ const StudentExamsPage: React.FC = () => {
                   exam={o}
                   paying={payingId === o._id}
                   onPay={pay}
+                  interview={interviews[o._id]}
+                  interviewBusy={interviewBusyId === o._id}
+                  onStartInterview={startInterview}
                 />
               ))}
               {visibleRegular.map(exam => {

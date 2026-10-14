@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:media": "playwright test -c playwright.media.config.ts",
     "test:unit": "node --experimental-strip-types --test tests-unit/*.test.ts"
   },
   "devDependencies": {

@@ -37,3 +37,4 @@ dist-ssr
 
 # real-model proctoring test frames (generated locally by e2e/real-model/prepare-fixtures.mjs - never committed)
 /e2e/.fixtures/
+dist-media
