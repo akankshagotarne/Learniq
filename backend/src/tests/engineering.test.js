@@ -607,7 +607,7 @@ test('26. the admin changes the deadline: validated, audited, effective at once 
   assert.ok(natural && natural.getTime() === fake.OlympiadAttempt.docs[0].deadline.getTime());
   // invalid values
   const bad = [{ endDate: 'tomorrow' }, { endDate: '2026-10-15T18:00' }, { endDate: 12345 }, { endDate: '2026-09-01T00:00:00+05:30' }, { endDate: '2031-10-15T18:00:00+05:30' },
-    { durationMinutes: 0 }, { durationMinutes: 200 }, { durationMinutes: 45.5 }, { durationMinutes: '45' }, { isPublished: 'yes' }, { instructions: [] }, { title: 'hack' }, { fee: 500 }, { totalMarks: 99 }];
+    { durationMinutes: 0 }, { durationMinutes: 200 }, { durationMinutes: 45.5 }, { durationMinutes: '45' }, { isPublished: 'yes' }, { instructions: [] }, { title: 'x' }, { fee: 500 }, { slug: 'hack' }, { totalMarks: 99 }];
   for (const body of bad) { const r = await call('PUT', '/engineering/admin/exam', a, body); assert.equal(r.status, 400, JSON.stringify(body)); }
   assert.equal(examDoc().endDate.toISOString(), '2026-10-14T12:30:00.000Z', 'nothing changed');
   // shorten to 5 minutes from now: the running attempt is cut to it

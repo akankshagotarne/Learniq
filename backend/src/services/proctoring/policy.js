@@ -14,14 +14,17 @@ const SWITCH_ACTIONS = ['WARN', 'WARN_AND_REQUIRE_FULLSCREEN', 'AUTO_SUBMIT_ON_C
 const CAMERA_FAILURE_ACTIONS = ['BLOCK_UNTIL_RESTORED', 'AUTO_SUBMIT_AFTER_GRACE'];
 
 /** [min, max, default] for every numeric setting - the single source of truth for validation and the UI. */
+const confidenceToPercent = (c) => Math.round(c * 100);
+const percentToConfidence = (pct) => Math.round(pct) / 100;
+
 const NUMERIC = {
   maxFaceAbsenceWarnings: [1, 20, 5],
   maxMultiFaceWarnings: [1, 10, 3],
   maxPhoneWarnings: [0, 10, 2],
-  faceAbsenceThresholdMs: [2000, 30000, 4000],   // no face for this long = one confirmed absence episode
+  faceAbsenceThresholdMs: [1000, 20000, 4000],   // no face for this long = one confirmed absence episode (admin UI: 1-20 seconds)
   multiFacePersistenceMs: [1000, 15000, 2500],    // 2+ faces for this long = one confirmed episode
   phonePersistenceMs: [500, 10000, 1500],         // phone seen (above confidence) for this long = one confirmed episode
-  phoneConfidence: [0.3, 0.95, 0.35],              // EfficientDet-Lite0 "cell phone" score (lowered from 0.5: partial/angled phones score 0.25–0.45)
+  phoneConfidence: [0.01, 1, 0.35],                // EfficientDet-Lite0 "cell phone" score on the detector's own 0-1 scale (admin UI: 1-100 %, see phoneConfidencePercent)
   recoveryMs: [500, 10000, 1500],                 // condition must be gone this long before a NEW episode can start
   fullscreenGraceMs: [3000, 60000, 10000],        // strict mode: not back in fullscreen within this = confirmed exit
   cameraGraceMs: [10000, 300000, 60000],          // AUTO_SUBMIT_AFTER_GRACE: camera not back within this = submit
@@ -63,6 +66,18 @@ const resolvePolicy = (stored) => {
   const src = stored && typeof stored.toObject === 'function' ? stored.toObject() : (stored || {});
   const out = { ...DEFAULT_POLICY };
   for (const k of Object.keys(DEFAULT_POLICY)) if (src[k] !== undefined && src[k] !== null) out[k] = src[k];
+  // Legacy / hand-edited values (e.g. an old 25 s face-absence setting from when the maximum was 30 s) are made safe here.
+  {
+    const [fMin, fMax, fDef] = NUMERIC.faceAbsenceThresholdMs;
+    out.faceAbsenceThresholdMs = typeof out.faceAbsenceThresholdMs === 'number' && Number.isFinite(out.faceAbsenceThresholdMs)
+      ? Math.min(fMax, Math.max(fMin, out.faceAbsenceThresholdMs)) : fDef;
+    const [pMin, pMax, pDef] = NUMERIC.phoneConfidence;
+    // an unusable phone confidence (NaN, 0, 35 typed as a percentage...) falls back to the default instead of silently
+    // becoming "detect everything" or "detect nothing"
+    out.phoneConfidence = typeof out.phoneConfidence === 'number' && Number.isFinite(out.phoneConfidence) && out.phoneConfidence >= pMin && out.phoneConfidence <= pMax
+      ? out.phoneConfidence : pDef;
+  }
+  out.phoneConfidencePercent = confidenceToPercent(out.phoneConfidence); // display value for the admin UI; never stored
   if (src.enabledAt) out.enabledAt = src.enabledAt;
   // strict mode = the strict response unless the examiner explicitly chose something else
   if (out.strictMode && (src.switchAction === undefined || src.switchAction === null)) out.switchAction = 'AUTO_SUBMIT_ON_CONFIRMED_SWITCH';
@@ -82,8 +97,19 @@ const validatePolicyInput = (input) => {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new PolicyValidationError(['Proctoring settings must be an object.']);
   const errors = [];
   const clean = {};
+  if (input.phoneConfidencePercent !== undefined && input.phoneConfidence !== undefined
+      && !(typeof input.phoneConfidencePercent === 'number' && typeof input.phoneConfidence === 'number'
+        && Math.abs(percentToConfidence(input.phoneConfidencePercent) - input.phoneConfidence) < 0.0051)) {
+    errors.push('Send either phoneConfidencePercent or phoneConfidence, not two different values.');
+  }
   for (const [k, v] of Object.entries(input)) {
     if (k === 'version' || k === 'enabledAt') continue; // server-managed
+    if (k === 'phoneConfidencePercent') {
+      // admin-facing form: a whole percentage 1-100, converted to the detector's 0-1 scale (1 % -> 0.01, 100 % -> 1.00)
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 100) errors.push('phoneConfidencePercent must be a whole number between 1 and 100.');
+      else clean.phoneConfidence = percentToConfidence(v);
+      continue;
+    }
     if (k in BOOLEAN) {
       if (typeof v !== 'boolean') errors.push(`${k} must be true or false.`); else clean[k] = v;
     } else if (k in NUMERIC) {
@@ -108,6 +134,7 @@ const applyPolicyEdit = (stored, edit) => {
   const next = { ...current, ...edit };
   if (edit.strictMode === true && edit.switchAction === undefined) next.switchAction = 'AUTO_SUBMIT_ON_CONFIRMED_SWITCH';
   const changed = Object.keys(edit).some((k) => current[k] !== next[k]) || (edit.strictMode === true && current.switchAction !== next.switchAction);
+  delete next.phoneConfidencePercent; // derived for display only - the stored value is the decimal phoneConfidence
   next.version = (current.version || 1) + (changed ? 1 : 0);
   if (next.enabled && !current.enabled) next.enabledAt = new Date();
   return { policy: next, changed };
@@ -120,6 +147,6 @@ const publicPolicy = (stored) => {
 };
 
 module.exports = {
-  proctoringPolicySchema, DEFAULT_POLICY, NUMERIC, BOOLEAN, SWITCH_ACTIONS, CAMERA_FAILURE_ACTIONS,
+  proctoringPolicySchema, DEFAULT_POLICY, NUMERIC, confidenceToPercent, percentToConfidence, BOOLEAN, SWITCH_ACTIONS, CAMERA_FAILURE_ACTIONS,
   resolvePolicy, validatePolicyInput, applyPolicyEdit, publicPolicy, PolicyValidationError,
 };

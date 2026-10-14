@@ -12,17 +12,29 @@ const Toggle: React.FC<{ label: string; hint?: string; checked: boolean; onChang
   </label>
 );
 
-const NumberField: React.FC<{ label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; disabled?: boolean; suffix?: string }> = ({ label, value, min, max, step = 1, onChange, disabled, suffix }) => (
-  <label className="block min-w-0">
-    <span className="text-xs font-semibold text-text-secondary">{label}</span>
-    <span className="flex items-center gap-1.5 mt-1">
-      <input type="number" min={min} max={max} step={step} value={value} disabled={disabled}
-        onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n))); }}
-        className="w-full min-w-0 bg-surface-alt border border-border-subtle rounded-xl px-3 py-2 text-sm text-text-primary" />
-      {suffix && <span className="text-xs text-text-muted flex-shrink-0">{suffix}</span>}
-    </span>
-  </label>
-);
+/**
+ * Numeric input that keeps what the admin is typing (so "1" -> "15" works) and only reports a value that is a whole number
+ * inside [min, max]; anything else shows an inline message and is never passed up, so it can never be saved.
+ */
+const NumberField: React.FC<{ label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; disabled?: boolean; suffix?: string; testId?: string; hint?: string; integer?: boolean }> = ({ label, value, min, max, step = 1, onChange, disabled, suffix, testId, hint, integer = true }) => {
+  const [draft, setDraft] = React.useState(String(value));
+  React.useEffect(() => { setDraft((d) => (Number(d) === value ? d : String(value))); }, [value]);
+  const n = Number(draft);
+  const invalid = draft.trim() === '' || !Number.isFinite(n) || n < min || n > max || (integer && !Number.isInteger(n));
+  return (
+    <label className="block min-w-0">
+      <span className="text-xs font-semibold text-text-secondary">{label}</span>
+      <span className="flex items-center gap-1.5 mt-1">
+        <input type="number" inputMode="numeric" min={min} max={max} step={step} value={draft} disabled={disabled} data-testid={testId}
+          aria-invalid={invalid} onBlur={() => { if (invalid) setDraft(String(value)); }}
+          onChange={(e) => { setDraft(e.target.value); const x = Number(e.target.value); if (e.target.value.trim() !== '' && Number.isFinite(x) && x >= min && x <= max && (!integer || Number.isInteger(x))) onChange(x); }}
+          className={`w-full min-w-0 bg-surface-alt border rounded-xl px-3 py-2 text-sm text-text-primary ${invalid ? 'border-[#E1447A]' : 'border-border-subtle'}`} />
+        {suffix && <span className="text-xs text-text-muted flex-shrink-0">{suffix}</span>}
+      </span>
+      {invalid ? <span className="block text-[11px] text-[#E1447A] mt-1" role="alert">Enter a whole number from {min} to {max}.</span> : hint && <span className="block text-[11px] text-text-muted mt-1">{hint}</span>}
+    </label>
+  );
+};
 
 const ProctoringSettings: React.FC<Props> = ({ value, onChange, disabled }) => {
   const p: ProctoringPolicy = { ...DEFAULT_PROCTORING_POLICY, ...(value || {}) };
@@ -45,8 +57,8 @@ const ProctoringSettings: React.FC<Props> = ({ value, onChange, disabled }) => {
           <NumberField label="Face-absence warnings" value={p.maxFaceAbsenceWarnings} min={1} max={20} onChange={(v) => set({ maxFaceAbsenceWarnings: v })} disabled={off} />
           <NumberField label="Multiple-face warnings" value={p.maxMultiFaceWarnings} min={1} max={10} onChange={(v) => set({ maxMultiFaceWarnings: v })} disabled={off} />
           <NumberField label="Phone warnings (then submit)" value={p.maxPhoneWarnings} min={0} max={10} onChange={(v) => set({ maxPhoneWarnings: v })} disabled={off} />
-          <NumberField label="No face for" value={p.faceAbsenceThresholdMs / 1000} min={2} max={30} onChange={(v) => set({ faceAbsenceThresholdMs: v * 1000 })} disabled={off} suffix="s" />
-          <NumberField label="Phone confidence" value={p.phoneConfidence} min={0.3} max={0.95} step={0.05} onChange={(v) => set({ phoneConfidence: Math.round(v * 100) / 100 })} disabled={off} />
+          <NumberField label="Face-absence threshold" value={Math.round(p.faceAbsenceThresholdMs / 1000)} min={1} max={20} onChange={(v) => set({ faceAbsenceThresholdMs: v * 1000 })} disabled={off} suffix="s" testId="face-absence-seconds" hint="1-20 seconds without a visible face counts as one warning." />
+          <NumberField label="Phone-detection confidence" value={Math.round(p.phoneConfidence * 100)} min={1} max={100} onChange={(v) => set({ phoneConfidence: v / 100 })} disabled={off} suffix="%" testId="phone-confidence-percent" hint="1-100 %. Lower = more sensitive." />
           <NumberField label="Fullscreen return time" value={p.fullscreenGraceMs / 1000} min={3} max={60} onChange={(v) => set({ fullscreenGraceMs: v * 1000 })} disabled={off} suffix="s" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
@@ -64,6 +76,7 @@ const ProctoringSettings: React.FC<Props> = ({ value, onChange, disabled }) => {
             </select>
           </label>
         </div>
+        <p className="text-xs text-[#B45309] mt-2" data-testid="phone-confidence-note">A lower phone-detection confidence catches more phones but also raises false alarms (a pen, a remote or a shadow may be flagged). Around 30-50 % is a balanced starting point.</p>
         <p className="text-xs text-text-muted mt-3 flex gap-1.5"><ShieldCheck className="w-4 h-4 flex-shrink-0" aria-hidden />Detection runs in the student's browser; no video or photos are uploaded. Changes apply to attempts started after saving.</p>
       </div>
     </div>
@@ -73,9 +86,10 @@ const ProctoringSettings: React.FC<Props> = ({ value, onChange, disabled }) => {
 /** Only the fields the server accepts (no version). */
 export const policyPayload = (p: Partial<ProctoringPolicy> | undefined) => {
   if (!p) return undefined;
-  const { version, enabledAt, ...rest } = p as ProctoringPolicy & { enabledAt?: string };
-  void version; void enabledAt;
-  return rest;
+  const { version, enabledAt, phoneConfidence, phoneConfidencePercent, ...rest } = p as ProctoringPolicy & { enabledAt?: string };
+  void version; void enabledAt; void phoneConfidencePercent;
+  // the API takes the admin-facing whole percentage; the server converts it to the detector's 0-1 scale
+  return phoneConfidence === undefined ? rest : { ...rest, phoneConfidencePercent: Math.round(phoneConfidence * 100) };
 };
 
 export default ProctoringSettings;

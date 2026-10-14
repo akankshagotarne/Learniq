@@ -143,3 +143,19 @@ export const createFaceCheck = (stableMs = 2000) => {
     reset() { since = null; status = 'waiting'; },
   };
 };
+
+/**
+ * How often the camera frame is analysed. A face-absence threshold of 1-2 s needs a faster scan than the usual 500 ms, or the
+ * warning would land noticeably late; the phone model stays at one run per ~1.5 s whatever the face scan rate is.
+ */
+export const scanTiming = (faceAbsenceThresholdMs: number): { faceIntervalMs: number; phoneEveryN: number } => {
+  const faceIntervalMs = faceAbsenceThresholdMs <= 2000 ? 250 : 500;
+  return { faceIntervalMs, phoneEveryN: Math.max(1, Math.round(1500 / faceIntervalMs)) };
+};
+
+/** The detector itself drops anything below `scoreThreshold`, so it must never be higher than the exam's own phone confidence. */
+export const detectorScoreFloor = (phoneConfidence: number | undefined): number => {
+  const c = typeof phoneConfidence === 'number' && Number.isFinite(phoneConfidence) ? phoneConfidence : 0.35;
+  return Math.max(0, Math.min(1, c) - 0.0005);
+};
+

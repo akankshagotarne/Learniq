@@ -20,6 +20,7 @@ router.post('/request', protect, perUser(10), ctrl.submitRequest);
 router.get('/admin/overview', ...adminAuth, perUser(60), ctrl.adminOverview);
 router.get('/admin/exam', ...adminAuth, ctrl.adminGetExam);
 router.put('/admin/exam', ...adminAuth, perUser(30), ctrl.adminUpdateExam);
+router.put('/admin/exam/proctoring', ...adminAuth, perUser(30), ctrl.adminUpdateProctoring);
 router.post('/admin/seed', ...adminAuth, perUser(5), ctrl.adminSeed);
 router.get('/admin/requests', ...adminAuth, perUser(120), ctrl.adminListRequests);
 router.post('/admin/requests/approve-all', ...adminAuth, perUser(10), ctrl.adminApproveAll);   // before /:id routes

@@ -49,7 +49,7 @@ const engineeringAuditSchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   action: {
     type: String, required: true,
-    enum: ['REQUEST_APPROVED', 'REQUEST_REJECTED', 'REQUEST_REOPENED', 'BULK_APPROVED', 'BULK_REJECTED', 'APPROVE_ALL', 'EXAM_UPDATED', 'DEADLINE_CHANGED', 'PUBLISHED', 'UNPUBLISHED', 'ACCESS_ENABLED', 'ACCESS_DISABLED', 'REPORT_DOWNLOADED'],
+    enum: ['REQUEST_APPROVED', 'REQUEST_REJECTED', 'REQUEST_REOPENED', 'BULK_APPROVED', 'BULK_REJECTED', 'APPROVE_ALL', 'EXAM_UPDATED', 'PROCTORING_UPDATED', 'DEADLINE_CHANGED', 'PUBLISHED', 'UNPUBLISHED', 'ACCESS_ENABLED', 'ACCESS_DISABLED', 'REPORT_DOWNLOADED'],
   },
   target: { type: mongoose.Schema.Types.ObjectId },       // a request id (single actions)
   affected: { type: Number },                             // how many records a bulk action changed

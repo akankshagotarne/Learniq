@@ -17,7 +17,12 @@ test('defaults match the LearnIQ rules and proctoring is off until enabled', () 
 test('validation rejects wrong types, out-of-range numbers and unknown keys', () => {
   assert.throws(() => validatePolicyInput({ enabled: 'yes' }));
   assert.throws(() => validatePolicyInput({ maxFaceAbsenceWarnings: 0 }));
-  assert.throws(() => validatePolicyInput({ phoneConfidence: 0.1 }));
+  assert.throws(() => validatePolicyInput({ phoneConfidence: 0.005 }), 'below 1 %');
+  assert.throws(() => validatePolicyInput({ phoneConfidence: 1.5 }));
+  assert.throws(() => validatePolicyInput({ faceAbsenceThresholdMs: 999 }), 'below 1 s');
+  assert.throws(() => validatePolicyInput({ faceAbsenceThresholdMs: 20001 }), 'above 20 s');
+  assert.throws(() => validatePolicyInput({ phoneConfidencePercent: 0 }));
+  assert.throws(() => validatePolicyInput({ phoneConfidencePercent: 101 }));
   assert.throws(() => validatePolicyInput({ hacked: true }));
   assert.throws(() => validatePolicyInput([]));
   assert.deepEqual(validatePolicyInput({ enabled: true, phoneConfidence: 0.555, version: 99 }), { enabled: true, phoneConfidence: 0.56 }, 'version is server-managed');

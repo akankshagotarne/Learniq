@@ -1,5 +1,6 @@
 import api from './api';
 import { EngineeringAccess, OlympiadExam } from '../types/olympiad';
+import { ProctoringPolicy } from '../proctoring/types';
 
 /** BE Engineering mock test API client. The server decides eligibility, approval and the closing time - the browser only displays it. */
 
@@ -42,6 +43,7 @@ export interface EngineeringAdminExam {
   durationMinutes: number; totalQuestions: number; totalMarks: number; marksPerCorrect: number;
   negativeMarking: boolean; fee: number; isPublished: boolean; accessEnabled: boolean; hardClose: boolean;
   instructions: string[]; questionCount: number; ready: boolean; problems: string[];
+  description?: string; proctoring?: ProctoringPolicy;
   windowState: 'upcoming' | 'open' | 'closed';
 }
 
@@ -112,8 +114,10 @@ export const engineeringApi = {
   // admin
   overview: async (): Promise<{ summary: EngineeringSummary; exam: any; recentActivity: EngineeringActivity[] }> => (await api.get('/engineering/admin/overview')).data,
   adminExam: async (): Promise<EngineeringAdminExam> => (await api.get('/engineering/admin/exam')).data.exam,
-  updateExam: async (body: { endDate?: string; durationMinutes?: number; isPublished?: boolean; accessEnabled?: boolean; instructions?: string[]; confirmPast?: boolean }): Promise<{ exam: EngineeringAdminExam; changed: string[]; runningAttemptsAdjusted: number }> =>
+  updateExam: async (body: { title?: string; description?: string; startDate?: string; endDate?: string; durationMinutes?: number; isPublished?: boolean; accessEnabled?: boolean; instructions?: string[]; confirmPast?: boolean }): Promise<{ exam: EngineeringAdminExam; changed: string[]; runningAttemptsAdjusted: number }> =>
     (await api.put('/engineering/admin/exam', body)).data,
+  updateProctoring: async (proctoring: Partial<ProctoringPolicy>): Promise<{ proctoring: ProctoringPolicy; changed: boolean }> =>
+    (await api.put('/engineering/admin/exam/proctoring', { proctoring })).data,
   seed: async () => (await api.post('/engineering/admin/seed')).data,
   requests: async (params: Record<string, any>): Promise<{ counts: { total: number; PENDING: number; APPROVED: number; REJECTED: number }; total: number; page: number; pages: number; limit: number; requests: EngineeringRequestRecord[] }> =>
     (await api.get('/engineering/admin/requests', { params })).data,
