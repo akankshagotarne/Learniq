@@ -167,3 +167,37 @@ test('10. no credentials are hard-coded in source and the server never runs the 
   assert.equal(/createAdmin/.test(fs.readFileSync(path.join(SRC, 'server.js'), 'utf8')), false);
   const logs = []; return run({ User: fake.User, identity, input: INPUT, apply: true, log: (m) => logs.push(m) }).then(() => assert.equal(logs.join('\n').includes(INPUT.password), false));
 });
+
+test('11. --check reports what is in THIS database without printing the password or hash; works when the account is missing', async () => {
+  await seedExisting();
+  const logs = [];
+  let r = await run({ User: fake.User, identity, input: INPUT, check: true, log: (m) => logs.push(m) });
+  assert.equal(r.report.exists, false); assert.equal(r.report.administratorsInDatabase, 1);
+  await apply();
+  const mine = fake.User.docs.find((d) => d.email === INPUT.email); PASSWORDS.set(String(mine._id), INPUT.password);
+  r = await run({ User: fake.User, identity, input: INPUT, check: true, log: (m) => logs.push(m) });
+  assert.equal(r.report.exists, true); assert.equal(r.report.role, 'admin'); assert.equal(r.report.phoneMatches, true); assert.equal(r.report.suppliedPasswordMatches, true);
+  assert.equal(r.report.accountsWithThisEmail, 1); assert.equal(r.report.administratorsInDatabase, 2);
+  assert.equal(logs.join('\n').includes(INPUT.password), false);
+  assert.equal(logs.join('\n').includes(mine.password) && mine.password !== INPUT.password, false);
+  r = await run({ User: fake.User, identity, input: { ...INPUT, password: 'wrong-wrong-1' }, check: true, log: quiet });
+  assert.equal(r.report.suppliedPasswordMatches, false);
+});
+
+test('12. --set-password replaces ONLY the password of an existing admin; refuses weak passwords, missing accounts and non-admins', async () => {
+  const existing = await seedExisting(); const s = await fake.User.create({ name: 'S', email: 'stud@example.com', role: 'student', isActive: true, isApproved: true, password: 'stud-pass-123456' });
+  await apply();
+  const strong = 'Zq7!vR2#mL9$wK4x-Strong';
+  const before = JSON.parse(JSON.stringify(fake.User.docs.find((d) => d.email === INPUT.email)));
+  assert.equal((await run({ User: fake.User, identity, input: { ...INPUT, password: '12345678' }, setPassword: true, log: quiet })).status, 'INVALID');
+  assert.equal((await run({ User: fake.User, identity, input: { ...INPUT, email: 'nobody@example.com', password: strong }, setPassword: true, log: quiet })).status, 'NOT_FOUND');
+  assert.equal((await run({ User: fake.User, identity, input: { ...INPUT, email: 'stud@example.com', password: strong }, setPassword: true, log: quiet })).status, 'CONFLICT');
+  assert.equal(fake.User.docs.find((d) => d.email === 'stud@example.com').password, 'stud-pass-123456');
+  const ok = await run({ User: fake.User, identity, input: { ...INPUT, password: strong }, setPassword: true, log: quiet });
+  assert.equal(ok.status, 'PASSWORD_REPLACED');
+  const after = fake.User.docs.find((d) => d.email === INPUT.email);
+  assert.equal(after.password, strong);
+  const { password: _a, updatedAt: _b, ...restAfter } = JSON.parse(JSON.stringify(after)); const { password: _c, updatedAt: _d, ...restBefore } = before;
+  assert.deepEqual(restAfter, restBefore, 'only the password changed');
+  assert.equal(fake.User.docs.find((d) => String(d._id) === String(existing._id)).password, EXISTING.password, 'the other admin is untouched');
+});
