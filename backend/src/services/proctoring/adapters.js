@@ -121,6 +121,10 @@ const olympiadAdapter = {
         return { eligible: true, resume: true, exam, attempt };
       }
       o.assertWindowOpen(exam, 'start');
+      if (o.isApprovalExam(exam)) { // free engineering test: an administrator must have approved the student's request
+        await o.resolveAccess(exam, user);
+        return { eligible: true, resume: false, exam };
+      }
       const paid = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS' });
       if (!paid) return { eligible: false, code: 'PAYMENT_REQUIRED', message: `Please complete the ₹${exam.fee} payment before starting the examination.`, exam };
       return { eligible: true, resume: false, exam };

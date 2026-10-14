@@ -106,6 +106,28 @@ const assertWindowOpen = (exam, purpose) => {
   }
 };
 
+// ── Free "approval" exams (the BE Engineering mock test): no payment; an administrator must approve the student's request ──
+const isApprovalExam = (exam) => exam.accessMode === 'approval';
+const requestModel = () => require('../models/Engineering').EngineeringRequest;
+
+/** The student's access request for an approval exam, or null. */
+const findAccessRequest = (userId, exam) => requestModel().findOne({ student: userId, exam: exam._id });
+
+/**
+ * Server-side gate used by /start and by the proctoring eligibility check - the UI only mirrors it.
+ * Returns the APPROVED request; throws 403 (NOT requested / pending / rejected / access disabled).
+ */
+const resolveAccess = async (exam, user) => {
+  if (exam.accessEnabled === false) throw new ApiError(403, 'Access to this examination is currently disabled.', 'ACCESS_DISABLED');
+  const r = await findAccessRequest(user._id, exam);
+  if (!r) throw new ApiError(403, 'Please request access to this examination first.', 'ACCESS_NOT_REQUESTED');
+  if (r.status === 'PENDING') throw new ApiError(403, 'Your access request is waiting for approval.', 'ACCESS_PENDING');
+  if (r.status === 'REJECTED') {
+    throw new ApiError(403, r.rejectionReason ? `Your access request was not approved: ${r.rejectionReason}` : 'Your access request was not approved.', 'ACCESS_REJECTED');
+  }
+  return r;
+};
+
 const maskEmail = (email = '') => {
   const [name, domain] = email.split('@');
   if (!domain) return '';
@@ -183,13 +205,15 @@ const ensureEvaluated = async (attempt) => {
   );
   // The official result is now stored. A PASS (>= 60%) gets its certificate right here — idempotent, and a certificate
   // problem can never break submitting an exam (it is retried the next time the result is opened).
-  if (updated) await certificates.safeIssueForAttempt(updated);
+  if (updated && exam.examType !== 'engineering') await certificates.safeIssueForAttempt(updated); // no certificates for the engineering mock test
   return updated || OlympiadAttempt.findById(attempt._id);
 };
 
 /** The student's certificate for an evaluated attempt: null when they did not pass (no record exists for a FAIL). */
 const certificatePayload = async (attempt) => {
   if (!certificates.isPass(attempt.percentage)) return null;
+  const owner = await OlympiadExam.findById(attempt.exam).select('examType');
+  if (owner && owner.examType === 'engineering') return null;
   const { certificate } = await certificates.safeIssueForAttempt(attempt);
   return certificate ? certificates.toOwnerView(certificate) : null;
 };
@@ -248,6 +272,10 @@ const examPublic = (exam) => ({
   conductedBy: exam.conductedBy,
   teacher: exam.teacher || null,
   examType: exam.examType,
+  category: exam.category || null,
+  accessMode: exam.accessMode || 'payment',
+  accessEnabled: exam.accessEnabled !== false,
+  hardClose: !!exam.hardClose,
   standard: exam.standard,
   startDate: exam.startDate,
   endDate: exam.endDate,
@@ -263,7 +291,44 @@ const examPublic = (exam) => ({
 });
 
 /** Work out where this student is in the pay → start → attempt → result journey. */
+const buildApprovalState = async (exam, userId, now) => {
+  const [request, foundAttempt] = await Promise.all([
+    findAccessRequest(userId, exam),
+    OlympiadAttempt.findOne({ student: userId, exam: exam._id }),
+  ]);
+  const attempt = await expireIfNeeded(foundAttempt, now);
+  const win = windowState(exam, now);
+  let state; let message = null;
+  if (attempt && attempt.status === 'COMPLETED') state = 'completed';
+  else if (attempt && attempt.status === 'IN_PROGRESS') state = 'in_progress';
+  else if (win === 'closed') { state = 'closed'; message = 'The examination is closed.'; }
+  else if (win === 'upcoming') { state = 'upcoming'; message = 'The examination has not started yet.'; }
+  else if (exam.accessEnabled === false) { state = 'disabled'; message = 'Access to this examination is currently disabled.'; }
+  else if (!request || (request.status === 'REJECTED' && request.allowResubmit)) state = 'request';
+  else if (request.status === 'PENDING') state = 'pending';
+  else if (request.status === 'REJECTED') { state = 'rejected'; message = request.rejectionReason || null; }
+  else state = 'ready';
+  return {
+    window: win,
+    state,
+    message,
+    paymentStatus: 'NONE',
+    access: request ? {
+      status: request.status, requestedAt: request.requestedAt, reviewedAt: request.reviewedAt || null,
+      rejectionReason: request.status === 'REJECTED' ? (request.rejectionReason || null) : null, canResubmit: request.status === 'REJECTED' && !!request.allowResubmit,
+      details: { college: request.college, branch: request.branch, degree: request.degree, year: request.year, rollNumber: request.rollNumber || '' },
+    } : { status: 'NONE' },
+    attemptStatus: attempt ? attempt.status : 'NOT_STARTED',
+    result: attempt && attempt.status === 'COMPLETED' ? resultSummary(attempt) : null,
+    remainingSeconds:
+      attempt && attempt.status === 'IN_PROGRESS'
+        ? Math.max(0, Math.ceil((attempt.deadline.getTime() - now.getTime()) / 1000))
+        : null,
+  };
+};
+
 const buildState = async (exam, userId, now = new Date()) => {
+  if (isApprovalExam(exam)) return buildApprovalState(exam, userId, now);
   const [success, latest, foundAttempt] = await Promise.all([
     OlympiadPayment.findOne({ student: userId, exam: exam._id, status: 'SUCCESS' }),
     OlympiadPayment.findOne({ student: userId, exam: exam._id }).sort({ createdAt: -1 }),
@@ -401,6 +466,7 @@ const safeEqual = (a, b) => {
 const createOrder = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   assertEligibleStudent(req.user, exam);
+  if (isApprovalExam(exam)) throw new ApiError(400, 'This examination is free. Request access instead of paying.', 'NO_PAYMENT_REQUIRED');
 
   const alreadyPaid = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
   if (alreadyPaid) {
@@ -642,18 +708,28 @@ const startExam = handler(async (req, res) => {
 
   assertWindowOpen(exam, 'start');
 
-  const payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
-  if (!payment) {
-    throw new ApiError(402, `Please complete the ₹${exam.fee} payment before starting the examination.`, 'PAYMENT_REQUIRED');
+  let unlock; // what lets this student start: a verified payment (Olympiad) or an approved request (free engineering test)
+  if (isApprovalExam(exam)) {
+    unlock = { accessRequest: (await resolveAccess(exam, req.user))._id };
+  } else {
+    const payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
+    if (!payment) {
+      throw new ApiError(402, `Please complete the ₹${exam.fee} payment before starting the examination.`, 'PAYMENT_REQUIRED');
+    }
+    unlock = { payment: payment._id };
   }
 
+  const naturalDeadline = new Date(now.getTime() + exam.durationMinutes * 60 * 1000);
+  // hard-close exam: the attempt can never outlive the closing time (a student cannot gain time by starting late)
+  const deadline = exam.hardClose && exam.endDate < naturalDeadline ? exam.endDate : naturalDeadline;
   try {
     attempt = await OlympiadAttempt.create({
       student: req.user._id,
       exam: exam._id,
-      payment: payment._id,
+      ...unlock,
       startedAt: now,
-      deadline: new Date(now.getTime() + exam.durationMinutes * 60 * 1000),
+      deadline,
+      naturalDeadline,
       status: 'IN_PROGRESS',
     });
   } catch (err) {
@@ -1288,7 +1364,7 @@ module.exports = {
   teacherListExams, teacherAttempts,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // used by the proctoring adapters (services/proctoring/adapters.js) - the Olympiad rules stay in this file
-  _proctoring: { loadExam, assertEligibleStudent, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt },
+  _proctoring: { loadExam, assertEligibleStudent, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt, isApprovalExam, resolveAccess },
   // exported for tests
-  _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated },
+  _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated, resultSummary, responsesToObject, buildState, examPublic },
 };

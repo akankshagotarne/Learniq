@@ -354,6 +354,12 @@ const createFakeDb = () => {
       unansweredCount: 0, attemptedCount: 0, accuracy: 0, timeTakenSeconds: 0, sectionResults: [],
     }),
   });
+  // BE Engineering mock test (models/Engineering.js) - same unique index: ONE request per student per exam
+  const EngineeringRequest = new FakeModel('EngineeringRequest', {
+    registry, refs: { student: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam'] }],
+    defaults: () => ({ status: 'PENDING', allowResubmit: false, history: [], requestedAt: new Date() }),
+  });
+  const EngineeringAudit = new FakeModel('EngineeringAudit', { registry, defaults: () => ({ at: new Date(), details: {} }) });
   const User = new FakeModel('User', {
     registry, hidden: ['password'],
     // same indexes as models/User.js: unique email + PARTIAL unique phoneNormalized (only real string values)
@@ -417,7 +423,9 @@ const createFakeDb = () => {
   const { sessionToken } = sessionStore;
   const authSessionModels = sessionStore.models;
 
-  return { sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
+
+  return { engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**

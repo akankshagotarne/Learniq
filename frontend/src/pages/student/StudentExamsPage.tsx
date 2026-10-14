@@ -78,7 +78,7 @@ const StudentExamsPage: React.FC = () => {
   });
 
   const hasOlympiad = olympiadExams.length > 0;
-  const olympiadAvailable = olympiadExams.filter(o => ['pay', 'ready', 'in_progress', 'closed'].includes(o.state));
+  const olympiadAvailable = olympiadExams.filter(o => ['pay', 'ready', 'in_progress', 'closed', 'request', 'pending', 'rejected', 'disabled'].includes(o.state));
   const olympiadUpcoming = olympiadExams.filter(o => o.state === 'upcoming');
   const olympiadCompleted = olympiadExams.filter(o => o.state === 'completed');
 

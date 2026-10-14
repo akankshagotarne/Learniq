@@ -60,6 +60,7 @@ const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
+const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -328,6 +329,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiad />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/engineering" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminEngineering />
         </ProtectedRoute>
       } />
 
