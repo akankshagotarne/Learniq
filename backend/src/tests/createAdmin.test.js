@@ -164,7 +164,8 @@ test('10. no credentials are hard-coded in source and the server never runs the 
   const fs = require('fs'); const root = path.join(SRC, '..');
   const script = fs.readFileSync(path.join(SRC, 'scripts', 'createAdmin.js'), 'utf8');
   assert.equal(/12345678|tpo\.sit@|9765550636/.test(script), false);
-  assert.equal(/createAdmin|BOOTSTRAP_ADMIN/.test(fs.readFileSync(path.join(SRC, 'server.js'), 'utf8')), false);
+  assert.equal(/createAdmin/.test(fs.readFileSync(path.join(SRC, 'server.js'), 'utf8')), false, 'server.js never runs the script directly; the only hook is the env-gated adminOnce (test 13)');
+  assert.equal(/12345678|tpo\.sit@|9765550636/.test(fs.readFileSync(path.join(SRC, 'bootstrap', 'adminOnce.js'), 'utf8')), false);
   const logs = []; return run({ User: fake.User, identity, input: INPUT, apply: true, log: (m) => logs.push(m) }).then(() => assert.equal(logs.join('\n').includes(INPUT.password), false));
 });
 
@@ -200,4 +201,18 @@ test('12. --set-password replaces ONLY the password of an existing admin; refuse
   const { password: _a, updatedAt: _b, ...restAfter } = JSON.parse(JSON.stringify(after)); const { password: _c, updatedAt: _d, ...restBefore } = before;
   assert.deepEqual(restAfter, restBefore, 'only the password changed');
   assert.equal(fake.User.docs.find((d) => String(d._id) === String(existing._id)).password, EXISTING.password, 'the other admin is untouched');
+});
+
+test('13. the temporary boot hook does nothing unless BOOTSTRAP_ADMIN_ONCE=1; when enabled it checks, creates once and logs no secrets', async () => {
+  const { runBootstrapAdminOnce } = require('../bootstrap/adminOnce');
+  const logs = []; const log = (m) => logs.push(m);
+  const env = { NEW_ADMIN_EMAIL: INPUT.email, NEW_ADMIN_PHONE: INPUT.phone, NEW_ADMIN_PASSWORD: INPUT.password };
+  assert.equal(await runBootstrapAdminOnce({ User: fake.User, identity, env, log }), null); assert.equal(fake.User.docs.length, 0, 'disabled by default');
+  assert.equal(await runBootstrapAdminOnce({ User: fake.User, identity, env: { ...env, BOOTSTRAP_ADMIN_ONCE: '0' }, log }), null);
+  const on = { ...env, BOOTSTRAP_ADMIN_ONCE: '1' };
+  assert.equal((await runBootstrapAdminOnce({ User: fake.User, identity, env: on, log })).status, 'CREATED');
+  assert.equal((await runBootstrapAdminOnce({ User: fake.User, identity, env: on, log })).status, 'ALREADY_EXISTS', 'restarts never duplicate');
+  assert.equal(fake.User.docs.length, 1);
+  assert.equal(logs.join('\n').includes(INPUT.password), false);
+  assert.equal((await runBootstrapAdminOnce({ User: fake.User, identity, env: { ...on, NEW_ADMIN_EMAIL: 'other.admin@example.com', NEW_ADMIN_PASSWORD: 'x' }, log })).status, 'INVALID');
 });
