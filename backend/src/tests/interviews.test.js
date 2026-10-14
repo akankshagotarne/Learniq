@@ -417,6 +417,22 @@ test('rooms: after approval both join; presence drives CONNECTING → IN_PROGRES
   assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS'); assert.ok(ivDoc(iv._id).startedAt);
 });
 
+test('rooms: a quick leave + re-join from the SAME connection (page re-entry / Try again) ends with the participant present and the peer told in order', { skip: NO_CLIENT }, async () => {
+  const t = await mkUser({ role: 'teacher' });
+  const { s, iv } = await approvedPair(t);
+  const ts = await connect(t.token); const ss = await connect(s.token);
+  await joinRoom(ts, iv._id); await joinRoom(ss, iv._id);
+  const seen = []; ss.on('interview:peer-left', () => seen.push('left')); ss.on('interview:peer-joined', () => seen.push('joined'));
+  ts.emit('interview:leave');                   // the old page instance cleans up ...
+  const again = await joinRoom(ts, iv._id);     // ... and the new instance joins at once, on the same socket
+  assert.equal(again.ok, true); assert.equal(again.peerPresent, true);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(seen, ['left', 'joined'], 'departure is announced before the new arrival, never after it');
+  assert.equal(ivDoc(iv._id).teacherPresent, true, 'the re-joined teacher is not marked absent by the late leave bookkeeping');
+  const s3 = await mkUser({ role: 'teacher' }); const ghost = await connect(s3.token);
+  assert.equal((await joinRoom(ghost, iv._id)).code, 'FORBIDDEN', 'still private');
+});
+
 test('SIMULTANEOUS interviews: separate rooms, no signalling or events cross over, ending one leaves the other running', { skip: NO_CLIENT }, async () => {
   const nikhil = await mkUser({ role: 'teacher', name: 'Nikhil Sir' }); const kruti = await mkUser({ role: 'teacher', name: 'Kruti Mam' });
   const A = await approvedPair(nikhil); const B = await approvedPair(kruti);
