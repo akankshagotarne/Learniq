@@ -2,8 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trophy, Clock, HelpCircle, Award, Calendar, IndianRupee, CheckCircle, Sparkles,
-  ChevronRight, Loader2, Lock, PlayCircle, UserCheck, GraduationCap, Hourglass, XCircle, Send,
+  ChevronRight, Loader2, Lock, PlayCircle, UserCheck, GraduationCap, Hourglass, XCircle, Send, Video,
 } from 'lucide-react';
+import { StudentExamInterview, OPEN_STATUSES } from '../../services/interview';
 import { OlympiadExam } from '../../types/olympiad';
 import { formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
 
@@ -11,9 +12,13 @@ interface Props {
   exam: OlympiadExam;
   paying: boolean;
   onPay: (exam: OlympiadExam) => void;
+  /** Teacher interview state for this exam (from the backend). Absent = no interview offer for this card. */
+  interview?: StudentExamInterview;
+  interviewBusy?: boolean;
+  onStartInterview?: (exam: OlympiadExam) => void;
 }
 
-const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
+const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, interviewBusy, onStartInterview }) => {
   const { state } = exam;
   const approval = exam.accessMode === 'approval';   // BE Engineering mock test: free, admin-approved
   const disabled = state === 'upcoming' || state === 'closed' || state === 'disabled';
@@ -198,6 +203,54 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
           >
             <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> View Result
           </Link>
+        )}
+        {interview && !approval && (
+          <div className="mt-2" data-testid="interview-action">
+            {interview.interview && OPEN_STATUSES.includes(interview.interview.status) ? (
+              <Link
+                to={`/student/interview/${interview.interview._id}`}
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-brand-primary/40 text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
+                data-testid="interview-view"
+              >
+                <Video className="w-3.5 h-3.5 text-brand-primary" /> View Interview Status <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            ) : interview.interview && interview.interview.status === 'COMPLETED' ? (
+              <Link
+                to={`/student/interview/${interview.interview._id}`}
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> Interview Completed
+              </Link>
+            ) : interview.locked ? (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
+                  data-testid="interview-locked"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Start Interview — Locked
+                </button>
+                <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message || 'Submit your Olympiad exam to unlock the interview.'}</p>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onStartInterview?.(exam)}
+                  disabled={interviewBusy || !interview.eligible}
+                  className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  data-testid="interview-start"
+                >
+                  {interviewBusy
+                    ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Requesting…</>
+                    : <><Video className="w-3.5 h-3.5" /> Start Interview <ChevronRight className="w-3.5 h-3.5" /></>}
+                </button>
+                {!interview.eligible && interview.message && <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message}</p>}
+              </>
+            )}
+          </div>
         )}
         {disabled && (
           <button

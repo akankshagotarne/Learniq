@@ -396,6 +396,18 @@ const createFakeDb = () => {
     }),
   });
 
+  // Teacher-student interviews (models/TeacherInterview.js) - same partial unique indexes as the real schema
+  const TeacherInterview = new FakeModel('TeacherInterview', {
+    registry, refs: { student: 'User', teacher: 'User', exam: 'OlympiadExam' },
+    unique: [
+      { fields: ['roomId'] },
+      { fields: ['student', 'exam'], where: (d) => d.isOpen === true },
+      { fields: ['teacher'], where: (d) => d.holdsTeacherSlot === true },
+    ],
+    defaults: () => ({ status: 'REQUESTED', isOpen: true, holdsTeacherSlot: false, requestedBy: 'student', requestedAt: new Date(), teacherPresent: false, studentPresent: false, lastActivityAt: new Date(), audit: [] }),
+  });
+  const InterviewSetting = new FakeModel('InterviewSetting', { registry, unique: [{ fields: ['key'] }], defaults: () => ({ key: 'global', requestsEnabled: true }) });
+
   // teaching content (used by the admin teacher profile counts)
   const Lecture = new FakeModel('Lecture', { registry });
   const Note = new FakeModel('Note', { registry });
@@ -425,7 +437,7 @@ const createFakeDb = () => {
 
   const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
 
-  return { engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { TeacherInterview, InterviewSetting, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**

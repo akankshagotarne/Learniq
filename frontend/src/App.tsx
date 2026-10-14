@@ -36,6 +36,7 @@ const OlympiadTakerPage = lazy(() => import('./pages/student/OlympiadTakerPage')
 const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage'));
 const AIInterviewPage = lazy(() => import('./pages/student/AIInterviewPage'));
 const AIInterviewResultPage = lazy(() => import('./pages/student/AIInterviewResultPage'));
+const StudentInterviewPage = lazy(() => import('./pages/student/StudentInterviewPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
 
 // Teacher pages
@@ -47,6 +48,8 @@ const TeacherExamsPage = lazy(() => import('./pages/teacher/TeacherExamsPage'));
 const ExamBuilderPage = lazy(() => import('./pages/teacher/ExamBuilderPage'));
 const ExamResultsPage = lazy(() => import('./pages/teacher/ExamResultsPage'));
 const TeacherOlympiadAttemptsPage = lazy(() => import('./pages/teacher/TeacherOlympiadAttemptsPage'));
+const TeacherInterviewPage = lazy(() => import('./pages/teacher/TeacherInterviewPage'));
+const TeacherInterviewRoomPage = lazy(() => import('./pages/teacher/TeacherInterviewRoomPage'));
 const TeacherDoubts = lazy(() => import('./pages/teacher/TeacherDoubts'));
 
 // Admin pages
@@ -60,6 +63,7 @@ const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
+const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
 const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
 
 // Loading fallback
@@ -203,6 +207,11 @@ const AppRoutes: React.FC = () => (
           <AIInterviewResultPage />
         </ProtectedRoute>
       } />
+      <Route path="/student/interview/:interviewId" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentInterviewPage />
+        </ProtectedRoute>
+      } />
       <Route path="/student/certificates" element={
         <ProtectedRoute roles={['student']}>
           <StudentCertificatesPage />
@@ -236,6 +245,16 @@ const AppRoutes: React.FC = () => (
       <Route path="/teacher/students" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
           <TeacherStudents />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/interview" element={
+        <ProtectedRoute roles={['teacher']}>
+          <TeacherInterviewPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/interview/:interviewId" element={
+        <ProtectedRoute roles={['teacher']}>
+          <TeacherInterviewRoomPage />
         </ProtectedRoute>
       } />
       <Route path="/teacher/doubts" element={
@@ -329,6 +348,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiad />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/interviews" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminInterviews />
         </ProtectedRoute>
       } />
       <Route path="/admin/engineering" element={
