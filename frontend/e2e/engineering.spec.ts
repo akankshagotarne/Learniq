@@ -205,3 +205,28 @@ test('a student cannot open the admin Engineering page', async ({ page }) => {
   await page.goto('/admin/engineering');
   await expect(page.getByRole('heading', { name: 'Engineering' })).toHaveCount(0);
 });
+
+// the acknowledgment checkbox was squeezed to a few pixels by the long label text (flex item without shrink-0)
+for (const width of [360, 390, 430, 1366]) {
+  test(`student (${width}px): the instructions checkbox is a clear 22px square with a 44px tap area; the label toggles it; Start follows it`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await studentPage(page, engineeringExam({ state: 'ready', access: { status: 'APPROVED' } }));
+    await page.goto('/student/olympiad/eng-1');
+    const cb = page.getByTestId('agree-checkbox'); const label = page.getByTestId('agree-label'); const start = page.getByRole('button', { name: /Start Examination/ });
+    await cb.scrollIntoViewIfNeeded();
+    await expect(cb).not.toBeChecked(); await expect(start).toBeDisabled();
+    const b = (await cb.boundingBox())!;
+    expect(Math.round(b.width), `width ${b.width}`).toBe(22); expect(Math.round(b.height)).toBe(22);
+    const lb = (await label.boundingBox())!;
+    expect(lb.height).toBeGreaterThanOrEqual(44);
+    const text = (await label.locator('span').boundingBox())!;
+    expect(text.x).toBeGreaterThanOrEqual(b.x + b.width + 8); // spacing, no overlap
+    // tapping the TEXT toggles it, tapping the box toggles it back
+    await label.locator('span').click(); await expect(cb).toBeChecked(); await expect(start).toBeEnabled();
+    await cb.click(); await expect(cb).not.toBeChecked(); await expect(start).toBeDisabled();
+    await cb.focus(); await page.keyboard.press('Space'); await expect(cb).toBeChecked();
+    const r = await findOverflow(page);
+    expect(r.offenders, JSON.stringify(r.offenders)).toEqual([]);
+    await label.screenshot({ path: `test-results/ack-${width}.png` });
+  });
+}

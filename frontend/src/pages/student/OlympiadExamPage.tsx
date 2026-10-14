@@ -255,12 +255,14 @@ const OlympiadExamPage: React.FC = () => {
 
         {exam.state === 'ready' && (
           <div className="space-y-4">
-            <label className="flex items-start gap-2.5 text-sm text-text-secondary cursor-pointer">
+            <label className="flex items-start gap-3 min-h-[44px] py-1.5 text-sm text-text-secondary cursor-pointer" data-testid="agree-label">
+              {/* shrink-0 + fixed 22px box: as a flex child the old w-4 h-4 input was squeezed to a few pixels by the long text */}
               <input
                 type="checkbox"
                 checked={agreed}
                 onChange={e => setAgreed(e.target.checked)}
-                className="mt-1 w-4 h-4 accent-[#6C63F2]"
+                data-testid="agree-checkbox"
+                className="mt-px w-[22px] h-[22px] min-w-[22px] min-h-[22px] shrink-0 grow-0 cursor-pointer accent-[#6C63F2] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6C63F2]"
               />
               <span>I have read and understood the instructions. I understand that the timer starts immediately and that I have only one attempt.</span>
             </label>
