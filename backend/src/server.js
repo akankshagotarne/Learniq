@@ -176,6 +176,21 @@ const backfillLegacyPhones = async () => {
   }
 };
 
+// TEMPORARY one-shot (env-gated, removed right after use): replaces the password of ONE existing administrator.
+const setAdminPasswordOnce = async () => {
+  const { TEMP_SET_ADMIN_EMAIL: email, TEMP_SET_ADMIN_PASSWORD: password } = process.env;
+  if (!email || !password) return;
+  try {
+    const u = await require('./models/User').findOne({ email: String(email).trim().toLowerCase() });
+    if (!u) return console.log('🔐 Admin password: no account with that e-mail. Nothing changed.');
+    if (u.role !== 'admin') return console.log('🔐 Admin password: not an administrator. Nothing changed.');
+    if (await u.comparePassword(password)) return console.log('🔐 Admin password: already set to the requested value. Nothing changed.');
+    u.password = password; // hashed by the model's pre-save hook
+    await u.save();
+    console.log('🔐 Admin password: REPLACED (hashed by the model). No other field changed.');
+  } catch (err) { console.error(`⚠️  Admin password change failed (${err.message})`); }
+};
+
 // "One active login per account" is enforced by a partial unique index on AuthSession (models/AuthSession.js).
 const verifySessionIndexes = async () => {
   const { AuthSession, SessionTakeover } = require('./models/AuthSession');
@@ -196,6 +211,7 @@ const startServer = async () => {
     await connectDB();
     await verifyUserIndexes();
     await backfillLegacyPhones();
+    await setAdminPasswordOnce();
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
