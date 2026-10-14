@@ -65,6 +65,55 @@ const classifyIdentifier = (raw) => {
   return phone.valid ? { kind: 'phone', e164: phone.e164 } : { kind: 'invalid' };
 };
 
+const MISSING_NORMALIZED = [{ phoneNormalized: { $exists: false } }, { phoneNormalized: null }];
+
+/**
+ * Accounts a phone number may belong to, for LOGIN:
+ *   1. phoneNormalized === e164 (indexed, unique for accounts created / updated since the identity rules existed), plus
+ *   2. LEGACY accounts: a phone was saved before `phoneNormalized` existed, so only the raw `phone` text (any format, even a
+ *      stored number) is there. Their raw value is normalised in code and compared for equality - nothing is guessed or truncated.
+ * Returns distinct documents. More than one means the number is shared - the caller must verify the password against each.
+ */
+const findPhoneCandidates = async (User, e164) => {
+  const indexed = await User.find({ phoneNormalized: e164 }).limit(5);
+  const legacy = await User.find({ phone: { $exists: true, $ne: '' }, $or: MISSING_NORMALIZED }).limit(2000);
+  const out = new Map();
+  for (const u of indexed || []) out.set(String(u._id), u);
+  for (const u of legacy || []) {
+    const n = normalizePhone(u.phone);
+    if (n.valid && n.e164 === e164) out.set(String(u._id), u);
+  }
+  return [...out.values()];
+};
+
+/**
+ * Fills `phoneNormalized` for legacy accounts - ONLY where the number is valid and no other account uses it (by either field).
+ * Idempotent, never touches `phone`, never deletes or merges; shared numbers are left alone (login handles them via the password).
+ */
+const backfillPhoneNormalized = async (User) => {
+  const all = await User.find({ phone: { $exists: true, $ne: '' } });
+  const owners = new Map();
+  for (const u of all) {
+    const n = normalizePhone(u.phone);
+    const e164 = n.valid ? n.e164 : (u.phoneNormalized || null);
+    if (!e164) continue;
+    if (!owners.has(e164)) owners.set(e164, []);
+    owners.get(e164).push(u);
+  }
+  const result = { scanned: all.length, filled: 0, shared: 0, invalid: 0 };
+  for (const u of all) {
+    if (u.phoneNormalized) continue;
+    const n = normalizePhone(u.phone);
+    if (!n.valid) { result.invalid += 1; continue; }
+    if (owners.get(n.e164).length > 1) { result.shared += 1; continue; }
+    try {
+      const done = await User.findOneAndUpdate({ _id: u._id, $or: MISSING_NORMALIZED }, { $set: { phoneNormalized: n.e164 } });
+      if (done) result.filled += 1;
+    } catch (e) { if (e && e.code === 11000) result.shared += 1; else throw e; }
+  }
+  return result;
+};
+
 /** Other accounts that already use this email and/or phone. `excludeId` lets a user keep their own values. */
 const findIdentityConflicts = async (User, { email, phoneNormalized, excludeId }) => {
   const or = [];
@@ -106,5 +155,5 @@ const conflictsFromDuplicateKeyError = (err) => {
 
 module.exports = {
   MESSAGES, DEFAULT_PHONE_COUNTRY,
-  normalizeEmail, normalizePhone, classifyIdentifier, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
+  normalizeEmail, normalizePhone, classifyIdentifier, findPhoneCandidates, backfillPhoneNormalized, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
 };
