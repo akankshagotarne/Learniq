@@ -176,16 +176,6 @@ const backfillLegacyPhones = async () => {
   }
 };
 
-// TEMPORARY one-shot (env-gated, removed right after use): applies the configured Olympiad fee (₹20) to the existing
-// exam records. Writes ONLY the `fee` field of Olympiad exams (src/scripts/setOlympiadFee.js); payments are never touched.
-const applyOlympiadFeeOnce = async () => {
-  if (process.env.TEMP_APPLY_OLYMPIAD_FEE !== 'true') return;
-  try {
-    const r = await require('./scripts/setOlympiadFee').run({ apply: true, log: (m) => console.log(`💰 ${m}`) });
-    console.log(`💰 Olympiad fee: ₹${r.fee} applied — ${r.changed} exam(s) changed, ${r.unchanged} already correct.`);
-  } catch (err) { console.error(`⚠️  Olympiad fee update failed (${err.message})`); }
-};
-
 // "One active login per account" is enforced by a partial unique index on AuthSession (models/AuthSession.js).
 const verifySessionIndexes = async () => {
   const { AuthSession, SessionTakeover } = require('./models/AuthSession');
@@ -206,7 +196,6 @@ const startServer = async () => {
     await connectDB();
     await verifyUserIndexes();
     await backfillLegacyPhones();
-    await applyOlympiadFeeOnce();
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
