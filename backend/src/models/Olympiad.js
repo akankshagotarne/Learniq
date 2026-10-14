@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { proctoringPolicySchema } = require('../services/proctoring/policy');
+const { STANDARD_OTHERS } = require('../constants/standards');
 
 /**
  * Paid Olympiad examination models.
@@ -26,8 +27,26 @@ const olympiadExamSchema = new mongoose.Schema({
   // Optional link to the teacher account that conducts/reviews this exam.
   // Lets the teacher dashboard query Olympiad exams they are assigned to.
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true, sparse: true },
-  examType: { type: String, default: 'olympiad' },
-  standard: { type: Number, required: true, min: 1, max: 10 },
+  examType: { type: String, default: 'olympiad' }, // 'olympiad' (paid, Std 1-10) | 'engineering' (free, approval-based, "Others")
+  category: { type: String, trim: true },          // e.g. 'BE Engineering'
+  // Std 1-10, or 99 = "Others" (constants/standards.js). Only the Engineering mock test uses 99.
+  standard: {
+    type: Number, required: true,
+    validate: {
+      validator(v) {
+        if (v === STANDARD_OTHERS) return !!this && this.examType === 'engineering'; // Others is only for the engineering mock test
+        return Number.isInteger(v) && v >= 1 && v <= 10;
+      },
+      message: 'standard must be 1-10 (99 / Others is only allowed for the engineering mock test).',
+    },
+  },
+  // How a student earns the right to start: 'payment' = a verified Razorpay payment (Olympiads);
+  // 'approval' = an administrator approved the student's access request (free Engineering mock test, no payment at all).
+  accessMode: { type: String, enum: ['payment', 'approval'], default: 'payment' },
+  accessEnabled: { type: Boolean, default: true }, // admin switch: false = nobody can request or start (running attempts finish normally)
+  // true: `endDate` is a HARD closing time - an attempt still running at that instant is finalised automatically
+  // (attempt.deadline = min(start + duration, endDate)). false (Olympiads): a running attempt may use its own full duration.
+  hardClose: { type: Boolean, default: false },
   instructions: [{ type: String }],
   sections: [sectionSchema],
 
@@ -41,7 +60,13 @@ const olympiadExamSchema = new mongoose.Schema({
   negativeMarking: { type: Boolean, default: false },
   negativeMarkValue: { type: Number, default: 0, min: 0 },
 
-  fee: { type: Number, required: true, min: 1 }, // in rupees
+  fee: {
+    type: Number, required: true, // in rupees; Olympiads cost at least Rs 1, only the free Engineering mock test may be 0
+    validate: {
+      validator(v) { return Number.isFinite(v) && v >= (this && this.examType === 'engineering' ? 0 : 1); },
+      message: 'fee must be at least 1 (0 is allowed only for the free engineering mock test).',
+    },
+  },
   currency: { type: String, default: 'INR' },
 
   isPublished: { type: Boolean, default: true },
@@ -143,13 +168,16 @@ const sectionResultSchema = new mongoose.Schema({
 const olympiadAttemptSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
-  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required: true },
+  // Paid Olympiad: the verified payment that unlocked this attempt. Free engineering test: the approved access request instead.
+  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest; } },
+  accessRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'EngineeringRequest' },
 
   status: { type: String, enum: ['IN_PROGRESS', 'COMPLETED'], default: 'IN_PROGRESS' },
   submissionType: { type: String, enum: ['MANUAL', 'TIMER', 'SYSTEM', 'PROCTORING'] },
 
   startedAt: { type: Date, required: true },
-  deadline: { type: Date, required: true }, // server-computed: startedAt + duration
+  deadline: { type: Date, required: true }, // server-computed: startedAt + duration (hard-close exams: never later than the exam's closing time)
+  naturalDeadline: { type: Date },          // startedAt + duration, before any hard-close cut (lets a later closing time give the time back)
   submittedAt: { type: Date },
 
   // questionId -> { selectedOption, marked, updatedAt }. Plain object so each answer is saved with an

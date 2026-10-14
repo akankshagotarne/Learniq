@@ -2,10 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trophy, Clock, HelpCircle, Award, Calendar, IndianRupee, CheckCircle, Sparkles,
-  ChevronRight, Loader2, Lock, PlayCircle, UserCheck,
+  ChevronRight, Loader2, Lock, PlayCircle, UserCheck, GraduationCap, Hourglass, XCircle, Send,
 } from 'lucide-react';
 import { OlympiadExam } from '../../types/olympiad';
-import { formatISTRange, formatRupees } from '../../utils/olympiadFormat';
+import { formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
 
 interface Props {
   exam: OlympiadExam;
@@ -15,7 +15,8 @@ interface Props {
 
 const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
   const { state } = exam;
-  const disabled = state === 'upcoming' || state === 'closed';
+  const approval = exam.accessMode === 'approval';   // BE Engineering mock test: free, admin-approved
+  const disabled = state === 'upcoming' || state === 'closed' || state === 'disabled';
 
   const badge = (() => {
     switch (state) {
@@ -34,7 +35,31 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
       case 'ready':
         return (
           <span className="badge-success text-[10px] py-0.5 px-2 flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> Payment Verified
+            <CheckCircle className="w-3 h-3" /> {approval ? 'Approved' : 'Payment Verified'}
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="badge-warning text-[10px] py-0.5 px-2 flex items-center gap-1" data-testid="engineering-status">
+            <Hourglass className="w-3 h-3" /> Pending approval
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="bg-[#FFE4EC] text-[#E1447A] text-[10px] font-semibold py-0.5 px-2 rounded-full flex items-center gap-1" data-testid="engineering-status">
+            <XCircle className="w-3 h-3" /> Request rejected
+          </span>
+        );
+      case 'disabled':
+        return (
+          <span className="bg-surface-alt border border-border-subtle text-text-muted text-[10px] font-semibold py-0.5 px-2 rounded-full flex items-center gap-1">
+            <Lock className="w-3 h-3" /> Access paused
+          </span>
+        );
+      case 'request':
+        return (
+          <span className="badge-primary text-[10px] py-0.5 px-2 flex items-center gap-1" data-testid="engineering-status">
+            <Sparkles className="w-3 h-3" /> Request access
           </span>
         );
       case 'upcoming':
@@ -67,7 +92,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3 mt-1">
           <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#FFC24B]/15 text-[#B7791F] dark:text-[#FFC24B] flex items-center gap-1">
-            <Trophy className="w-3 h-3" /> Olympiad
+            {approval ? <GraduationCap className="w-3 h-3" /> : <Trophy className="w-3 h-3" />} {approval ? (exam.category || 'BE Engineering') : 'Olympiad'}
           </span>
           {badge}
         </div>
@@ -77,7 +102,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
         </h3>
         <p className="text-xs text-text-muted mt-1 flex items-start gap-1">
           <UserCheck className="w-3 h-3 mt-0.5 flex-shrink-0" aria-hidden="true" />
-          <span className="min-w-0">Standard {exam.standard} · Exam by {exam.conductedBy || 'Nikhil Sir'}</span>
+          <span className="min-w-0">{approval ? `Others · Mock test by ${exam.conductedBy || 'LearnIQ'}` : `Standard ${exam.standard} · Exam by ${exam.conductedBy || 'Nikhil Sir'}`}</span>
         </p>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-2 my-4 p-3 bg-surface-alt rounded-xl border border-border-subtle text-xs">
@@ -95,13 +120,13 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
           </div>
           <div className="flex items-center gap-1.5 min-w-0 text-text-secondary">
             <IndianRupee className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
-            <span className="min-w-0">Fee: {formatRupees(exam.fee)}</span>
+            <span className="min-w-0">Fee: {exam.fee > 0 ? formatRupees(exam.fee) : 'FREE'}</span>
           </div>
         </div>
 
         <div className="text-[11px] text-text-muted mb-3 flex items-start gap-1.5">
           <Calendar className="w-3 h-3 mt-0.5 text-brand-primary flex-shrink-0" aria-hidden="true" />
-          <span className="min-w-0">Available: {formatISTRange(exam.startDate, exam.endDate)}</span>
+          <span className="min-w-0">{approval ? <>Closes: <b>{formatISTDateTime(exam.endDate)}</b></> : <>Available: {formatISTRange(exam.startDate, exam.endDate)}</>}</span>
         </div>
 
         {state === 'completed' && exam.result && (
@@ -113,7 +138,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
           </div>
         )}
 
-        {exam.message && (state === 'upcoming' || state === 'closed') && (
+        {exam.message && (state === 'upcoming' || state === 'closed' || state === 'disabled' || state === 'rejected') && (
           <p className="text-[11px] text-text-secondary mb-3">{exam.message}</p>
         )}
       </div>
@@ -132,6 +157,23 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
               <><Sparkles className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> <span className="min-w-0">Pay {formatRupees(exam.fee)} &amp; Start Exam</span> <ChevronRight className="w-4 h-4 flex-shrink-0" aria-hidden="true" /></>
             )}
           </button>
+        )}
+        {(state === 'request' || state === 'rejected') && (
+          <Link
+            to={`/student/olympiad/${exam._id}`}
+            className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 shadow-sm"
+            data-testid="engineering-request-link"
+          >
+            <Send className="w-3.5 h-3.5" /> {state === 'rejected' ? 'View Details' : 'Request to Join'} <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        )}
+        {state === 'pending' && (
+          <Link
+            to={`/student/olympiad/${exam._id}`}
+            className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
+          >
+            <Hourglass className="w-3.5 h-3.5 text-[#D97706]" /> Awaiting approval
+          </Link>
         )}
         {state === 'ready' && (
           <Link
@@ -162,7 +204,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay }) => {
             disabled
             className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center"
           >
-            {state === 'upcoming' ? 'Exam Not Started Yet' : 'Registration Closed'}
+            {state === 'upcoming' ? 'Exam Not Started Yet' : state === 'disabled' ? 'Access Paused' : approval ? 'Exam Closed' : 'Registration Closed'}
           </button>
         )}
       </div>

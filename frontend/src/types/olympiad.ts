@@ -2,7 +2,19 @@
 // NOTE: the answer key never appears in these types except in OlympiadReviewItem,
 // which the backend only returns AFTER the student has submitted.
 
-export type OlympiadState = 'upcoming' | 'pay' | 'ready' | 'in_progress' | 'completed' | 'closed';
+export type OlympiadState = 'upcoming' | 'pay' | 'ready' | 'in_progress' | 'completed' | 'closed'
+  // approval-only exams (BE Engineering mock test): the student asks to join and an administrator decides
+  | 'request' | 'pending' | 'rejected' | 'disabled';
+export type EngineeringAccessStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface EngineeringAccess {
+  status: EngineeringAccessStatus;
+  requestedAt?: string;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  canResubmit?: boolean;
+  details?: { college: string; branch: string; degree: string; year: string; rollNumber: string };
+}
 export type OlympiadPaymentStatus = 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 
 export interface OlympiadSection {
@@ -122,6 +134,14 @@ export interface OlympiadExam {
   currency: string;
   sections: OlympiadSection[];
   instructions?: string[];
+  /** 'BE Engineering' for the engineering mock test, null for school Olympiads */
+  category?: string | null;
+  accessMode?: 'payment' | 'approval';
+  accessEnabled?: boolean;
+  hardClose?: boolean;
+  /** approval exams: the student's request status */
+  access?: EngineeringAccess;
+  deadlineIST?: string;
   // per-student journey state
   window: 'upcoming' | 'open' | 'closed';
   state: OlympiadState;

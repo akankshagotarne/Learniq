@@ -31,6 +31,7 @@ const adminRoutes = require('./routes/admin');
 const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
+const engineeringRoutes = require('./routes/engineering');
 const certificateRoutes = require('./routes/certificates');
 const aiInterviewRoutes = require('./routes/aiInterviews');
 const proctoringRoutes = require('./routes/proctoring');
@@ -105,6 +106,7 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
+app.use('/api/engineering', engineeringRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/ai-interviews', aiInterviewRoutes);
 app.use('/api/proctoring', proctoringRoutes);
@@ -192,6 +194,10 @@ const startServer = async () => {
     require('./seed/seedOlympiadAll')({ ifMissing: true })
       .then(({ exams }) => exams.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`)))
       .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
+    // Make sure the free BE Engineering mock test exists (creates it only when missing; never overwrites admin changes)
+    require('./services/engineering').ensureEngineeringExam()
+      .then(({ exam, created, questionsAdded }) => console.log(`🎓 Engineering mock test ready: ${exam.title}${created ? ' (created)' : ''}${questionsAdded ? ` (+${questionsAdded} questions)` : ''}`))
+      .catch((err) => console.error('⚠️  Engineering exam seed skipped:', err.message));
     // Auto-link Olympiad exams to their teacher (e.g. Nikhil Sir) in production
     require('./scripts/backfillOlympiadTeacher').run({ apply: true, log: () => {} })
       .catch((err) => console.error('⚠️  Olympiad teacher backfill skipped:', err.message));

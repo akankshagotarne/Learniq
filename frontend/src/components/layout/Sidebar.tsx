@@ -51,6 +51,7 @@ const adminNav: NavItem[] = [
   { label: 'Live Sessions', href: '/admin/live', icon: Radio },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy },
+  { label: 'Engineering', href: '/admin/engineering', icon: GraduationCap },
   { label: 'Help & Support', href: '/admin/support', icon: HelpCircle },
   { label: 'About Page', href: '/about', icon: Building2 },
 ];

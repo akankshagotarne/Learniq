@@ -3,13 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Trophy, Clock, HelpCircle, Award, Calendar, IndianRupee, ArrowLeft, AlertCircle,
-  CheckCircle, Loader2, PlayCircle, ListChecks, ShieldCheck, Sparkles,
+  CheckCircle, Loader2, PlayCircle, ListChecks, ShieldCheck, Sparkles, GraduationCap, Hourglass, XCircle, RefreshCw,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadExam } from '../../types/olympiad';
 import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
 import { formatISTDateTime, formatRupees } from '../../utils/olympiadFormat';
+import EngineeringRequestForm from '../../components/olympiad/EngineeringRequestForm';
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex min-h-screen bg-page transition-colors">
@@ -96,7 +97,9 @@ const OlympiadExamPage: React.FC = () => {
     );
   }
 
-  const blocked = exam.state === 'upcoming' || exam.state === 'closed';
+  const blocked = exam.state === 'upcoming' || exam.state === 'closed' || exam.state === 'disabled';
+  const approval = exam.accessMode === 'approval';
+  const free = exam.fee <= 0;
 
   return (
     <Shell>
@@ -105,17 +108,17 @@ const OlympiadExamPage: React.FC = () => {
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#8B03ED] to-[#09ACEF]" />
         <div className="flex items-center gap-2 mb-2 mt-1">
           <span className="p-2 rounded-xl bg-[#FFC24B]/15 text-[#FFC24B]"><Trophy className="w-5 h-5" /></span>
-          <span className="text-xs font-bold uppercase tracking-wider text-[#6C63F2]">Olympiad · Standard {exam.standard}</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#6C63F2]">{approval ? `${exam.category || 'BE Engineering'} · Others` : `Olympiad · Standard ${exam.standard}`}</span>
         </div>
         <h1 className="font-heading font-bold text-xl sm:text-2xl text-text-primary">{exam.title}</h1>
-        <p className="text-sm text-text-secondary mt-1">Exam by {exam.conductedBy || 'Nikhil Sir'}</p>
+        <p className="text-sm text-text-secondary mt-1">{approval ? `Mock test by ${exam.conductedBy || 'LearnIQ'}` : `Exam by ${exam.conductedBy || 'Nikhil Sir'}`}</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-xs">
           {[
             { icon: HelpCircle, color: 'text-[#5AC8FA]', label: 'Questions', value: exam.totalQuestions },
             { icon: Award, color: 'text-[#FFC24B]', label: 'Total Marks', value: exam.totalMarks },
             { icon: Clock, color: 'text-brand-primary', label: 'Duration', value: `${exam.durationMinutes} mins` },
-            { icon: IndianRupee, color: 'text-[#4ADE9A]', label: 'Exam Fee', value: formatRupees(exam.fee) },
+            { icon: IndianRupee, color: 'text-[#4ADE9A]', label: 'Exam Fee', value: free ? 'FREE' : formatRupees(exam.fee) },
           ].map(item => (
             <div key={item.label} className="p-3 rounded-xl bg-surface-alt border border-border-subtle">
               <item.icon className={`w-4 h-4 mb-1 ${item.color}`} />
@@ -127,7 +130,9 @@ const OlympiadExamPage: React.FC = () => {
 
         <div className="mt-4 text-xs text-text-secondary flex items-start gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-brand-primary mt-0.5 flex-shrink-0" />
-          <span>Available from <b>{formatISTDateTime(exam.startDate)}</b> to <b>{formatISTDateTime(exam.endDate)}</b></span>
+          {approval
+            ? <span>Closes on <b data-testid="engineering-deadline">{formatISTDateTime(exam.endDate)}</b>. You must start before this time; an attempt still running at the closing time is submitted automatically.</span>
+            : <span>Available from <b>{formatISTDateTime(exam.startDate)}</b> to <b>{formatISTDateTime(exam.endDate)}</b></span>}
         </div>
       </div>
 
@@ -150,10 +155,41 @@ const OlympiadExamPage: React.FC = () => {
         </div>
       )}
 
+      {exam.state === 'pending' && (
+        <div className="card-soft p-4 rounded-2xl mb-6 flex items-start gap-3 border border-[#FFC24B]/40 bg-[#FFC24B]/10" data-testid="engineering-pending">
+          <Hourglass className="w-5 h-5 text-[#D97706] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-text-primary">Your request is waiting for administrator approval. You can start the test as soon as it is approved — check back here.</p>
+        </div>
+      )}
+
+      {exam.state === 'rejected' && (
+        <div className="card-soft p-4 rounded-2xl mb-6 flex items-start gap-3 border border-[#E1447A]/40 bg-[#E1447A]/10" data-testid="engineering-rejected">
+          <XCircle className="w-5 h-5 text-[#E1447A] flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-text-primary">
+            <p>Your request was not approved.</p>
+            {exam.access?.rejectionReason && <p className="mt-1 text-text-secondary">Reason: {exam.access.rejectionReason}</p>}
+            <p className="mt-1 text-text-secondary">If you think this is a mistake, please contact LearnIQ support.</p>
+          </div>
+        </div>
+      )}
+
+      {exam.state === 'request' && (
+        <div className="card-soft p-5 rounded-2xl mb-6 border border-[#6C63F2]/30" data-testid="engineering-request-card">
+          <h2 className="font-heading font-bold text-sm text-text-primary mb-1 flex items-center gap-2">
+            <GraduationCap className="w-4 h-4 text-brand-primary" /> Request to Join
+          </h2>
+          <p className="text-xs text-text-secondary mb-4">This test is free. Tell us a little about yourself; once an administrator approves your request you can start the test.</p>
+          {exam.access?.status === 'REJECTED' && exam.access.canResubmit && (
+            <p className="text-xs text-[#D97706] mb-3 flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> An administrator reopened your request — you can update your details and send it again.</p>
+          )}
+          <EngineeringRequestForm initial={exam.access?.details} onSubmitted={load} />
+        </div>
+      )}
+
       {exam.state === 'ready' && (
         <div className="card-soft p-4 rounded-2xl mb-6 flex items-start gap-3 border border-[#4ADE9A]/40 bg-[#4ADE9A]/10">
           <CheckCircle className="w-5 h-5 text-[#4ADE9A] flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-text-primary">Payment verified. Read the instructions below and start when you are ready. You have one attempt.</p>
+          <p className="text-sm text-text-primary">{approval ? 'Approved. ' : 'Payment verified. '} Read the instructions below and start when you are ready. You have one attempt.</p>
         </div>
       )}
 
@@ -243,8 +279,11 @@ const OlympiadExamPage: React.FC = () => {
 
         {blocked && (
           <button disabled className="w-full sm:w-auto py-3 px-6 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm font-semibold cursor-not-allowed">
-            {exam.state === 'upcoming' ? 'Exam Not Started Yet' : 'Registration Closed'}
+            {exam.state === 'upcoming' ? 'Exam Not Started Yet' : exam.state === 'disabled' ? 'Access Paused' : approval ? 'Exam Closed' : 'Registration Closed'}
           </button>
+        )}
+        {(exam.state === 'request' || exam.state === 'pending' || exam.state === 'rejected') && (
+          <p className="text-xs text-text-muted">The Start button appears here after your request is approved.</p>
         )}
       </div>
     </Shell>
