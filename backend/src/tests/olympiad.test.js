@@ -351,6 +351,25 @@ test('create order: amount comes from the server (₹20 = 2000 paise), client ca
   S.orderA = r.body.order;
 });
 
+test('an open order created at the old ₹1 fee is retired; the student gets a fresh ₹20 (2000 paise) order', async () => {
+  const T = await mkUser({ standard: 10 });
+  const old = await M.OlympiadPayment.create({
+    student: T.user._id, exam: S.exam._id, amount: 1, currency: 'INR', status: 'PENDING', razorpayOrderId: 'order_OLD_ONE_RUPEE',
+  });
+  const r = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: T.token });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.order.amount, 2000);
+  assert.notEqual(r.body.order.id, 'order_OLD_ONE_RUPEE');
+  assert.equal(rzp.createdOrders.at(-1).amount, 2000);
+  const oldAfter = await M.OlympiadPayment.findById(old._id);
+  assert.equal(oldAfter.status, 'FAILED');
+  assert.equal(oldAfter.failureReason, 'SUPERSEDED_BY_FEE_CHANGE');
+  assert.equal(oldAfter.amount, 1, 'the historical record keeps its amount');
+  const open = await M.OlympiadPayment.find({ student: T.user._id, exam: S.exam._id, status: 'PENDING' });
+  assert.equal(open.length, 1);
+  assert.equal(open[0].amount, 20);
+});
+
 test('duplicate / parallel "Pay" clicks reuse the same open order (idempotent)', async () => {
   const results = await Promise.all(Array.from({ length: 5 }, () => api('POST', `/exams/${S.exam._id}/payment/order`, { token: S.A.token })));
   for (const r of results) { assert.equal(r.status, 200, r.text); assert.equal(r.body.order.id, S.orderA.id); }
@@ -813,7 +832,7 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
   const b = await seed();
   assert.equal(String(a._id), String(b._id));
   assert.equal(await M.OlympiadQuestion.countDocuments({ exam: a._id }), 60);
-  assert.equal(a.fee, 1);
+  assert.equal(a.fee, 20);
   assert.equal(a.startDate.toISOString(), '2026-09-28T18:30:00.000Z');
   assert.equal(a.endDate.toISOString(), '2026-10-15T18:29:59.999Z');
 });
@@ -845,7 +864,7 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     const e = r.body.exams[0];
     assert.equal(e.standard, std);
     assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026');
-    assert.equal(e.fee, 1);
+    assert.equal(e.fee, 20);
     assert.equal(e.totalQuestions, QUESTIONS_IN(std));
     assert.equal(e.totalMarks, QUESTIONS_IN(std));
     assert.equal(e.durationMinutes, 60);

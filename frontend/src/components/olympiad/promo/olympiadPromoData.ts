@@ -140,7 +140,7 @@ export const OLYMPIAD_PROMO_STANDARDS: OlympiadPromoStandard[] = Array.from({ le
 });
 
 export const OLYMPIAD_PROMO = {
-  fee: 1,
+  fee: 20,
   dates: '1–5 October 2026',
   durationMinutes: 60,
   autoplayMs: 6000,

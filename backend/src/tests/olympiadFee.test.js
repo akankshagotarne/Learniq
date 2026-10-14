@@ -1,5 +1,5 @@
 /**
- * The Olympiad fee is ₹1 for now. The server charges the fee stored on the exam record, so these tests cover:
+ * The Olympiad fee is ₹20 (it was ₹1). The server charges the fee stored on the exam record, so these tests cover:
  * the configured/seeded default, the fee script (dry run writes nothing, --apply changes only `fee`),
  * and that payments already made keep the amount that was charged.
  */
@@ -31,9 +31,13 @@ const { OLYMPIAD_FEE, configFor, STANDARDS } = require('../seed/olympiadConfigs'
 const { run } = require('../scripts/setOlympiadFee');
 const silent = { log: () => {} };
 
-test('configured fee is ₹1 for every standard', () => {
-  assert.equal(OLYMPIAD_FEE, 1);
-  for (const std of STANDARDS) assert.equal(configFor(std).fee, 1, `std ${std}`);
+test('configured fee is ₹20 (2000 paise) for every standard 1–10', () => {
+  assert.equal(OLYMPIAD_FEE, 20);
+  assert.deepEqual(STANDARDS, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  for (const std of STANDARDS) {
+    assert.equal(configFor(std).fee, 20, `std ${std}`);
+    assert.equal(Math.round(configFor(std).fee * 100), 2000, `std ${std} paise`);
+  }
 });
 
 test('fee script: dry run writes nothing; --apply changes only the fee; a second run changes nothing; payments keep their amount', async () => {
@@ -42,20 +46,20 @@ test('fee script: dry run writes nothing; --apply changes only the fee; a second
     currency: 'INR', durationMinutes: 60, totalQuestions: 60, totalMarks: 60, isPublished: true,
     startDate: new Date(Date.now() - 3600e3), endDate: new Date(Date.now() + 86400e3),
   });
-  const a = await mk(5, 20); const b = await mk(6, 20); await mk(7, 1);
-  const paid = await fake.OlympiadPayment.create({ student: 'stu1', exam: a._id, amount: 20, status: 'SUCCESS', razorpayOrderId: 'order_x' });
+  const a = await mk(5, 1); const b = await mk(6, 1); await mk(7, 20);
+  const paid = await fake.OlympiadPayment.create({ student: 'stu1', exam: a._id, amount: 1, status: 'SUCCESS', razorpayOrderId: 'order_x' });
 
   const dry = await run({ apply: false, ...silent });
   assert.equal(dry.changed, 0);
-  assert.equal(fake.OlympiadExam.docs.filter((e) => e.fee === 20).length, 2, 'dry run writes nothing');
+  assert.equal(fake.OlympiadExam.docs.filter((e) => e.fee === 1).length, 2, 'dry run writes nothing');
 
   const applied = await run({ apply: true, ...silent });
   assert.equal(applied.changed, 2);
-  assert.deepEqual([...new Set(fake.OlympiadExam.docs.map((e) => e.fee))], [1]);
+  assert.deepEqual([...new Set(fake.OlympiadExam.docs.map((e) => e.fee))], [20]);
   assert.equal(fake.OlympiadExam.docs.find((e) => String(e._id) === String(b._id)).title, 'LearnIQ – All India Olympiad Examination 2026');
 
   const p = fake.OlympiadPayment.docs.find((x) => String(x._id) === String(paid._id));
-  assert.equal(p.amount, 20, 'a payment already made keeps the amount that was charged');
+  assert.equal(p.amount, 1, 'a payment already made at ₹1 keeps the amount that was charged');
   assert.equal(p.status, 'SUCCESS');
 
   const again = await run({ apply: true, ...silent });

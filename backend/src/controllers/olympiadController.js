@@ -485,6 +485,17 @@ const createOrder = handler(async (req, res) => {
 
   // One open order per student+exam: refresh / double-click / retry all get the same order back.
   let payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'PENDING' });
+  // An open order created at an older fee (e.g. the former ₹1) must never be handed out again: Razorpay fixes the
+  // amount at order creation, so reusing it would let the student pay the old price. Close it (kept for audit, and
+  // still eligible for the reconciler's late-capture re-checks in case it was paid) and open a fresh order below.
+  if (payment && Math.round(payment.amount * 100) !== Math.round(exam.fee * 100)) {
+    const closedAt = new Date();
+    await OlympiadPayment.updateOne(
+      { _id: payment._id, status: 'PENDING' },
+      { $set: { status: 'FAILED', failureReason: 'SUPERSEDED_BY_FEE_CHANGE', failedBy: 'reconciler', reconciledAt: closedAt, lateChecks: 0, reconcileNextAt: new Date(closedAt.getTime() + 10 * 60e3) } }
+    );
+    payment = null;
+  }
   let createdPlaceholder = false;
   if (!payment) {
     try {

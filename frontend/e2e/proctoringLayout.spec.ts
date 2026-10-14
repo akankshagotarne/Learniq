@@ -189,7 +189,7 @@ for (const vp of VIEWPORTS) {
 async function setupProctoredOlympiad(page: Page, server: MockProctorServer) {
   await mockApi(page, 'student', (method, path) => {
     if (method === 'GET' && path === '/olympiad/exams/oly-ready') {
-      return { body: { success: true, exam: { _id: 'oly-ready', title: 'LearnIQ – All India Olympiad Examination (Std 9)', standard: 9, durationMinutes: 60, totalQuestions: 60, totalMarks: 60, fee: 1, state: 'ready', paymentStatus: 'SUCCESS', attemptStatus: 'NOT_STARTED', startDate: new Date(Date.now() - 864e5).toISOString(), endDate: new Date(Date.now() + 864e5).toISOString(), instructions: [], proctoring: server.policy } } };
+      return { body: { success: true, exam: { _id: 'oly-ready', title: 'LearnIQ – All India Olympiad Examination (Std 9)', standard: 9, durationMinutes: 60, totalQuestions: 60, totalMarks: 60, fee: 20, state: 'ready', paymentStatus: 'SUCCESS', attemptStatus: 'NOT_STARTED', startDate: new Date(Date.now() - 864e5).toISOString(), endDate: new Date(Date.now() + 864e5).toISOString(), instructions: [], proctoring: server.policy } } };
     }
     if (method === 'GET' && path === '/proctoring/olympiad/oly-ready/eligibility') return { body: { success: true, eligible: true, resume: false, proctoring: server.policy } };
     if (method === 'POST' && path === '/proctoring/olympiad/oly-ready/session') { server.sessionOpen = true; return { status: 201, body: { success: true, resumed: false, state: server.state() } }; }
