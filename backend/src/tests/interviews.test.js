@@ -26,6 +26,7 @@ const SRC = path.join(__dirname, '..');
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,

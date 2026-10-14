@@ -7,6 +7,7 @@ const { Company, Notification } = require('../models/index');
 const { getPaymentStats, listPayments } = require('../services/paymentStats');
 const supportCtrl = require('../controllers/supportController');
 const profileCtrl = require('../controllers/adminProfileController');
+const examAccessCtrl = require('../controllers/examAccessController');
 
 const adminAuth = [protect, authorize('admin')];
 
@@ -25,6 +26,10 @@ router.delete('/users/:id', ...adminAuth, profileCtrl.requireObjectId, userCtrl.
 
 // Profile pages (read-only, allow-listed fields) and the "send password reset" action — never a password
 router.get('/students/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getStudentProfile);
+// Exam exceptions (admin only): exceptional access for ONE student + ONE exam, and a reset of ONE attempt - both audited
+router.get('/students/:id/exam-access', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.overview);
+router.post('/students/:id/exam-access/grant', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.grant);
+router.post('/students/:id/exam-access/reset', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.reset);
 router.get('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getTeacherProfile);
 router.post('/users/:id/send-password-reset', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.sendPasswordReset);
 

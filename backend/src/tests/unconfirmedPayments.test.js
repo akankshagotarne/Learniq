@@ -45,6 +45,7 @@ const razorpay = {
 };
 
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => razorpay },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,

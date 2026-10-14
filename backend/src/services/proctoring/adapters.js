@@ -125,7 +125,7 @@ const olympiadAdapter = {
         await o.resolveAccess(exam, user);
         return { eligible: true, resume: false, exam };
       }
-      const paid = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS' });
+      const paid = (await require('../examAccess').entitlementFor(user._id, exam._id)).entitled; // verified payment OR an administrator exception
       if (!paid) return { eligible: false, code: 'PAYMENT_REQUIRED', message: `Please complete the ₹${exam.fee} payment before starting the examination.`, exam };
       return { eligible: true, resume: false, exam };
     } catch (err) {

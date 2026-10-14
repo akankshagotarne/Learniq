@@ -31,6 +31,7 @@ const SRC = path.join(__dirname, '..');
 
 // Set module overrides to fakeDb
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels,
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
