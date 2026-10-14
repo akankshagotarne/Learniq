@@ -181,6 +181,8 @@ export const interviewApi = {
   approve: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/approve`)).data.interview,
   rejectJoin: async (id: string, reason?: string): Promise<InterviewView> => (await api.post(`${base}/${id}/reject-join`, { reason })).data.interview,
   release: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/release`)).data.interview,
+  /** the interview never ran (student has not joined): cancel the waiting session - no evaluation, never COMPLETED */
+  closeWaiting: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/close-waiting`)).data.interview,
   end: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/end`)).data.interview,
   getEvaluation: async (id: string): Promise<{ criteria: Criterion[]; maxMarks: number; interviewStatus: InterviewStatus; evaluation: EvaluationView | null }> => (await api.get(`${base}/${id}/evaluation`)).data,
   saveDraft: async (id: string, body: EvaluationPayload): Promise<EvaluationView> => (await api.put(`${base}/${id}/evaluation`, body)).data.evaluation,

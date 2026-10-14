@@ -8,7 +8,7 @@ import path from 'node:path';
  * separate rooms; ending the interview closes the call for the student. It does NOT prove quality over real networks
  * (no TURN, no packet loss) or behaviour on physical webcams / Safari / mobile browsers.
  */
-type Fixture = { base: string; examId: string; teacher: { token: string }; teacher2: { token: string }; student: { token: string }; student2: { token: string }; student3: { token: string } };
+type Fixture = { base: string; examId: string; teacher: { token: string }; teacher2: { token: string }; student: { token: string }; student2: { token: string }; student3: { token: string }; student4: { token: string } };
 let harness: ChildProcess; let fx: Fixture;
 
 test.beforeAll(async () => {
@@ -111,6 +111,36 @@ test('request → teacher Accepts in the UI → both in the room with live video
   await student.goto('/student/interview-results');
   await expect(student.getByTestId('result-total')).toContainText('40/50');
   await expect(student.getByText('Clear and confident.')).toBeVisible();
+  await sCtx.close(); await tCtx.close();
+});
+
+test('student never joins: the teacher closes the WAITING session in the UI - cancelled (not completed), camera released, no evaluation, student told', async ({ browser }) => {
+  const id = await requestInterview(fx.student4.token); await accept(fx.teacher.token, id);
+  const tCtx = await browser.newContext();
+  await tCtx.addInitScript(() => { const w = window as any; w.__streams = []; const md = navigator.mediaDevices; const o = md.getUserMedia.bind(md); md.getUserMedia = (c?: MediaStreamConstraints) => o(c).then((s) => { w.__streams.push(s); return s; }); });
+  const teacher = await openAs(tCtx, fx.teacher.token, `/teacher/interview/${id}`);
+  await expect(teacher.getByTestId('interview-room')).toHaveAttribute('data-phase', 'waiting-peer', { timeout: 20_000 });
+  await expect(teacher.getByTestId('end-interview')).toHaveCount(0);            // nothing promises an evaluation for an interview that never ran
+  // End & Evaluate really is refused for a session that never ran (the backend is the authority)
+  expect((await call('POST', `/${id}/end`, fx.teacher.token)).status).toBe(409);
+  await teacher.getByTestId('close-waiting').click();
+  await expect(teacher.getByTestId('close-waiting-dialog')).toContainText('The student has not joined yet');
+  await teacher.getByTestId('keep-waiting').click();
+  await expect(teacher.getByTestId('close-waiting-dialog')).toHaveCount(0);      // Keep Waiting changes nothing
+  expect((await call('GET', `/${id}`, fx.teacher.token)).json.interview.status).toBe('APPROVED');
+  await teacher.getByTestId('close-waiting').click();
+  await teacher.getByTestId('confirm-close-waiting').click();
+  await expect(teacher).toHaveURL(/\/teacher\/interview$/, { timeout: 15_000 }); // back on the dashboard
+  await expect.poll(() => teacher.evaluate(() => ((window as any).__streams as MediaStream[]).reduce((n, s) => n + s.getTracks().filter((t) => t.readyState === 'live').length, 0))).toBe(0);
+  const d = (await call('GET', `/${id}`, fx.teacher.token)).json.interview;
+  expect(d.status).toBe('CANCELLED'); expect(d.endReason).toBe('TEACHER_CLOSED_BEFORE_START'); expect(d.startedAt).toBeUndefined();
+  expect((await call('GET', `/${id}/evaluation`, fx.teacher.token)).json.evaluation ?? null).toBeNull();
+  // the student's page shows the closed session, not an active waiting room, and no room
+  const sCtx = await browser.newContext(); const student = await openAs(sCtx, fx.student4.token, `/student/interview/${id}`);
+  await expect(student.getByTestId('interview-status')).toHaveText('Request Cancelled');
+  await expect(student.getByTestId('interview-hint')).toContainText('closed this session before you joined');
+  await expect(student.getByTestId('interview-room')).toHaveCount(0);
+  expect((await call('POST', `/${id}/room-access`, fx.student4.token)).status).toBe(409);
   await sCtx.close(); await tCtx.close();
 });
 

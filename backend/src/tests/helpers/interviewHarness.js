@@ -66,8 +66,9 @@ const { Server } = require('socket.io');
   const student = await mk('student', 'Student One', { currentStandard: 9 });
   const student2 = await mk('student', 'Student Two', { currentStandard: 9 });
   const student3 = await mk('student', 'Student Three', { currentStandard: 9 });
+  const student4 = await mk('student', 'Student Four', { currentStandard: 9 });
   const exam = await fake.OlympiadExam.create({ title: 'Olympiad Std 9', slug: 'oly-9', standard: 9, examType: 'olympiad', fee: 20, currency: 'INR', isPublished: true, durationMinutes: 60 });
-  for (const s of [student, student2, student3]) {
+  for (const s of [student, student2, student3, student4]) {
     const p = await fake.OlympiadPayment.create({ student: s._id, exam: exam._id, amount: 20, currency: 'INR', status: 'SUCCESS', razorpayOrderId: `order_${s._id}` });
     await fake.OlympiadAttempt.create({ student: s._id, exam: exam._id, payment: p._id, status: 'COMPLETED', startedAt: new Date(Date.now() - 3600e3), deadline: new Date(Date.now() + 3600e3), submittedAt: new Date(), submissionType: 'MANUAL', score: 0 });
   }
@@ -80,5 +81,6 @@ const { Server } = require('socket.io');
     student: { id: String(student._id), token: fake.sessionToken(student) },
     student2: { id: String(student2._id), token: fake.sessionToken(student2) },
     student3: { id: String(student3._id), token: fake.sessionToken(student3) },
+    student4: { id: String(student4._id), token: fake.sessionToken(student4) },
   }));
 })().catch((e) => { console.error(e); process.exit(1); });
