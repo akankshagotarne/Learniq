@@ -1111,3 +1111,130 @@ test('T8 completed / cancelled interviews cannot be restarted by a teacher; a re
   assert.equal(ivDoc(iv._id).status, 'CANCELLED');
   const again = await requestFor(s); assert.equal(again.status, 'REQUESTED'); assert.notEqual(again._id, iv._id);
 });
+
+// ═════════════════ closing a waiting session (the interview never ran) vs ending a running one ═════════════════
+const approvedFor = async (t, st) => { const iv = await requestFor(st); await api('POST', `/${iv._id}/accept`, { token: t.token }); return iv; };
+const close = (t, id) => api('POST', `/${id}/close-waiting`, { token: t.token });
+
+test('C1 the teacher closes an approved session before the student joined: CANCELLED, no evaluation, slot freed, student told, not completed', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' });
+  const iv = await approvedFor(t, s);
+  assert.equal((await api('POST', `/${iv._id}/end`, { token: t.token })).status, 409, 'End & Evaluate is (still) only for a running interview');
+  const seen = []; const onChanged = ({ interview }) => seen.push(interview.status); svc.events.on('changed', onChanged);
+  const r = await close(t, iv._id);
+  svc.events.off('changed', onChanged);
+  assert.equal(r.status, 200); assert.equal(r.body.interview.status, 'CANCELLED');
+  const d = ivDoc(iv._id);
+  assert.equal(d.status, 'CANCELLED'); assert.equal(d.endReason, svc.CLOSED_BEFORE_START); assert.equal(d.endedBy, 'teacher');
+  assert.equal(d.startedAt, undefined, 'it never started'); assert.ok(d.endedAt);
+  assert.equal(d.holdsTeacherSlot, false); assert.equal(d.isOpen, false); assert.equal(d.teacherPresent, false);
+  assert.ok(d.audit.some((a) => a.action === 'CLOSED_BEFORE_START' && a.role === 'teacher' && String(a.by) === String(t.user._id) && a.at));
+  assert.deepEqual(seen, ['CANCELLED'], 'a change event reaches the student / dashboard');
+  assert.equal(M.InterviewEvaluation.docs.filter((e) => String(e.interview) === String(iv._id)).length, 0, 'no fake evaluation');
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: s.token })).status, 409, 'the student cannot enter a closed session');
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: t.token })).status, 409);
+  assert.equal((await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } })).status === 200, false, 'a never-run interview can not be evaluated into completion');
+  assert.notEqual(ivDoc(iv._id).status, 'COMPLETED');
+  // the teacher is free: she can accept another student straight away
+  const s2 = await submittedStudent();
+  assert.equal((await acceptFor(t, s2)).status, 200);
+  // the student sees the cancellation (reason included) and may make a NEW request; nothing was auto-created
+  assert.equal(M.TeacherInterview.docs.filter((x) => String(x.student) === String(s.user._id) && x.isOpen).length, 0);
+  const view = (await api('GET', `/${iv._id}`, { token: s.token })).body; assert.equal(view.interview.status, 'CANCELLED'); assert.equal(view.interview.endReason, svc.CLOSED_BEFORE_START);
+  const again = await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } });
+  assert.equal(again.status, 201); assert.equal(again.body.interview.status, 'REQUESTED'); assert.notEqual(again.body.interview._id, iv._id);
+});
+
+test('C1b the teacher can also close a session that is still waiting for the join approval or for the student to connect', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' }); const s2 = await submittedStudent(); const t2 = await mkUser({ role: 'teacher' });
+  const a = (await assignFor(t, s)).body.interview; await api('POST', `/${a._id}/join-request`, { token: s.token });
+  assert.equal(ivDoc(a._id).status, 'WAITING_FOR_APPROVAL'); assert.equal((await close(t, a._id)).status, 200);
+  const b = await approvedFor(t2, s2); await svc.setPresence(b._id, 'student', true);
+  assert.equal(ivDoc(b._id).status, 'CONNECTING'); assert.equal((await close(t2, b._id)).status, 200, 'media never connected: nothing ran');
+  assert.equal(ivDoc(b._id).studentPresent, false);
+});
+
+test('C2 a running interview is NOT closable as a waiting session; End & Evaluate keeps working and completion still needs the evaluation', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' });
+  const iv = await approvedFor(t, s);
+  await svc.setPresence(iv._id, 'teacher', true); await svc.setPresence(iv._id, 'student', true); await svc.markConnected(iv._id);
+  assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS');
+  const r = await close(t, iv._id); assert.equal(r.status, 409); assert.equal(r.body.code, 'RUNNING');
+  assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS', 'untouched');
+  const end = await api('POST', `/${iv._id}/end`, { token: t.token }); assert.equal(end.status, 200); assert.equal(end.body.interview.status, 'EVALUATION_PENDING');
+  assert.equal((await close(t, iv._id)).status, 409, 'an interview waiting for its evaluation cannot be closed away');
+  assert.equal(ivDoc(iv._id).status, 'EVALUATION_PENDING');
+  const sub = await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } });
+  assert.equal(sub.status, 200); assert.equal(sub.body.interview.status, 'COMPLETED');
+});
+
+test('C3 a completed interview cannot be closed, cancelled or reopened through the waiting-session action', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' });
+  const iv = await approvedFor(t, s);
+  await svc.setPresence(iv._id, 'teacher', true); await svc.setPresence(iv._id, 'student', true); await svc.markConnected(iv._id);
+  await api('POST', `/${iv._id}/end`, { token: t.token }); await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } });
+  const before = JSON.stringify(ivDoc(iv._id));
+  const r = await close(t, iv._id); assert.equal(r.status, 409);
+  assert.equal(ivDoc(iv._id).status, 'COMPLETED'); assert.equal(JSON.stringify(ivDoc(iv._id)), before, 'nothing changed');
+  assert.equal(M.InterviewEvaluation.docs.filter((e) => String(e.interview) === String(iv._id) && e.state === 'SUBMITTED').length, 1, 'the submitted evaluation is intact');
+  assert.equal((await api('POST', `/${iv._id}/accept`, { token: t.token })).status === 200, false, 'and it cannot be reopened');
+});
+
+test('C4 authorisation: only the assigned teacher; students, other teachers, admins-by-this-route, anonymous and unknown ids are refused', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' }); const other = await mkUser({ role: 'teacher' }); const stranger = await submittedStudent(); const admin = await mkUser({ role: 'admin' });
+  const unapproved = await mkUser({ role: 'teacher', approved: false });
+  const iv = await approvedFor(t, s);
+  assert.equal((await api('POST', `/${iv._id}/close-waiting`, { token: s.token })).status, 403, 'the student cannot close the teacher session');
+  assert.equal((await api('POST', `/${iv._id}/close-waiting`, { token: stranger.token })).status, 403);
+  assert.equal((await close(other, iv._id)).status, 403, "another teacher cannot close this teacher's session");
+  assert.equal((await close(unapproved, iv._id)).status === 200, false);
+  assert.equal((await api('POST', `/${iv._id}/close-waiting`, { token: admin.token })).status, 403);
+  assert.equal((await api('POST', `/${iv._id}/close-waiting`)).status, 401);
+  assert.equal((await close(t, '64b0000000000000000000ee')).status, 404); assert.equal((await close(t, 'nope')).status, 404);
+  assert.equal(ivDoc(iv._id).status, 'APPROVED', 'untouched by every refused attempt');
+  // a REQUESTED (not yet accepted) interview has no teacher, so nobody can "close" it as a waiting session
+  const s3 = await submittedStudent(); const pending = await requestFor(s3);
+  assert.equal((await close(t, pending._id)).status, 403); assert.equal(ivDoc(pending._id).status, 'REQUESTED');
+});
+
+test('C5 double / stale / simultaneous actions leave exactly one consistent record', async () => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' });
+  const iv = await approvedFor(t, s);
+  const res = await Promise.all([close(t, iv._id), close(t, iv._id), close(t, iv._id)]);
+  assert.ok(res.every((r) => r.status === 200 && r.body.interview.status === 'CANCELLED'));
+  assert.equal(ivDoc(iv._id).audit.filter((a) => a.action === 'CLOSED_BEFORE_START').length, 1, 'one closure in the audit trail');
+  assert.equal((await api('POST', `/${iv._id}/end`, { token: t.token })).status, 409, 'a stale End click cannot revive it');
+  assert.equal((await api('POST', `/${iv._id}/approve`, { token: t.token })).status, 409);
+  assert.equal((await api('POST', `/${iv._id}/accept`, { token: t.token })).status === 200, false, 'a stale accept cannot reopen the cancelled interview');
+  assert.equal(ivDoc(iv._id).status, 'CANCELLED');
+  // the student joining at the very same moment: exactly one outcome
+  const s2 = await submittedStudent(); const t2 = await mkUser({ role: 'teacher' }); const iv2 = await approvedFor(t2, s2);
+  await Promise.all([close(t2, iv2._id), svc.setPresence(iv2._id, 'student', true)]);
+  const st = ivDoc(iv2._id).status; assert.ok(['CANCELLED', 'CONNECTING'].includes(st));
+  if (st === 'CANCELLED') assert.equal(ivDoc(iv2._id).holdsTeacherSlot, false);
+});
+
+test('C6 closing one waiting session leaves another teacher\'s running interview untouched', async () => {
+  M.TeacherInterview.docs = [];
+  const [s1, s2] = [await submittedStudent(), await submittedStudent()]; const [t1, t2] = [await mkUser({ role: 'teacher' }), await mkUser({ role: 'teacher' })];
+  const a = await approvedFor(t1, s1); const b = await approvedFor(t2, s2);
+  await svc.setPresence(b._id, 'teacher', true); await svc.setPresence(b._id, 'student', true); await svc.markConnected(b._id);
+  assert.equal((await close(t1, a._id)).status, 200);
+  assert.equal(ivDoc(b._id).status, 'IN_PROGRESS'); assert.equal(ivDoc(b._id).teacherPresent, true); assert.equal(ivDoc(b._id).studentPresent, true);
+  assert.equal((await api('POST', `/${b._id}/room-access`, { token: s2.token })).status, 200);
+  assert.equal((await close(t1, b._id)).status, 403, 'and t1 cannot touch it');
+});
+
+test('C7 admin can tell a closed-before-start interview from a conducted one', async () => {
+  M.TeacherInterview.docs = [];
+  const admin = await mkUser({ role: 'admin' }); const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' });
+  const iv = await approvedFor(t, s); await close(t, iv._id);
+  const row = (await api('GET', '/admin/list', { token: admin.token })).body.interviews.find((r) => r._id === String(iv._id));
+  assert.equal(row.status, 'CANCELLED'); assert.equal(row.endReason, svc.CLOSED_BEFORE_START); assert.equal(row.startedAt, null); assert.equal(row.evaluation, null);
+});

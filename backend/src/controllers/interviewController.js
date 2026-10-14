@@ -66,6 +66,10 @@ const teacherStart = handler(async (req, res) => {
   res.json({ success: true, interview: svc.view(await svc.teacherStart(req.user, { studentId, examId, interviewId })) });
 });
 
+const closeWaiting = handler(async (req, res) => {
+  res.json({ success: true, interview: svc.view(await svc.teacherCloseWaiting(req.user, req.params.id)) });
+});
+
 const approve = handler(async (req, res) => {
   res.json({ success: true, interview: svc.view(await svc.teacherApprove(req.user, req.params.id)) });
 });
@@ -144,6 +148,6 @@ const adminExport = handler(async (req, res) => {
 
 module.exports = {
   myOverview, eligibility, requestInterview, joinRequest, detail, roomAccess, cancel,
-  directory, studentDetails, teacherStart, accept, approve, rejectJoin, release, end, getEvaluation, saveDraft, submitEvaluation, myResults, adminCorrect,
+  directory, studentDetails, teacherStart, closeWaiting, accept, approve, rejectJoin, release, end, getEvaluation, saveDraft, submitEvaluation, myResults, adminCorrect,
   adminStats, adminList, adminDetail, adminAssign, adminRecover, adminSettings, adminUpdateSettings, adminExport,
 };

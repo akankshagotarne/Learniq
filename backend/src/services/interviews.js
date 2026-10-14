@@ -305,6 +305,29 @@ const teacherEnd = async (teacher, id) => {
   return next;
 };
 
+/** how a session that never ran was closed (stored in endReason + the audit trail, so admins can tell it from a conducted interview) */
+const CLOSED_BEFORE_START = 'TEACHER_CLOSED_BEFORE_START';
+/**
+ * The teacher closes an approved session in which the interview NEVER RAN (student has not joined / media never connected).
+ * It is a cancellation, not a completion: no evaluation is required or created, the status becomes CANCELLED (startedAt stays
+ * empty), the teacher's slot is released and the student's waiting screen is told through the normal 'changed' event.
+ * A running interview (IN_PROGRESS) is refused here - it must go through End & Evaluate - and so is anything already finished.
+ */
+const teacherCloseWaiting = async (teacher, id) => {
+  const iv = await load(id);
+  assertAssignedTeacher(iv, teacher);
+  if (iv.status === 'CANCELLED' && iv.endReason === CLOSED_BEFORE_START) return iv; // repeated click / retry: already closed, harmless
+  if (iv.status === 'IN_PROGRESS') throw new InterviewError(409, 'This interview is already running. End it and evaluate instead.', 'RUNNING', { status: iv.status });
+  const next = await finish(
+    iv,
+    { teacher: teacher._id, status: { $in: ['ASSIGNED', 'WAITING_FOR_APPROVAL', 'APPROVED', 'CONNECTING'] }, startedAt: { $exists: false } },
+    { status: 'CANCELLED', by: teacher._id, role: 'teacher', action: 'CLOSED_BEFORE_START', reason: CLOSED_BEFORE_START }
+  );
+  if (!next) throw await conflict(iv._id, 'This interview can no longer be closed as a waiting session.', 'INVALID_STATE');
+  emitChanged(next);
+  return next;
+};
+
 // ── evaluation (default five criteria, server-side validation and totals) ─────────────────────────
 const TEXT_MAX = 1500;
 const cleanText = (v) => (typeof v === 'string' ? v.trim().slice(0, TEXT_MAX) : '');
@@ -996,7 +1019,7 @@ module.exports = {
   InterviewError, events, isValidId, oid, same,
   getSettings, setRequestsEnabled, checkEligibility,
   requestInterview, studentJoinRequest, cancel,
-  cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd,
+  cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
   getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,
