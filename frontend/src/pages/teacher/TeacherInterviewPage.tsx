@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Loader2, Search, Video } from 'lucide-react';
+import { Clock, Loader2, Search, Video } from 'lucide-react';
 import StudentDetailsDrawer from '../../components/interview/StudentDetailsDrawer';
 import Sidebar from '../../components/layout/Sidebar';
 import { fmtDateTime, staffStatusLabel, statusTone } from '../../components/interview/interviewLabels';
@@ -35,7 +35,6 @@ const TeacherInterviewPage: React.FC = () => {
     catch (e) { toast.error(interviewErrorMessage(e)); load(); }
     finally { setBusyKey(null); }
   };
-  const start = (row: DirectoryRow) => go(row, () => interviewApi.start({ studentId: row.student._id, examId: row.exam._id, interviewId: row.interview?._id }));
   const accept = (row: DirectoryRow) => go(row, () => interviewApi.accept(row.interview!._id));
 
   const action = (row: DirectoryRow) => {
@@ -58,12 +57,8 @@ const TeacherInterviewPage: React.FC = () => {
       );
     }
     if (s === 'NONE' || s === 'CANCELLED' || s === 'FAILED') {
-      return (
-        <button type="button" disabled={busy || blocked} title={blocked ? 'Finish your current interview first.' : undefined} onClick={() => start(row)}
-          className="bg-surface-alt border border-border-subtle text-text-primary min-h-[44px] px-4 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60" data-testid="interview-start-row">
-          <Video className="w-3.5 h-3.5" /> Start Interview
-        </button>
-      );
+      // only the STUDENT can start the process (Exams page -> Start Interview). The teacher has no way to create, approve or enter it.
+      return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted bg-surface-alt border border-border-subtle rounded-xl px-3 min-h-[44px]" data-testid="interview-waiting-student" aria-disabled="true"><Clock className="w-3.5 h-3.5" aria-hidden="true" /> Waiting for Student Request</span>;
     }
     if (s === 'COMPLETED') return <span className="text-xs text-text-muted">Completed</span>;
     return <span className="text-xs text-text-muted">With {row.assignedTeacher?.name || 'another teacher'}</span>;

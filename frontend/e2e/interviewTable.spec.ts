@@ -126,7 +126,8 @@ test('switching students never shows stale data; a failed load shows an error wi
 
 test('actions still follow the status rules and the name click never triggers them', async ({ page }) => {
   const t = await open(page);
-  await expect(page.locator('[data-testid="interview-start-row"]:visible')).toHaveCount(1);
+  await expect(page.locator('[data-testid="interview-waiting-student"]:visible')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Start Interview/ })).toHaveCount(0); // the teacher has no Start Interview button at all
   await expect(page.locator('[data-testid="interview-accept"]:visible')).toHaveCount(1);
   await expect(page.getByText('With Kruti Mam').and(page.locator(':visible'))).toBeVisible();
   await expect(page.locator('[data-testid="interview-row"]:visible', { hasText: 'Meera Shah' })).toContainText('Completed');
