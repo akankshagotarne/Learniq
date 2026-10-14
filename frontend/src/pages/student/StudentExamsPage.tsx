@@ -13,6 +13,7 @@ import { olympiadApi } from '../../services/olympiad';
 import { interviewApi, interviewErrorMessage, StudentExamInterview } from '../../services/interview';
 import { useInterviewLive } from '../../hooks/useInterviewLive';
 import toast from 'react-hot-toast';
+import { olympiadTab } from '../../utils/examTabs';
 import { OlympiadExam } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
 import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
@@ -100,9 +101,10 @@ const StudentExamsPage: React.FC = () => {
   });
 
   const hasOlympiad = olympiadExams.length > 0;
-  const olympiadAvailable = olympiadExams.filter(o => ['pay', 'ready', 'in_progress', 'closed', 'request', 'pending', 'rejected', 'disabled'].includes(o.state));
-  const olympiadUpcoming = olympiadExams.filter(o => o.state === 'upcoming');
-  const olympiadCompleted = olympiadExams.filter(o => o.state === 'completed');
+  // The tab comes from the backend's exam AND interview status: a submitted exam whose interview is not finished stays Available
+  const olympiadAvailable = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'available');
+  const olympiadUpcoming = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'upcoming');
+  const olympiadCompleted = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'completed');
 
   // Unique subjects
   const subjects = ['All', ...(hasOlympiad ? ['Olympiad'] : []), ...Array.from(new Set(exams.map(e => e.subject)))];

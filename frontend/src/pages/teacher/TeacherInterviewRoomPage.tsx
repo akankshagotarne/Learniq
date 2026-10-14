@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, CheckCircle2, Loader2, PhoneOff, ShieldCheck, ShieldX, Undo2, UserRound } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import InterviewRoomView from '../../components/interview/InterviewRoomView';
+import InterviewEvaluationForm from '../../components/interview/InterviewEvaluationForm';
 import { staffStatusLabel, statusTone } from '../../components/interview/interviewLabels';
 import { interviewApi, interviewErrorMessage, ROOM_STATUSES } from '../../services/interview';
 import { useInterviewLive } from '../../hooks/useInterviewLive';
@@ -16,7 +17,6 @@ const TeacherInterviewRoomPage: React.FC = () => {
   const [data, setData] = useState<Detail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [remarks, setRemarks] = useState('');
   const [confirmEnd, setConfirmEnd] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,19 +78,26 @@ const TeacherInterviewRoomPage: React.FC = () => {
                 {(status === 'CANCELLED' || status === 'FAILED') && <p className="mt-3 text-sm text-text-secondary">This interview is {status === 'CANCELLED' ? 'cancelled' : 'closed'}.</p>}
               </div>
 
+              {mine && (status === 'EVALUATION_PENDING' || status === 'COMPLETED') && (
+                <InterviewEvaluationForm
+                  key={status} interviewId={interviewId} studentName={data.student?.name || 'Student'} standard={data.student?.standard}
+                  teacherName={data.teacher?.name} statusLabel={staffStatusLabel(status)} onSubmitted={load}
+                />
+              )}
+
               {inRoom && (
                 <>
                   <InterviewRoomView
                     interviewId={interviewId} role="teacher" peerLabel={data.student?.name || 'Student'} onEnded={load}
-                    actions={<button type="button" onClick={() => setConfirmEnd(true)} className="min-h-[44px] px-4 rounded-xl bg-[#E1447A] text-white text-sm font-bold inline-flex items-center gap-2" data-testid="end-interview"><PhoneOff className="w-4 h-4" /> End interview</button>}
+                    actions={<button type="button" onClick={() => setConfirmEnd(true)} className="min-h-[44px] px-4 rounded-xl bg-[#E1447A] text-white text-sm font-bold inline-flex items-center gap-2" data-testid="end-interview"><PhoneOff className="w-4 h-4" /> End Interview &amp; Evaluate</button>}
                   />
                   {confirmEnd && (
-                    <div className="card-soft p-4 rounded-2xl border border-[#E1447A]/30" role="dialog" aria-label="End interview">
-                      <label htmlFor="remarks" className="text-sm font-medium text-text-primary">Remarks (optional, visible to admin only)</label>
-                      <textarea id="remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} maxLength={1000} rows={3} className="input-field mt-2" />
-                      <div className="mt-3 flex gap-3">
-                        <button type="button" disabled={busy} onClick={() => run(async () => { await interviewApi.complete(interviewId, remarks.trim() || undefined); setConfirmEnd(false); }, 'Interview completed.')} className="btn-primary min-h-[44px] px-5 rounded-xl text-sm font-bold" data-testid="confirm-complete">Complete interview</button>
-                        <button type="button" onClick={() => setConfirmEnd(false)} className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold">Keep going</button>
+                    <div className="card-soft p-4 rounded-2xl border border-[#E1447A]/30" role="dialog" aria-label="End interview and evaluate">
+                      <p className="text-sm font-medium text-text-primary">End the video call and open the evaluation form?</p>
+                      <p className="text-xs text-text-muted mt-1">The call closes for both of you. The interview is completed only after you submit the evaluation.</p>
+                      <div className="mt-3 flex flex-col-reverse sm:flex-row gap-3">
+                        <button type="button" onClick={() => setConfirmEnd(false)} className="min-h-[48px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold">Keep going</button>
+                        <button type="button" disabled={busy} onClick={() => run(async () => { await interviewApi.end(interviewId); setConfirmEnd(false); })} className="btn-primary min-h-[48px] px-5 rounded-xl text-sm font-bold" data-testid="confirm-end">End &amp; Evaluate</button>
                       </div>
                     </div>
                   )}

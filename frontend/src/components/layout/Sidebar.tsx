@@ -29,6 +29,7 @@ const studentNav: NavItem[] = [
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
+  { label: 'Interview Results', href: '/student/interview-results', icon: Video },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];

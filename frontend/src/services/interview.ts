@@ -3,9 +3,9 @@ import api from './api';
 /** Teacher–Student interview API (separate from the AI Interview). The backend is the source of truth for every state. */
 export type InterviewStatus =
   | 'REQUESTED' | 'ASSIGNED' | 'WAITING_FOR_APPROVAL' | 'APPROVED' | 'CONNECTING' | 'IN_PROGRESS'
-  | 'COMPLETED' | 'CANCELLED' | 'FAILED';
+  | 'EVALUATION_PENDING' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
 
-export const OPEN_STATUSES: InterviewStatus[] = ['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL', 'APPROVED', 'CONNECTING', 'IN_PROGRESS'];
+export const OPEN_STATUSES: InterviewStatus[] = ['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL', 'APPROVED', 'CONNECTING', 'IN_PROGRESS', 'EVALUATION_PENDING'];
 export const ROOM_STATUSES: InterviewStatus[] = ['APPROVED', 'CONNECTING', 'IN_PROGRESS'];
 
 export interface InterviewView {
@@ -28,7 +28,15 @@ export interface InterviewView {
   studentPresent?: boolean;
 }
 
+/** Where a purchase is in "exam + interview" (from the backend). Only COMPLETED means the whole workflow is done. */
+export type WorkflowStage = 'LOCKED' | 'AVAILABLE' | 'REQUESTED' | 'IN_PROGRESS' | 'EVALUATION_PENDING' | 'COMPLETED';
+
+export interface EvaluationSummary { state: 'DRAFT' | 'SUBMITTED'; totalMarks?: number; maxMarks?: number; percentage?: number; submittedAt?: string }
+
 export interface StudentExamInterview {
+  stage: WorkflowStage;
+  workflowComplete: boolean;
+  evaluation: EvaluationSummary | null;
   eligible: boolean;
   locked: boolean;
   code: string | null;
@@ -43,6 +51,7 @@ export interface DirectoryRow {
   submission: { status: 'SUBMITTED'; submittedAt: string };
   interview: InterviewView | null;
   interviewStatus: InterviewStatus | 'NONE';
+  evaluation: EvaluationSummary | null;
   assignedTeacher: { _id: string; name: string } | null;
   assignedToMe: boolean;
 }
@@ -65,10 +74,31 @@ export interface AdminRow {
   teacherPresent: boolean;
   studentPresent: boolean;
   stale: boolean;
+  evaluation: { state: 'DRAFT' | 'SUBMITTED'; scores: Record<string, number | null>; totalMarks: number; maxMarks: number; percentage: number; submittedAt: string | null } | null;
+}
+
+export interface EvaluationScore { key: string; label: string; max: number; score: number | null }
+export interface EvaluationView {
+  state: 'DRAFT' | 'SUBMITTED';
+  scores: EvaluationScore[];
+  totalMarks: number; maxMarks: number; percentage: number;
+  remarks: string; strengths: string; improvements: string;
+  submittedAt: string | null; updatedAt: string | null;
+  revisions?: { at: string; reason: string; previous: any }[];
+}
+export interface Criterion { key: string; label: string; description: string; max: number }
+export interface EvaluationPayload { scores: Record<string, number | null>; remarks?: string; strengths?: string; improvements?: string }
+
+export interface InterviewResult extends EvaluationView {
+  interviewId: string;
+  student: { name: string; standard: number | null };
+  exam: { _id: string; title: string; standard: number } | null;
+  teacher: { name: string } | null;
+  interviewDate: string;
 }
 
 export interface AdminStats {
-  eligibleStudents: number; notRequested: number; pending: number; assigned: number; waitingApproval: number; active: number;
+  eligibleStudents: number; notRequested: number; pending: number; assigned: number; waitingApproval: number; active: number; evaluationPending: number;
   completed: number; cancelled: number; failed: number; stale: number; teachersTotal: number; teachersAvailable: number;
   settings: { requestsEnabled: boolean };
 }
@@ -93,6 +123,7 @@ export const interviewApi = {
   mine: async (): Promise<{ byExam: Record<string, StudentExamInterview>; requestsEnabled: boolean }> => (await api.get(`${base}/mine`)).data,
   request: async (examId: string): Promise<InterviewView> => (await api.post(`${base}/request`, { examId })).data.interview,
   joinRequest: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/join-request`)).data.interview,
+  results: async (): Promise<{ results: InterviewResult[]; pending: { interviewId: string; exam: { title: string } | null; message: string }[]; criteria: { key: string; label: string; max: number }[]; maxMarks: number }> => (await api.get(`${base}/results`)).data,
   // shared
   detail: async (id: string): Promise<{
     interview: InterviewView; role: string;
@@ -106,18 +137,23 @@ export const interviewApi = {
   directory: async (params: { q?: string; standard?: string; status?: string }) =>
     (await api.get(`${base}/teacher/directory`, { params })).data as {
       rows: DirectoryRow[]; myActive: InterviewView | null;
-      counts: { pending: number; waitingApproval: number; assigned: number; active: number; completed: number };
+      counts: { pending: number; waitingApproval: number; assigned: number; active: number; evaluationPending: number; completed: number };
     },
   start: async (body: { studentId?: string; examId?: string; interviewId?: string }): Promise<InterviewView> => (await api.post(`${base}/teacher/start`, body)).data.interview,
+  accept: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/accept`)).data.interview,
   approve: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/approve`)).data.interview,
   rejectJoin: async (id: string, reason?: string): Promise<InterviewView> => (await api.post(`${base}/${id}/reject-join`, { reason })).data.interview,
   release: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/release`)).data.interview,
-  complete: async (id: string, remarks?: string): Promise<InterviewView> => (await api.post(`${base}/${id}/complete`, { remarks })).data.interview,
+  end: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/end`)).data.interview,
+  getEvaluation: async (id: string): Promise<{ criteria: Criterion[]; maxMarks: number; interviewStatus: InterviewStatus; evaluation: EvaluationView | null }> => (await api.get(`${base}/${id}/evaluation`)).data,
+  saveDraft: async (id: string, body: EvaluationPayload): Promise<EvaluationView> => (await api.put(`${base}/${id}/evaluation`, body)).data.evaluation,
+  submitEvaluation: async (id: string, body: EvaluationPayload): Promise<{ interview: InterviewView; evaluation: EvaluationView; alreadySubmitted: boolean }> => (await api.post(`${base}/${id}/evaluation/submit`, body)).data,
   // admin
   adminStats: async (): Promise<{ stats: AdminStats; teachers: AdminTeacher[] }> => (await api.get(`${base}/admin/stats`)).data,
   adminList: async (params: Record<string, string | undefined>): Promise<AdminRow[]> => (await api.get(`${base}/admin/list`, { params })).data.interviews,
-  adminDetail: async (id: string) => (await api.get(`${base}/admin/${id}`)).data.interview as InterviewView & { audit: { at: string; role: string; action: string; note: string | null }[]; stale: boolean },
+  adminDetail: async (id: string) => (await api.get(`${base}/admin/${id}`)).data.interview as InterviewView & { evaluation: EvaluationView | null; audit: { at: string; role: string; action: string; note: string | null }[]; stale: boolean },
   adminAssign: async (id: string, teacherId: string): Promise<InterviewView> => (await api.post(`${base}/admin/${id}/assign`, { teacherId })).data.interview,
+  adminCorrect: async (id: string, body: EvaluationPayload & { reason: string }): Promise<EvaluationView> => (await api.put(`${base}/admin/${id}/evaluation`, body)).data.evaluation,
   adminRecoverStale: async (): Promise<{ recovered: number }> => (await api.post(`${base}/admin/recover-stale`, {})).data,
   adminSetRequestsEnabled: async (requestsEnabled: boolean) => (await api.put(`${base}/admin/settings`, { requestsEnabled })).data.settings as { requestsEnabled: boolean },
   adminExport: async (params: Record<string, string | undefined>): Promise<Blob> => (await api.get(`${base}/admin/export`, { params, responseType: 'blob' })).data,
