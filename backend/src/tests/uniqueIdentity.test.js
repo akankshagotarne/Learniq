@@ -244,7 +244,7 @@ test('login still works, and is tolerant of capitals / spaces in the email', asy
   // the fake User stores passwords as given (no bcrypt hook), so check the lookup path only
   await register({ email: 'login@example.com' });
   const ok = await post('/login', { email: '  Login@Example.com ', password: PASSWORD });
-  assert.notEqual(ok.json.message, 'Invalid email or password.', 'the account is found despite capitals / spaces');
+  assert.notEqual(ok.json.message, 'Invalid login details. Please check your email or phone number and your password.', 'the account is found despite capitals / spaces');
 });
 
 test('profile update: cannot take another account\'s phone, may keep its own', async () => {

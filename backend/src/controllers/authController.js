@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
 const User = require('../models/User');
@@ -160,24 +161,42 @@ const register = async (req, res) => {
 
 // @desc   Login user
 // @route  POST /api/auth/login
+// A real bcrypt hash of a throw-away string: unknown accounts still cost one bcrypt compare, so response time does not
+// reveal whether an email address / phone number is registered.
+const DUMMY_HASH = '$2a$12$EjqOVmHheSBzzeSfHQtspet4TNZSDkiqQ7NoFoKJ5wnbgeoDNRmFK';
+
+/** The ONE account an identifier points to, or null (unknown, or - defensively - ambiguous: never guess which one). */
+const findLoginUser = async (id) => {
+  if (id.kind === 'email') return User.findOne({ email: id.email });
+  // phone: only the stored canonical number (phoneNormalized, unique per account) is matched - never a raw string
+  const matches = await User.find({ phoneNormalized: id.e164 }).limit(2);
+  return matches.length === 1 ? matches[0] : null;
+};
+
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // `identifier` = email OR phone number. `email` is still accepted so older clients keep working.
+    const body = req.body || {};
+    const raw = body.identifier !== undefined ? body.identifier : body.email;
+    const { password } = body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    if (typeof raw !== 'string' || !raw.trim() || typeof password !== 'string' || !password) {
+      return res.status(400).json({ success: false, message: 'Email or phone number and password are required.' });
+    }
+    const id = identity.classifyIdentifier(raw);
+    if (id.kind === 'invalid') {
+      return res.status(400).json({ success: false, code: 'INVALID_IDENTIFIER', field: 'identifier', message: identity.MESSAGES.INVALID_IDENTIFIER });
     }
 
-    // Same canonical form as registration (trimmed + lower-cased), so " Student@Example.com " still finds the account
-    const loginEmail = identity.normalizeEmail(email);
-    const user = loginEmail ? await User.findOne({ email: loginEmail }) : null;
+    const user = await findLoginUser(id);
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => false);
+      return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
     }
 
     const blocked = signInBlockReason(user);

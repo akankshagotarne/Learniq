@@ -137,7 +137,7 @@ test('3. a WRONG password never reveals the other session (no conflict, no devic
   await login(u, WIN_CHROME);
   const bad = await login(u, IPHONE_SAFARI, 'WrongPass1');
   assert.equal(bad.status, 401);
-  assert.equal(bad.json.message, 'Invalid email or password.');
+  assert.equal(bad.json.message, 'Invalid login details. Please check your email or phone number and your password.');
   assert.equal(bad.json.activeSession, undefined);
   assert.equal(bad.json.takeoverToken, undefined);
   assert.equal(T.docs.length, 0, 'no takeover authorization was created');

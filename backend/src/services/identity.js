@@ -17,6 +17,8 @@ const MESSAGES = Object.freeze({
   EMAIL_AND_PHONE_ALREADY_EXIST: 'This email address and phone number are already registered. Please check your details or log in to your existing account.',
   INVALID_EMAIL: 'Please enter a valid email address.',
   INVALID_PHONE: 'Please enter a valid phone number, for example +91 98765 43210.',
+  INVALID_IDENTIFIER: 'Please enter a valid email address or phone number.',
+  LOGIN_FAILED: 'Invalid login details. Please check your email or phone number and your password.',
 });
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,6 +45,24 @@ const normalizePhone = (raw) => {
   const parsed = parsePhoneNumberFromString(text, DEFAULT_PHONE_COUNTRY);
   if (!parsed || !parsed.isValid()) return { empty: false, valid: false };
   return { empty: false, valid: true, e164: parsed.number };
+};
+
+/**
+ * What did the user type in a combined "Email or Phone Number" box?
+ *   contains "@"  -> an email (validated + canonicalised like registration)
+ *   anything else -> a phone number (E.164 via normalizePhone; no "+" = India, exactly like registration)
+ * @returns {{ kind: 'email', email: string } | { kind: 'phone', e164: string } | { kind: 'invalid' }}
+ */
+const classifyIdentifier = (raw) => {
+  if (typeof raw !== 'string') return { kind: 'invalid' };
+  const text = raw.trim();
+  if (!text) return { kind: 'invalid' };
+  if (text.includes('@')) {
+    const email = normalizeEmail(text);
+    return email ? { kind: 'email', email } : { kind: 'invalid' };
+  }
+  const phone = normalizePhone(text);
+  return phone.valid ? { kind: 'phone', e164: phone.e164 } : { kind: 'invalid' };
 };
 
 /** Other accounts that already use this email and/or phone. `excludeId` lets a user keep their own values. */
@@ -86,5 +106,5 @@ const conflictsFromDuplicateKeyError = (err) => {
 
 module.exports = {
   MESSAGES, DEFAULT_PHONE_COUNTRY,
-  normalizeEmail, normalizePhone, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
+  normalizeEmail, normalizePhone, classifyIdentifier, findIdentityConflicts, conflictBody, conflictsFromDuplicateKeyError,
 };

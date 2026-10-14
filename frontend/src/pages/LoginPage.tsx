@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, UserRound, Lock, AlertCircle, GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
 import { useAuth, SessionConflict } from '../context/AuthContext';
 import SessionConflictDialog, { ConflictDialogState } from '../components/auth/SessionConflictDialog';
 import { AUTH_NOTICE_KEY } from '../services/api';
@@ -34,8 +34,21 @@ const ROLES: { role: Role; label: string; icon: React.ReactNode; color: string; 
   },
 ];
 
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Quick client-side check only - the server validates again and decides. "@" = e-mail, otherwise a phone number. */
+const identifierProblem = (raw: string): string => {
+  const v = raw.trim();
+  if (!v) return 'Enter your email or phone number.';
+  if (v.includes('@')) return EMAIL_SHAPE.test(v) ? '' : 'Enter a valid email address.';
+  if (!/^\+?[\d\s().-]+$/.test(v)) return 'Enter a valid email address or phone number.';
+  const digits = v.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 15 ? '' : 'Enter a valid phone number, for example +91 98765 43210.';
+};
+
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('');   // the "Email or Phone Number" box
+  const [idError, setIdError] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,9 +80,12 @@ const LoginPage: React.FC = () => {
     if (loading) return;
     setError('');
     setNotice('');
+    const problem = identifierProblem(email);
+    setIdError(problem);
+    if (problem) return;
     setLoading(true);
     try {
-      const result = await login(email, password);
+      const result = await login(email.trim(), password);
       if (result.status === 'conflict') {
         setConflictState('idle'); setConflictError(null); setConflict(result.conflict);
         return;
@@ -173,20 +189,29 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
-              <label className="text-xs font-semibold text-text-secondary block mb-1.5">Email Address</label>
+              <label htmlFor="login-identifier" className="text-xs font-semibold text-text-secondary block mb-1.5">Email or Phone Number</label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                <UserRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                 <input
-                  type="email"
+                  id="login-identifier"
+                  name="username"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  onChange={e => { setEmail(e.target.value); if (idError) setIdError(''); }}
+                  placeholder="you@example.com or +91 98765 43210"
+                  aria-invalid={!!idError}
+                  aria-describedby={idError ? 'login-identifier-error' : undefined}
                   className="w-full bg-surface-alt border border-border-subtle rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
-                  required
                 />
               </div>
+              {idError && <p id="login-identifier-error" role="alert" className="text-[#E1447A] text-xs mt-1.5">{idError}</p>}
             </div>
 
             <div>
