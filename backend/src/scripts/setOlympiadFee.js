@@ -4,7 +4,7 @@
  * exam (never a value from the browser), so this is the one place the live price changes.
  *
  *   node src/scripts/setOlympiadFee.js                 DRY RUN (default): lists exams whose fee differs, writes nothing
- *   node src/scripts/setOlympiadFee.js --apply         sets every Olympiad exam to the configured fee (OLYMPIAD_FEE, now ₹1)
+ *   node src/scripts/setOlympiadFee.js --apply         sets every Olympiad exam to the configured fee (OLYMPIAD_FEE, now ₹20)
  *   node src/scripts/setOlympiadFee.js --fee 5 --apply sets a different fee
  *
  * Only the `fee` field of exam records is written. Payments, attempts, students and questions are never touched:

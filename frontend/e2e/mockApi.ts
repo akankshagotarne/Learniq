@@ -36,7 +36,7 @@ const section = (name: string, questionCount: number) => ({ name, questionCount,
 const baseOlympiad = {
   slug: 'olympiad-std-10', description: 'National level online Olympiad.', conductedBy: 'Nikhil Sir', examType: 'olympiad',
   standard: 10, startDate: iso(NOW - 11 * day), endDate: iso(NOW + 5 * day), durationMinutes: 60, totalQuestions: 60,
-  totalMarks: 60, negativeMarking: false, negativeMarkValue: 0, fee: 1, currency: 'INR',
+  totalMarks: 60, negativeMarking: false, negativeMarkValue: 0, fee: 20, currency: 'INR',
   sections: [section('Mathematics', 15), section('Science', 15), section('English', 15), section('Logical Reasoning', 15)],
   instructions: [
     'The examination has 60 multiple-choice questions and lasts 60 minutes.',
@@ -221,7 +221,7 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   if (r) return { success: true, exam: olympiadExams.find(o => o._id === r![1]) || olympiadExams[1] };
   if (m(/^\/olympiad\/exams\/[^/]+\/payment\/status$/)) return { success: true, paymentStatus: 'NONE', unlocked: false };
   r = m(/^\/olympiad\/exams\/([^/]+)\/payment\/order$/);
-  if (r) return { success: true, keyId: 'rzp_test_mock', paymentId: 'pay-record-1', order: { id: 'order_mock_1', amount: 100, currency: 'INR' }, exam: { _id: r[1], title: LONG_EXAM_TITLE, fee: 1 } };
+  if (r) return { success: true, keyId: 'rzp_test_mock', paymentId: 'pay-record-1', order: { id: 'order_mock_1', amount: 2000, currency: 'INR' }, exam: { _id: r[1], title: LONG_EXAM_TITLE, fee: 20 } };
   if (m(/^\/olympiad\/exams\/[^/]+\/payment\/verify$/)) return { success: true, unlocked: true, paymentStatus: 'SUCCESS' };
   if (m(/^\/olympiad\/exams\/[^/]+\/(start|attempt)$/)) return { success: true, ...attemptPayload() };
   if (m(/^\/olympiad\/exams\/[^/]+\/attempt\/answers$/)) return { success: true, remainingSeconds: 3400, savedAt: iso(Date.now()) };
