@@ -182,12 +182,7 @@ test('9. a number that was never stored on an account cannot be used - nothing i
   const r = await login('+91 90000 00001', PASSWORD);
   assert.equal(r.status, 401);
   assert.equal(fake.User.docs.find((d) => String(d._id) === String(noPhone._id)).phoneNormalized, undefined, 'a failed phone login attaches nothing');
-  // an account whose phone text was never canonicalised (legacy, not backfilled) is not matched by guesswork
-  const legacy = await makeUser({ phone: '98765 99999', phoneNormalized: undefined });
-  delete fake.User.docs.find((d) => String(d._id) === String(legacy._id)).phoneNormalized;
-  assert.equal((await login('9876599999')).status, 401);
-  // ...but it still logs in with its e-mail
-  assert.equal((await login(legacy.email)).status, 200);
+  // legacy accounts (phone text only, no phoneNormalized) are covered by test 18
 });
 
 test('10. an account WITHOUT a phone keeps logging in with its e-mail', async () => {
@@ -195,13 +190,24 @@ test('10. an account WITHOUT a phone keeps logging in with its e-mail', async ()
   assert.equal((await login(u.email)).status, 200);
 });
 
-test('11. an ambiguous phone match fails securely (never authenticates "one of them")', async () => {
-  const a = await makeUser({ phone: PHONE });
-  const b = await makeUser({ phone: '+91 90000 11111' });
-  fake.User.docs.find((d) => String(d._id) === String(b._id)).phoneNormalized = identity.normalizePhone(PHONE).e164; // bypasses the unique index on purpose
-  PASSWORDS.set(String(a._id), PASSWORD); PASSWORDS.set(String(b._id), PASSWORD);
-  const r = await login(PHONE);
-  assert.equal(r.status, 401); assert.equal(r.json.message, GENERIC); assert.equal(r.json.token, undefined);
+test('11. a number shared by two accounts: the PASSWORD picks the account; the same password on both -> fail securely', async () => {
+  // duplicates can only exist in legacy data (the unique index forbids them for canonical records)
+  const a = await makeLegacy(PHONE); const b = await makeLegacy(PHONE.replace(/ /g, ''));
+  delete fake.User.docs.find((d) => String(d._id) === String(a._id)).phoneNormalized;
+  delete fake.User.docs.find((d) => String(d._id) === String(b._id)).phoneNormalized;
+  PASSWORDS.set(String(a._id), 'AlphaPass1'); PASSWORDS.set(String(b._id), 'BetaPass22');
+  const ra = await login(PHONE, 'AlphaPass1');
+  assert.equal(ra.status, 200); assert.equal(jwt.decode(ra.json.token).id, String(a._id));
+  fake.AuthSession.docs = [];
+  const rb = await login(PHONE, 'BetaPass22');
+  assert.equal(rb.status, 200); assert.equal(jwt.decode(rb.json.token).id, String(b._id));
+  fake.AuthSession.docs = [];
+  const none = await login(PHONE, 'WrongPass1');
+  assert.equal(none.status, 401); assert.equal(none.json.message, GENERIC);
+  // both accounts accept the same password: ambiguous -> nobody is signed in
+  PASSWORDS.set(String(b._id), 'AlphaPass1');
+  const amb = await login(PHONE, 'AlphaPass1');
+  assert.equal(amb.status, 401); assert.equal(amb.json.message, GENERIC); assert.equal(amb.json.token, undefined);
   assert.equal(fake.AuthSession.docs.length, 0);
 });
 
@@ -290,4 +296,92 @@ test('17. identifier classification (unit)', () => {
   assert.deepEqual(c('09876543210'), { kind: 'phone', e164: '+919876543210' });
   assert.deepEqual(c('+1 415 555 2671'), { kind: 'phone', e164: '+14155552671' });
   for (const bad of ['', ' ', 'hello', 'a@b', '123', null, undefined, {}, []]) assert.deepEqual(c(bad), { kind: 'invalid' });
+});
+
+// ── the reported bug: a legacy account (phone saved, no phoneNormalized) could not log in with its phone number ──
+const makeLegacy = async (phone, over = {}) => {
+  const u = await makeUser({ phone, ...over });
+  delete fake.User.docs.find((d) => String(d._id) === String(u._id)).phoneNormalized; // exactly how pre-identity-rules records look
+  return u;
+};
+
+test('18. REGRESSION: legacy account (phone text only) logs in with its phone - every Indian format - and with its e-mail, same password', async () => {
+  const nikhil = await makeLegacy('9145200040', { name: 'Nikhil Reddy', email: 'nikhilreddyofficial8@gmail.com' });
+  assert.equal(fake.User.docs[0].phoneNormalized, undefined, 'precondition: no canonical phone stored');
+  for (const f of ['9145200040', '+919145200040', '919145200040', '+91 91452 00040', '09145200040', '91452-00040', '+91-9145200040']) {
+    fake.AuthSession.docs = [];
+    const r = await login(f);
+    assert.equal(r.status, 200, `format "${f}"`);
+    assert.equal(jwt.decode(r.json.token).id, String(nikhil._id));
+  }
+  fake.AuthSession.docs = [];
+  assert.equal((await login('9145200040', 'WrongPass1')).status, 401);
+  assert.equal((await login('9145200041')).status, 401, 'a different number is a different account');
+  fake.AuthSession.docs = [];
+  assert.equal((await login('nikhilreddyofficial8@gmail.com')).status, 200, 'e-mail login unchanged');
+});
+
+test('19. legacy phone stored in other shapes (spaces / +91 / 91 prefix / a stored number) is still found; other accounts are never touched', async () => {
+  const shapes = ['91 9145200040', '+91 9145200040', 9145200040, '  9145200040 '];
+  for (const [i, shape] of shapes.entries()) {
+    fake.User.docs = []; fake.AuthSession.docs = [];
+    const bystander = await makeLegacy('9000000001', { email: `bystander${i}@example.com` });
+    const u = await makeLegacy(shape);
+    const r = await login('9145200040');
+    assert.equal(r.status, 200, `stored as ${JSON.stringify(shape)}`);
+    assert.equal(jwt.decode(r.json.token).id, String(u._id));
+    assert.notEqual(jwt.decode(r.json.token).id, String(bystander._id));
+  }
+});
+
+test('20. a legacy duplicate is resolved by the password, never by "first match"; a deactivated duplicate cannot block or replace the active one', async () => {
+  const first = await makeLegacy('9145200040', { email: 'first@example.com' });
+  const second = await makeLegacy('+91 91452 00040', { email: 'second@example.com' });
+  PASSWORDS.set(String(first._id), 'FirstPass11'); PASSWORDS.set(String(second._id), 'SecondPass22');
+  assert.equal(jwt.decode((await login('9145200040', 'SecondPass22')).json.token).id, String(second._id), 'the SECOND record is chosen when its password is used');
+  fake.AuthSession.docs = [];
+  assert.equal(jwt.decode((await login('9145200040', 'FirstPass11')).json.token).id, String(first._id));
+  fake.AuthSession.docs = [];
+  PASSWORDS.set(String(second._id), 'FirstPass11');                                   // same password on both
+  assert.equal((await login('9145200040', 'FirstPass11')).status, 401, 'ambiguous -> fail');
+  fake.User.docs.find((d) => String(d._id) === String(second._id)).isActive = false;  // the duplicate is deactivated
+  const r = await login('9145200040', 'FirstPass11');
+  assert.equal(r.status, 200); assert.equal(jwt.decode(r.json.token).id, String(first._id));
+  fake.AuthSession.docs = [];
+  const only = await login('9145200040', 'WrongPass1');
+  assert.equal(only.status, 401);
+});
+
+test('21. a legacy deactivated account still cannot log in with its phone, and a number never opens an account by role switching', async () => {
+  const off = await makeLegacy('9145200040', { isActive: false });
+  const r = await login('9145200040');
+  assert.equal(r.status, 401); assert.equal(r.json.token, undefined);
+  assert.equal(fake.AuthSession.docs.length, 0);
+  // the role chip on the login page is not an input: a forged role in the body changes nothing
+  fake.User.docs.find((d) => String(d._id) === String(off._id)).isActive = true;
+  const t = await call('POST', '/auth/login', { body: { identifier: '9145200040', password: PASSWORD, role: 'admin' } });
+  assert.equal(t.status, 200); assert.equal(t.json.user.role, 'student');
+});
+
+test('22. backfill: fills phoneNormalized only for valid, unshared numbers; leaves phone, shared and invalid records alone; idempotent', async () => {
+  const solo = await makeLegacy('9145200040', { email: 'solo@example.com' });
+  const d1 = await makeLegacy('9000000011', { email: 'd1@example.com' });
+  const d2 = await makeLegacy('+91 90000 00011', { email: 'd2@example.com' });
+  const bad = await makeLegacy('12345', { email: 'bad@example.com' });
+  const ok = await makeUser({ phone: '+91 90000 00022', email: 'ok@example.com' });
+  const noPhone = await makeUser({ phone: undefined, email: 'nophone@example.com' });
+  const before = JSON.stringify(fake.User.docs.map((d) => [d.phone, d.email]));
+  const r = await identity.backfillPhoneNormalized(fake.User);
+  const by = (u) => fake.User.docs.find((d) => String(d._id) === String(u._id));
+  assert.equal(by(solo).phoneNormalized, '+919145200040');
+  assert.equal(by(d1).phoneNormalized, undefined); assert.equal(by(d2).phoneNormalized, undefined);
+  assert.equal(by(bad).phoneNormalized, undefined);
+  assert.equal(by(ok).phoneNormalized, '+919000000022'); assert.equal(by(noPhone).phoneNormalized, undefined);
+  assert.equal(JSON.stringify(fake.User.docs.map((d) => [d.phone, d.email])), before, 'phone / email values untouched');
+  assert.deepEqual([r.filled, r.shared, r.invalid], [1, 1 + 1, 1]);
+  const again = await identity.backfillPhoneNormalized(fake.User);
+  assert.equal(again.filled, 0);
+  assert.equal(fake.User.docs.length, 6, 'nothing created or deleted');
+  // after the backfill the solo account still logs in
+  assert.equal((await login('9145200040')).status, 200);
 });

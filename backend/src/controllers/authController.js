@@ -165,14 +165,6 @@ const register = async (req, res) => {
 // reveal whether an email address / phone number is registered.
 const DUMMY_HASH = '$2a$12$EjqOVmHheSBzzeSfHQtspet4TNZSDkiqQ7NoFoKJ5wnbgeoDNRmFK';
 
-/** The ONE account an identifier points to, or null (unknown, or - defensively - ambiguous: never guess which one). */
-const findLoginUser = async (id) => {
-  if (id.kind === 'email') return User.findOne({ email: id.email });
-  // phone: only the stored canonical number (phoneNormalized, unique per account) is matched - never a raw string
-  const matches = await User.find({ phoneNormalized: id.e164 }).limit(2);
-  return matches.length === 1 ? matches[0] : null;
-};
-
 const login = async (req, res) => {
   try {
     // `identifier` = email OR phone number. `email` is still accepted so older clients keep working.
@@ -188,15 +180,21 @@ const login = async (req, res) => {
       return res.status(400).json({ success: false, code: 'INVALID_IDENTIFIER', field: 'identifier', message: identity.MESSAGES.INVALID_IDENTIFIER });
     }
 
-    const user = await findLoginUser(id);
-    if (!user) {
-      await bcrypt.compare(password, DUMMY_HASH).catch(() => false);
-      return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
+    let user = null;
+    if (id.kind === 'email') {
+      user = await User.findOne({ email: id.email });
+      if (!user) { await bcrypt.compare(password, DUMMY_HASH).catch(() => false); return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED }); }
+      if (!(await user.comparePassword(password))) return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
+    } else {
+      // A phone can (in legacy data) be shared by several accounts: never take "the first match". The password decides, and
+      // only if EXACTLY ONE eligible account accepts it is that account signed in; anything else fails generically.
+      const candidates = await identity.findPhoneCandidates(User, id.e164);
+      if (candidates.length === 0) await bcrypt.compare(password, DUMMY_HASH).catch(() => false);
+      const accepted = [];
+      for (const c of candidates) if (await c.comparePassword(password)) accepted.push(c);
+      const eligible = accepted.filter((c) => !signInBlockReason(c));
+      user = eligible.length === 1 ? eligible[0] : (eligible.length === 0 && accepted.length === 1 ? accepted[0] : null);
+      if (!user) return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
     }
 
     const blocked = signInBlockReason(user);

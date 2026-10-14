@@ -165,6 +165,17 @@ const verifyUserIndexes = async () => {
   }
 };
 
+// Accounts created before the identity rules have a `phone` but no canonical `phoneNormalized`. Fill it in - only where the number is
+// valid and used by no other account (idempotent; never edits `phone`, never deletes or merges). Phone login also copes without it.
+const backfillLegacyPhones = async () => {
+  try {
+    const r = await require('./services/identity').backfillPhoneNormalized(require('./models/User'));
+    console.log(`📞 Phone identities: ${r.filled} legacy account(s) filled, ${r.shared} shared number(s) left as is, ${r.invalid} invalid left as is (of ${r.scanned} with a phone)`);
+  } catch (err) {
+    console.error(`⚠️  Phone identity backfill skipped (${err.message}). Phone login still works for legacy accounts.`);
+  }
+};
+
 // "One active login per account" is enforced by a partial unique index on AuthSession (models/AuthSession.js).
 const verifySessionIndexes = async () => {
   const { AuthSession, SessionTakeover } = require('./models/AuthSession');
@@ -184,6 +195,7 @@ const startServer = async () => {
   try {
     await connectDB();
     await verifyUserIndexes();
+    await backfillLegacyPhones();
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
