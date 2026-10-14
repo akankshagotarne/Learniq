@@ -69,8 +69,28 @@ const rejectJoin = handler(async (req, res) => {
 const release = handler(async (req, res) => {
   res.json({ success: true, interview: svc.view(await svc.teacherRelease(req.user, req.params.id)) });
 });
-const complete = handler(async (req, res) => {
-  res.json({ success: true, interview: svc.view(await svc.teacherComplete(req.user, req.params.id, str(req.body && req.body.remarks, 2000))) });
+const accept = handler(async (req, res) => {
+  res.json({ success: true, interview: svc.view(await svc.teacherAccept(req.user, req.params.id)) });
+});
+const end = handler(async (req, res) => {
+  res.json({ success: true, interview: svc.view(await svc.teacherEnd(req.user, req.params.id)) });
+});
+const getEvaluation = handler(async (req, res) => {
+  res.json({ success: true, ...(await svc.getEvaluation(req.user, req.params.id)) });
+});
+const saveDraft = handler(async (req, res) => {
+  const out = await svc.saveEvaluationDraft(req.user, req.params.id, req.body || {});
+  res.json({ success: true, ...out });
+});
+const submitEvaluation = handler(async (req, res) => {
+  const out = await svc.submitEvaluation(req.user, req.params.id, req.body || {});
+  res.json({ success: true, interview: svc.view(out.interview), evaluation: out.evaluation, alreadySubmitted: out.alreadySubmitted });
+});
+const myResults = handler(async (req, res) => {
+  res.json({ success: true, ...(await svc.studentResults(req.user)) });
+});
+const adminCorrect = handler(async (req, res) => {
+  res.json({ success: true, evaluation: await svc.adminCorrectEvaluation(req.user, req.params.id, req.body || {}) });
 });
 
 // ── admin ────────────────────────────────────────────────────────────────────────────────────
@@ -118,6 +138,6 @@ const adminExport = handler(async (req, res) => {
 
 module.exports = {
   myOverview, eligibility, requestInterview, joinRequest, detail, roomAccess, cancel,
-  directory, teacherStart, approve, rejectJoin, release, complete,
+  directory, teacherStart, accept, approve, rejectJoin, release, end, getEvaluation, saveDraft, submitEvaluation, myResults, adminCorrect,
   adminStats, adminList, adminDetail, adminAssign, adminRecover, adminSettings, adminUpdateSettings, adminExport,
 };

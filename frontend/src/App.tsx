@@ -37,6 +37,7 @@ const OlympiadResultPage = lazy(() => import('./pages/student/OlympiadResultPage
 const AIInterviewPage = lazy(() => import('./pages/student/AIInterviewPage'));
 const AIInterviewResultPage = lazy(() => import('./pages/student/AIInterviewResultPage'));
 const StudentInterviewPage = lazy(() => import('./pages/student/StudentInterviewPage'));
+const StudentInterviewResultsPage = lazy(() => import('./pages/student/StudentInterviewResultsPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
 
 // Teacher pages
@@ -205,6 +206,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/ai-interview/:examId/result" element={
         <ProtectedRoute roles={['student']}>
           <AIInterviewResultPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/interview-results" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentInterviewResultsPage />
         </ProtectedRoute>
       } />
       <Route path="/student/interview/:interviewId" element={

@@ -26,6 +26,14 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
   const badge = (() => {
     switch (state) {
       case 'completed':
+        if (interview && !approval && interview.stage !== 'LOCKED' && !interview.workflowComplete) {
+          const label = interview.stage === 'IN_PROGRESS' ? 'Interview In Progress' : interview.stage === 'EVALUATION_PENDING' ? 'Evaluation Pending' : interview.stage === 'REQUESTED' ? 'Waiting for Teacher' : 'Interview Pending';
+          return (
+            <span className="badge-warning text-[10px] py-0.5 px-2 flex items-center gap-1" data-testid="interview-badge">
+              <Video className="w-3 h-3" /> Exam submitted · {label}
+            </span>
+          );
+        }
         return (
           <span className="badge-success text-[10px] py-0.5 px-2 flex items-center gap-1">
             <CheckCircle className="w-3 h-3" /> Completed
@@ -143,6 +151,13 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           </div>
         )}
 
+        {state === 'completed' && interview?.workflowComplete && interview.evaluation?.state === 'SUBMITTED' && (
+          <div className="mb-3 p-3 rounded-xl bg-[#09ACEF]/10 border border-[#09ACEF]/30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs" data-testid="interview-marks">
+            <span className="text-text-secondary font-medium">Interview marks</span>
+            <span className="font-heading font-bold text-text-primary">{interview.evaluation.totalMarks}/{interview.evaluation.maxMarks} ({interview.evaluation.percentage}%)</span>
+          </div>
+        )}
+
         {exam.message && (state === 'upcoming' || state === 'closed' || state === 'disabled' || state === 'rejected') && (
           <p className="text-[11px] text-text-secondary mb-3">{exam.message}</p>
         )}
@@ -205,21 +220,24 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           </Link>
         )}
         {interview && !approval && (
-          <div className="mt-2" data-testid="interview-action">
-            {interview.interview && OPEN_STATUSES.includes(interview.interview.status) ? (
+          <div className="mt-2" data-testid="interview-action" data-stage={interview.stage}>
+            {interview.stage === 'COMPLETED' ? (
+              <Link
+                to="/student/interview-results"
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
+                data-testid="interview-results-link"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> Interview Completed — View Results <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            ) : interview.interview && ['REQUESTED', 'IN_PROGRESS', 'EVALUATION_PENDING'].includes(interview.stage) ? (
               <Link
                 to={`/student/interview/${interview.interview._id}`}
                 className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-brand-primary/40 text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
                 data-testid="interview-view"
               >
-                <Video className="w-3.5 h-3.5 text-brand-primary" /> View Interview Status <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            ) : interview.interview && interview.interview.status === 'COMPLETED' ? (
-              <Link
-                to={`/student/interview/${interview.interview._id}`}
-                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> Interview Completed
+                <Video className="w-3.5 h-3.5 text-brand-primary" />
+                {interview.stage === 'REQUESTED' ? 'Waiting for Teacher Approval' : interview.stage === 'IN_PROGRESS' ? 'Interview In Progress — Open' : 'Evaluation Pending'}
+                <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             ) : interview.locked ? (
               <>

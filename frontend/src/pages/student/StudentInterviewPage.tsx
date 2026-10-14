@@ -77,7 +77,15 @@ const StudentInterviewPage: React.FC = () => {
                   </button>
                 )}
                 {(status === 'REQUESTED' || status === 'WAITING_FOR_APPROVAL') && <p className="text-[11px] text-text-muted mt-3 flex items-center gap-1"><Clock className="w-3 h-3" /> This page updates by itself.</p>}
-                {status === 'COMPLETED' && <p className="mt-3 text-sm text-[#15803D] dark:text-[#4ADE9A] flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Interview completed.</p>}
+                {status === 'COMPLETED' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <p className="text-sm text-[#15803D] dark:text-[#4ADE9A] flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Interview completed.</p>
+                    <Link to="/student/interview-results" className="btn-primary min-h-[44px] px-5 rounded-xl text-sm font-bold inline-flex items-center gap-2" data-testid="view-results">View Interview Results</Link>
+                  </div>
+                )}
+                {(status === 'CANCELLED' || status === 'FAILED') && (
+                  <Link to="/student/exams" className="btn-primary mt-4 min-h-[44px] px-5 rounded-xl text-sm font-bold inline-flex items-center gap-2" data-testid="request-again">Request Interview Again</Link>
+                )}
               </div>
 
               {inRoom && (

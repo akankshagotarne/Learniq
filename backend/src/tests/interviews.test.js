@@ -118,6 +118,7 @@ const submittedStudent = async (opts = {}) => {
   return { ...s, exam };
 };
 
+const FULL = { communication: 8, confidence: 9, subjectKnowledge: 7, listening: 8, logicalThinking: 8 }; // 40/50
 const clients = [];
 const connect = (token) => new Promise((resolve, reject) => {
   const c = ioClient(BASE, { auth: { token }, transports: ['websocket'], reconnection: false, forceNew: true });
@@ -319,29 +320,36 @@ test('reject-join sends the student back to waiting-for-teacher; release returns
   assert.equal((await api('POST', '/teacher/start', { token: t2.token, body: { interviewId: iv._id } })).status, 200, 'another teacher can now take it');
 });
 
-test('complete: only an IN_PROGRESS interview can be completed, only by its teacher; timestamps and remarks are saved; the slot is freed', async () => {
+test('end + evaluate: only a RUNNING interview can be ended, only by its teacher; the call ending is NOT completion; the slot is kept until the evaluation is submitted', async () => {
   const s = await submittedStudent(); const t = await mkUser({ role: 'teacher' }); const t2 = await mkUser({ role: 'teacher' });
   const iv = (await api('POST', '/teacher/start', { token: t.token, body: { studentId: String(s.user._id), examId: String(s.exam._id) } })).body.interview;
-  assert.equal((await api('POST', `/${iv._id}/complete`, { token: t.token })).status, 409, 'not started');
+  assert.equal((await api('POST', `/${iv._id}/end`, { token: t.token })).status, 409, 'not started');
   await api('POST', `/${iv._id}/join-request`, { token: s.token });
   await api('POST', `/${iv._id}/approve`, { token: t.token });
   await svc.setPresence(iv._id, 'teacher', true); await svc.setPresence(iv._id, 'student', true);
   assert.equal(ivDoc(iv._id).status, 'CONNECTING');
   await svc.markConnected(iv._id);
   assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS'); assert.ok(ivDoc(iv._id).startedAt);
-  assert.equal((await api('POST', `/${iv._id}/complete`, { token: t2.token })).status, 403);
-  assert.equal((await api('POST', `/${iv._id}/complete`, { token: s.token })).status, 403);
-  const r = await api('POST', `/${iv._id}/complete`, { token: t.token, body: { remarks: 'Confident, good vocabulary.' } });
-  assert.equal(r.status, 200); assert.equal(r.body.interview.status, 'COMPLETED');
+  assert.equal((await api('POST', `/${iv._id}/end`, { token: t2.token })).status, 403);
+  assert.equal((await api('POST', `/${iv._id}/end`, { token: s.token })).status, 403);
+  const r = await api('POST', `/${iv._id}/end`, { token: t.token });
+  assert.equal(r.status, 200); assert.equal(r.body.interview.status, 'EVALUATION_PENDING', 'leaving the call does not complete the interview');
   const d = ivDoc(iv._id);
-  assert.ok(d.endedAt && d.startedAt && d.durationSeconds >= 0); assert.equal(d.remarks, 'Confident, good vocabulary.');
-  assert.equal(d.holdsTeacherSlot, false); assert.equal(d.isOpen, false);
-  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: s.token })).status, 409, 'a completed interview cannot be re-entered by a stale client');
+  assert.ok(d.endedAt && d.startedAt && d.durationSeconds >= 0);
+  assert.equal(d.holdsTeacherSlot, true, 'teacher still owes the evaluation'); assert.equal(d.isOpen, true);
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: s.token })).status, 409, 'the media room is closed');
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: t.token })).status, 409);
+  assert.equal((await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } })).body.interview.status, 'EVALUATION_PENDING', 'no second request while evaluating');
+  const s2 = await submittedStudent();
+  assert.equal((await api('POST', '/teacher/start', { token: t.token, body: { studentId: String(s2.user._id), examId: String(s2.exam._id) } })).status, 409, 'busy until the evaluation is submitted');
+  // final submission completes it and frees the teacher
+  const sub = await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } });
+  assert.equal(sub.status, 200); assert.equal(sub.body.interview.status, 'COMPLETED');
+  const done = ivDoc(iv._id);
+  assert.equal(done.holdsTeacherSlot, false); assert.equal(done.isOpen, false);
   assert.equal((await api('POST', `/${iv._id}/approve`, { token: t.token })).status, 409);
   assert.equal((await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } })).body.code, 'ALREADY_COMPLETED');
-  // the teacher is free again
-  const s2 = await submittedStudent();
-  assert.equal((await api('POST', '/teacher/start', { token: t.token, body: { studentId: String(s2.user._id), examId: String(s2.exam._id) } })).status, 200);
+  assert.equal((await api('POST', '/teacher/start', { token: t.token, body: { studentId: String(s2.user._id), examId: String(s2.exam._id) } })).status, 200, 'the teacher is free again');
 });
 
 test('cancel: a student may cancel before approval only; a cancelled interview cannot be joined; a new request is then allowed', async () => {
@@ -433,10 +441,10 @@ test('SIMULTANEOUS interviews: separate rooms, no signalling or events cross ove
 
   // ending room A does not touch room B
   const ended = waitFor(tuS, 'interview:ended'); const bQuiet = silent(diS, 'interview:ended', 400);
-  const done = await api('POST', `/${A.iv._id}/complete`, { token: nikhil.token, body: { remarks: 'ok' } });
+  const done = await api('POST', `/${A.iv._id}/end`, { token: nikhil.token });
   assert.equal(done.status, 200);
-  assert.equal((await ended).status, 'COMPLETED'); await bQuiet;
-  assert.equal(ivDoc(A.iv._id).status, 'COMPLETED'); assert.equal(ivDoc(B.iv._id).status, 'IN_PROGRESS');
+  assert.equal((await ended).status, 'EVALUATION_PENDING'); await bQuiet;
+  assert.equal(ivDoc(A.iv._id).status, 'EVALUATION_PENDING'); assert.equal(ivDoc(B.iv._id).status, 'IN_PROGRESS');
   assert.equal((await api('POST', `/${B.iv._id}/room-access`, { token: B.s.token })).status, 200, 'room B still usable');
   const stillWorks = waitFor(diS, 'interview:signal');
   kS.emit('interview:signal', { data: { type: 'ice', c: 1 } });
@@ -446,7 +454,7 @@ test('SIMULTANEOUS interviews: separate rooms, no signalling or events cross ove
   diS.close();
   await new Promise((r) => setTimeout(r, 200));
   assert.equal(ivDoc(B.iv._id).studentPresent, false); assert.equal(ivDoc(B.iv._id).status, 'IN_PROGRESS', 'a dropped student does not end the interview');
-  assert.equal(ivDoc(A.iv._id).status, 'COMPLETED');
+  assert.equal(ivDoc(A.iv._id).status, 'EVALUATION_PENDING');
 });
 
 test('rooms: reconnect replaces the old tab of the same user (same interview), never a third person', { skip: NO_CLIENT }, async () => {
@@ -466,7 +474,7 @@ test('rooms: reconnect replaces the old tab of the same user (same interview), n
   assert.equal((await joinRoom(s3, iv._id)).ok, true, 'rejoin to the SAME interview');
 });
 
-test('rooms: cancel/complete by the server closes the room and later joins are refused', { skip: NO_CLIENT }, async () => {
+test('rooms: cancel by the server closes the room and later joins are refused', { skip: NO_CLIENT }, async () => {
   const t = await mkUser({ role: 'teacher' }); const { s, iv } = await approvedPair(t);
   const ts = await connect(t.token); const ss = await connect(s.token);
   await joinRoom(ts, iv._id); await joinRoom(ss, iv._id);
@@ -639,4 +647,229 @@ test('the AI Interview model and routes are untouched by this feature', () => {
   const src = fs.readFileSync(path.join(SRC, 'routes', 'interviews.js'), 'utf8');
   assert.ok(!/aiInterview|AIInterview/i.test(src));
   assert.notEqual(require('../models/TeacherInterview'), require('../models/TeacherInterview').AIInterview);
+});
+
+// ═════════════════ 8. Live-Classes style accept, evaluation + marks, completion logic ═════════════════
+/** student requests, the teacher ACCEPTS from the waiting list, both connect → IN_PROGRESS */
+const runningPair = async (teacher, studentOpts = {}) => {
+  const s = await submittedStudent(studentOpts);
+  const iv = (await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } })).body.interview;
+  const acc = await api('POST', `/${iv._id}/accept`, { token: teacher.token });
+  assert.equal(acc.status, 200, JSON.stringify(acc.body));
+  await svc.setPresence(iv._id, 'teacher', true); await svc.setPresence(iv._id, 'student', true); await svc.markConnected(iv._id);
+  assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS');
+  return { s, iv };
+};
+const evalDocs = (id) => M.InterviewEvaluation.docs.filter((d) => String(d.interview) === String(id));
+
+test('accept: the waiting request is claimed AND approved in one atomic step; exactly one of several teachers wins; the student then may enter', async () => {
+  const s = await submittedStudent();
+  const [t1, t2, t3] = [await mkUser({ role: 'teacher' }), await mkUser({ role: 'teacher' }), await mkUser({ role: 'teacher' })];
+  const iv = (await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } })).body.interview;
+  assert.equal(iv.status, 'REQUESTED');
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: s.token })).status, 409, 'cannot enter before a teacher accepts');
+  assert.equal((await api('POST', `/${iv._id}/accept`, { token: s.token })).status, 403, 'students cannot accept');
+  const results = await Promise.all([t1, t2, t3].map((t) => api('POST', `/${iv._id}/accept`, { token: t.token })));
+  assert.equal(results.filter((r) => r.status === 200).length, 1, 'exactly one winner');
+  assert.deepEqual(results.filter((r) => r.status !== 200).map((r) => r.status), [409, 409]);
+  const winner = results.findIndex((r) => r.status === 200);
+  const d = ivDoc(iv._id);
+  assert.equal(d.status, 'APPROVED'); assert.equal(String(d.teacher), String([t1, t2, t3][winner].user._id)); assert.equal(d.holdsTeacherSlot, true);
+  assert.equal((await api('POST', `/${iv._id}/room-access`, { token: s.token })).status, 200, 'approved student may enter');
+  const again = await api('POST', `/${iv._id}/accept`, { token: [t1, t2, t3][winner].token });
+  assert.equal(again.status, 200, 'accepting your own interview again is harmless');
+  // a busy teacher cannot accept a second one
+  const s2 = await submittedStudent(); const iv2 = (await api('POST', '/request', { token: s2.token, body: { examId: String(s2.exam._id) } })).body.interview;
+  const busy = await api('POST', `/${iv2._id}/accept`, { token: [t1, t2, t3][winner].token });
+  assert.equal(busy.status, 409); assert.equal(busy.body.code, 'TEACHER_BUSY');
+});
+
+test('scores: whole numbers 0-10 only; invalid values are rejected; totals/percentages are computed by the server and a client total is ignored', async () => {
+  const t = await mkUser({ role: 'teacher' }); const { iv } = await runningPair(t);
+  const put = (scores, extra = {}) => api('PUT', `/${iv._id}/evaluation`, { token: t.token, body: { scores, ...extra } });
+  for (const bad of [11, -1, 7.5, 'abc', true, [], {}, '1e1', ' ', '10.0']) {
+    const r = await put({ communication: bad });
+    if (bad === ' ') { assert.equal(r.status, 400, 'blank-ish string rejected'); continue; }
+    assert.equal(r.status, 400, `rejects ${JSON.stringify(bad)}`); assert.equal(r.body.code, 'INVALID_SCORE');
+  }
+  assert.equal((await put({ communication: '8' })).status, 200, 'digit string accepted as 8');
+  // client-supplied totals are ignored: 8+9+7+8+8 = 40 → 80%
+  const r = await put(FULL, { totalMarks: 50, percentage: 100, maxMarks: 999 });
+  assert.equal(r.status, 200); assert.equal(r.body.evaluation.totalMarks, 40); assert.equal(r.body.evaluation.percentage, 80); assert.equal(r.body.evaluation.maxMarks, 50);
+  assert.deepEqual(svc.totals({ communication: 10, confidence: 10, subjectKnowledge: 10, listening: 10, logicalThinking: 10 }), { totalMarks: 50, maxMarks: 50, percentage: 100 });
+  assert.equal(svc.totals({ communication: 7, confidence: 7, subjectKnowledge: 7, listening: 7, logicalThinking: 7 }).percentage, 70);
+  assert.equal(svc.totals({ communication: 5, confidence: 5, subjectKnowledge: 5, listening: 5, logicalThinking: 5 }).percentage, 50);
+  assert.ok(svc.totals({ communication: 10, confidence: 10, subjectKnowledge: 10, listening: 10, logicalThinking: 10, extra: 99 }).totalMarks <= 50, 'unknown criteria never add marks');
+  const stored = evalDocs(iv._id)[0];
+  assert.equal(stored.totalMarks, 40); assert.equal(stored.state, 'DRAFT');
+  assert.equal(M.TeacherInterview.docs.find((d) => String(d._id) === String(iv._id)).status, 'IN_PROGRESS', 'a draft never changes the interview status');
+});
+
+test('evaluation: draft → incomplete cannot be finalised → authorised teacher submits once → locked; interview completes only then', async () => {
+  const t = await mkUser({ role: 'teacher' }); const t2 = await mkUser({ role: 'teacher' });
+  const { s, iv } = await runningPair(t);
+  const sub = (token, body) => api('POST', `/${iv._id}/evaluation/submit`, { token, body });
+  assert.equal((await sub(t.token, { scores: FULL })).status, 409, 'cannot submit while the call is still running');
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  assert.equal(ivDoc(iv._id).status, 'EVALUATION_PENDING');
+
+  // draft is saved and can be read back after "leaving"
+  const dr = await api('PUT', `/${iv._id}/evaluation`, { token: t.token, body: { scores: { communication: 6, confidence: 7 }, remarks: 'Draft remark', strengths: 'Clear voice' } });
+  assert.equal(dr.status, 200); assert.equal(dr.body.evaluation.state, 'DRAFT'); assert.equal(dr.body.evaluation.totalMarks, 13);
+  const back = await api('GET', `/${iv._id}/evaluation`, { token: t.token });
+  assert.equal(back.body.evaluation.remarks, 'Draft remark'); assert.equal(back.body.criteria.length, 5);
+  assert.deepEqual(back.body.criteria.map((c) => c.max), [10, 10, 10, 10, 10]);
+
+  // incomplete → refused, interview still not completed
+  const inc = await sub(t.token, { scores: { communication: 6, confidence: 7 } });
+  assert.equal(inc.status, 400); assert.equal(inc.body.code, 'INCOMPLETE_EVALUATION');
+  assert.equal(ivDoc(iv._id).status, 'EVALUATION_PENDING');
+
+  // other teacher / student / anonymous cannot read, save or submit
+  for (const [m, u, b] of [['GET', `/${iv._id}/evaluation`], ['PUT', `/${iv._id}/evaluation`, { scores: FULL }], ['POST', `/${iv._id}/evaluation/submit`, { scores: FULL }]]) {
+    assert.equal((await api(m, u, { token: t2.token, body: b })).status, 403, `other teacher ${m}`);
+    assert.equal((await api(m, u, { token: s.token, body: b })).status, 403, `student ${m}`);
+    assert.equal((await api(m, u, { body: b })).status, 401, `anon ${m}`);
+  }
+  assert.equal(ivDoc(iv._id).status, 'EVALUATION_PENDING');
+
+  // the same submit fired three times at once → ONE final result
+  const before = Date.now();
+  const rs = await Promise.all([1, 2, 3].map(() => sub(t.token, { scores: FULL, remarks: 'Confident', strengths: 'Vocabulary', improvements: 'Pace' })));
+  assert.ok(rs.every((r) => r.status === 200), JSON.stringify(rs.map((r) => r.body)));
+  assert.equal(evalDocs(iv._id).length, 1, 'no duplicate final results');
+  const ev = evalDocs(iv._id)[0];
+  assert.equal(ev.state, 'SUBMITTED'); assert.equal(ev.totalMarks, 40); assert.equal(ev.percentage, 80);
+  assert.equal(String(ev.teacher), String(t.user._id), 'the submitting teacher is recorded'); assert.equal(String(ev.student), String(s.user._id));
+  assert.ok(ev.submittedAt && new Date(ev.submittedAt).getTime() >= before - 1000);
+  const d = ivDoc(iv._id);
+  assert.equal(d.status, 'COMPLETED'); assert.equal(d.holdsTeacherSlot, false); assert.equal(d.isOpen, false);
+  const firstSubmittedAt = String(ev.submittedAt);
+
+  // locked: no overwrite by draft or by a different second submission
+  assert.equal((await api('PUT', `/${iv._id}/evaluation`, { token: t.token, body: { scores: { communication: 1 } } })).status, 409);
+  const again = await sub(t.token, { scores: { communication: 0, confidence: 0, subjectKnowledge: 0, listening: 0, logicalThinking: 0 } });
+  assert.equal(again.status, 200); assert.equal(again.body.alreadySubmitted, true);
+  assert.equal(evalDocs(iv._id)[0].totalMarks, 40, 'the first final result is untouched'); assert.equal(String(evalDocs(iv._id)[0].submittedAt), firstSubmittedAt);
+});
+
+test('a teacher who leaves the room / a network drop never completes the interview; only the submitted evaluation does', async () => {
+  const t = await mkUser({ role: 'teacher' }); const { iv } = await runningPair(t);
+  await svc.setPresence(iv._id, 'teacher', false); await svc.setPresence(iv._id, 'student', false);
+  assert.equal(ivDoc(iv._id).status, 'IN_PROGRESS', 'leaving does not complete');
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  const stale = await svc.recoverStale({ staleMs: 0, now: new Date(Date.now() + 3600e3) });
+  assert.ok(!stale.ids.includes(String(iv._id)), 'an interview waiting for its evaluation is never swept as stale');
+  assert.equal(ivDoc(iv._id).status, 'EVALUATION_PENDING');
+});
+
+test('student results: only FINAL evaluations of their own interview; drafts and pending evaluations stay hidden; exam marks stay separate', async () => {
+  const t = await mkUser({ role: 'teacher' });
+  const { s, iv } = await runningPair(t, { score: 37 });
+  const other = await submittedStudent();
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  await api('PUT', `/${iv._id}/evaluation`, { token: t.token, body: { scores: FULL, remarks: 'SECRET-DRAFT-NOTE' } });
+  let r = await api('GET', '/results', { token: s.token });
+  assert.equal(r.status, 200); assert.equal(r.body.results.length, 0);
+  assert.equal(r.body.pending.length, 1); assert.match(r.body.pending[0].message, /has not been submitted yet/);
+  assert.ok(!JSON.stringify(r.body).includes('SECRET-DRAFT-NOTE'), 'drafts are never exposed');
+  const ov = await api('GET', '/mine', { token: s.token });
+  assert.equal(ov.body.byExam[String(s.exam._id)].stage, 'EVALUATION_PENDING'); assert.equal(ov.body.byExam[String(s.exam._id)].workflowComplete, false);
+
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL, remarks: 'Confident', strengths: 'Vocabulary', improvements: 'Pace' } });
+  r = await api('GET', '/results', { token: s.token });
+  assert.equal(r.body.results.length, 1); assert.equal(r.body.pending.length, 0);
+  const res = r.body.results[0];
+  assert.equal(res.totalMarks, 40); assert.equal(res.maxMarks, 50); assert.equal(res.percentage, 80);
+  assert.deepEqual(res.scores.map((x) => [x.label, x.score, x.max]), [['Communication Skills', 8, 10], ['Confidence and Self-Presentation', 9, 10], ['Subject Knowledge and Understanding', 7, 10], ['Listening Skills and Comprehension', 8, 10], ['Logical Thinking and Problem-Solving', 8, 10]]);
+  assert.equal(res.remarks, 'Confident'); assert.equal(res.strengths, 'Vocabulary'); assert.equal(res.improvements, 'Pace'); assert.ok(res.teacher.name && res.exam.title && res.student.name && res.interviewDate);
+  assert.ok(!('roomId' in res) && !('audit' in res), 'no internals');
+  assert.equal(M.OlympiadAttempt.docs.find((a) => String(a.student) === String(s.user._id)).score, 37, 'Olympiad exam marks are untouched and separate');
+  assert.ok(!('score' in res));
+  // another student sees nothing of it; teachers/anonymous cannot use the student endpoint
+  assert.equal((await api('GET', '/results', { token: other.token })).body.results.length, 0);
+  assert.equal((await api('GET', '/results', { token: t.token })).status, 403);
+  assert.equal((await api('GET', '/results')).status, 401);
+  const done = await api('GET', '/mine', { token: s.token });
+  assert.equal(done.body.byExam[String(s.exam._id)].stage, 'COMPLETED'); assert.equal(done.body.byExam[String(s.exam._id)].workflowComplete, true);
+  assert.equal(done.body.byExam[String(s.exam._id)].evaluation.totalMarks, 40);
+});
+
+test('workflow stage for the Exams page: LOCKED → AVAILABLE → REQUESTED → IN_PROGRESS → EVALUATION_PENDING → COMPLETED; cancelled/failed never count as completed', async () => {
+  const t = await mkUser({ role: 'teacher' });
+  const unsubmitted = await mkUser(); const ex = await mkExam(5); await pay(unsubmitted.user, ex);
+  const stageOf = async (u, exam) => (await api('GET', '/mine', { token: u.token })).body.byExam[String(exam._id)];
+  assert.equal((await stageOf(unsubmitted, ex)).stage, 'LOCKED');
+
+  const s = await submittedStudent();
+  assert.equal((await stageOf(s, s.exam)).stage, 'AVAILABLE');
+  const iv = (await api('POST', '/request', { token: s.token, body: { examId: String(s.exam._id) } })).body.interview;
+  assert.equal((await stageOf(s, s.exam)).stage, 'REQUESTED');
+  await api('POST', `/${iv._id}/accept`, { token: t.token });
+  assert.equal((await stageOf(s, s.exam)).stage, 'IN_PROGRESS');
+  await svc.setPresence(iv._id, 'teacher', true); await svc.setPresence(iv._id, 'student', true); await svc.markConnected(iv._id);
+  assert.equal((await stageOf(s, s.exam)).stage, 'IN_PROGRESS');
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  assert.equal((await stageOf(s, s.exam)).stage, 'EVALUATION_PENDING');
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } });
+  assert.equal((await stageOf(s, s.exam)).stage, 'COMPLETED');
+
+  // cancelled → can request again; failed → same. Neither is "completed".
+  const c = await submittedStudent();
+  const civ = (await api('POST', '/request', { token: c.token, body: { examId: String(c.exam._id) } })).body.interview;
+  await api('POST', `/${civ._id}/cancel`, { token: c.token });
+  let o = await stageOf(c, c.exam); assert.equal(o.stage, 'AVAILABLE'); assert.equal(o.workflowComplete, false);
+  const again = await api('POST', '/request', { token: c.token, body: { examId: String(c.exam._id) } });
+  assert.equal(again.status, 201, 'a new request is allowed after a cancellation');
+  const f = await submittedStudent();
+  const fiv = (await api('POST', '/request', { token: f.token, body: { examId: String(f.exam._id) } })).body.interview;
+  const t2 = await mkUser({ role: 'teacher' });
+  await api('POST', `/${fiv._id}/accept`, { token: t2.token });
+  await svc.recoverStale({ staleMs: 0, now: new Date(Date.now() + 3600e3) });
+  assert.equal(ivDoc(fiv._id).status, 'FAILED');
+  o = await stageOf(f, f.exam); assert.equal(o.stage, 'AVAILABLE'); assert.equal(o.workflowComplete, false);
+});
+
+test('admin: sees evaluations, corrections need a reason and keep the original (audited), non-admins cannot; CSV carries scores but no feedback text or room ids', async () => {
+  const t = await mkUser({ role: 'teacher' }); const admin = await mkUser({ role: 'admin' });
+  const { s, iv } = await runningPair(t);
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL, remarks: 'PRIVATE-FEEDBACK' } });
+
+  const list = await api('GET', `/admin/list?status=COMPLETED`, { token: admin.token });
+  const row = list.body.interviews.find((x) => x._id === iv._id);
+  assert.equal(row.evaluation.totalMarks, 40); assert.equal(row.evaluation.scores.communication, 8); assert.equal(row.evaluation.state, 'SUBMITTED');
+  const det = await api('GET', `/admin/${iv._id}`, { token: admin.token });
+  assert.equal(det.body.interview.evaluation.remarks, 'PRIVATE-FEEDBACK'); assert.equal(det.body.interview.evaluation.totalMarks, 40);
+
+  const fix = (token, body) => api('PUT', `/admin/${iv._id}/evaluation`, { token, body });
+  assert.equal((await fix(t.token, { scores: { communication: 1 }, reason: 'teacher edit' })).status, 403);
+  assert.equal((await fix(s.token, { scores: { communication: 1 }, reason: 'student edit' })).status, 403);
+  assert.equal((await fix(admin.token, { scores: { communication: 9 } })).body.code, 'REASON_REQUIRED');
+  assert.equal((await fix(admin.token, { scores: { communication: 11 }, reason: 'typo in marks' })).status, 400);
+  const ok = await fix(admin.token, { scores: { communication: 10 }, reason: 'Teacher entered wrong value' });
+  assert.equal(ok.status, 200); assert.equal(ok.body.evaluation.totalMarks, 42);
+  assert.equal(ok.body.evaluation.revisions.length, 1); assert.equal(ok.body.evaluation.revisions[0].previous.totalMarks, 40, 'original values are preserved');
+  assert.ok(ivDoc(iv._id).audit.some((a) => a.action === 'EVALUATION_CORRECTED'));
+  const stats = await api('GET', '/admin/stats', { token: admin.token });
+  assert.ok(typeof stats.body.stats.evaluationPending === 'number');
+
+  const csv = await api('GET', '/admin/export', { token: admin.token });
+  assert.match(csv.text, /Communication Skills \(\/10\)/); assert.match(csv.text, /Total Marks/);
+  assert.ok(csv.text.includes(',10,9,7,8,8,42,50,84'), 'scores, total, max and percentage are exported');
+  assert.ok(!csv.text.includes('PRIVATE-FEEDBACK'), 'free-text feedback is not exported'); assert.ok(!/iv_[0-9a-f]{20}/.test(csv.text), 'no room ids');
+});
+
+test('teacher directory marks EVALUATION_PENDING rows and shows the marks summary (no feedback text) of finished interviews', async () => {
+  const t = await mkUser({ role: 'teacher' }); const viewer = await mkUser({ role: 'teacher' });
+  const { s, iv } = await runningPair(t);
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  let dir = await api('GET', '/teacher/directory', { token: viewer.token });
+  let row = dir.body.rows.find((r) => r.student._id === String(s.user._id));
+  assert.equal(row.interviewStatus, 'EVALUATION_PENDING'); assert.equal(row.assignedToMe, false);
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL, remarks: 'TEXT-NOT-IN-DIRECTORY' } });
+  dir = await api('GET', '/teacher/directory', { token: viewer.token });
+  row = dir.body.rows.find((r) => r.student._id === String(s.user._id));
+  assert.equal(row.interviewStatus, 'COMPLETED'); assert.equal(row.evaluation.totalMarks, 40);
+  assert.ok(!JSON.stringify(dir.body).includes('TEXT-NOT-IN-DIRECTORY'));
 });

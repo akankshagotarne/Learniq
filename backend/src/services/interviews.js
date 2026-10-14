@@ -9,8 +9,9 @@ const { EventEmitter } = require('events');
 const { OlympiadExam, OlympiadPayment, OlympiadAttempt } = require('../models/Olympiad');
 const User = require('../models/User');
 const {
-  TeacherInterview, InterviewSetting, ACTIVE, OPEN, ROOM_STATUSES, flagsFor,
+  TeacherInterview, InterviewSetting, InterviewEvaluation, ACTIVE, OPEN, ROOM_STATUSES, EVALUATING, flagsFor,
 } = require('../models/TeacherInterview');
+const { CRITERIA, MAX_TOTAL, KEYS } = require('../config/interviewCriteria');
 
 class InterviewError extends Error {
   constructor(status, message, code, extra) {
@@ -253,14 +254,237 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
   return next;
 };
 
-const teacherComplete = async (teacher, id, remarks) => {
+/**
+ * Accept a student's waiting request (the Live Classes "approve from the waiting room" step): ONE atomic update claims the
+ * interview for this teacher AND approves the student, so the student's waiting screen moves straight into the room.
+ * Only one teacher can win: the update only matches while the interview is still REQUESTED.
+ */
+const teacherAccept = async (teacher, id) => {
+  const iv = await load(id);
+  if (same(iv.teacher, teacher._id)) { // my own interview: accepting again is harmless
+    if (iv.status === 'WAITING_FOR_APPROVAL') return teacherApprove(teacher, id);
+    if (ACTIVE.includes(iv.status)) return iv;
+  }
+  if (iv.status !== 'REQUESTED') {
+    throw await conflict(iv._id, iv.teacher ? 'Another teacher has already accepted this interview.' : 'This request can no longer be accepted.', 'ALREADY_CLAIMED');
+  }
+  try {
+    const now = new Date();
+    const next = await transition(
+      { _id: iv._id, status: 'REQUESTED', isOpen: true },
+      { teacher: teacher._id, status: 'APPROVED', assignedAt: now, approvedAt: now, ...flagsFor('APPROVED') },
+      note(teacher._id, 'teacher', 'ACCEPTED')
+    );
+    if (!next) throw await conflict(iv._id, 'Another teacher has already accepted this interview.', 'ALREADY_CLAIMED');
+    emitChanged(next);
+    return next;
+  } catch (e) {
+    if (isDup(e)) throw new InterviewError(409, 'You already have a live interview. Finish its evaluation before accepting another.', 'TEACHER_BUSY');
+    throw e;
+  }
+};
+
+/**
+ * The teacher ends the video call. This does NOT complete the interview: it moves to EVALUATION_PENDING (media room closed,
+ * teacher still holds the slot) until the evaluation is submitted. Only a call that really ran (IN_PROGRESS) can be evaluated.
+ */
+const teacherEnd = async (teacher, id) => {
   const iv = await load(id);
   assertAssignedTeacher(iv, teacher);
-  if (iv.status === 'COMPLETED') return iv;
-  const next = await finish(iv, { teacher: teacher._id, status: 'IN_PROGRESS' }, { status: 'COMPLETED', by: teacher._id, role: 'teacher', action: 'COMPLETED', remarks });
-  if (!next) throw await conflict(iv._id, 'Only an interview in progress can be marked completed. Cancel it instead if it never started.', 'INVALID_STATE');
+  if (iv.status === EVALUATING || iv.status === 'COMPLETED') return iv;
+  const next = await finish(iv, { teacher: teacher._id, status: 'IN_PROGRESS' }, { status: EVALUATING, by: teacher._id, role: 'teacher', action: 'CALL_ENDED' });
+  if (!next) throw await conflict(iv._id, 'Only a running interview can be ended and evaluated. Cancel it instead if it never started.', 'INVALID_STATE');
   emitChanged(next);
   return next;
+};
+
+// ── evaluation (default five criteria, server-side validation and totals) ─────────────────────────
+const TEXT_MAX = 1500;
+const cleanText = (v) => (typeof v === 'string' ? v.trim().slice(0, TEXT_MAX) : '');
+const SCORE_RE = /^(10|[0-9])$/;
+
+/** @returns {{ scores: object, errors: string[] }} integers 0-10 only; missing keys stay undefined (a draft may be partial) */
+const parseScores = (input) => {
+  const scores = {}; const errors = [];
+  const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  for (const c of CRITERIA) {
+    const raw = src[c.key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const n = typeof raw === 'number' ? raw : (typeof raw === 'string' && SCORE_RE.test(raw.trim()) ? Number(raw.trim()) : NaN);
+    if (!Number.isInteger(n) || n < 0 || n > c.max) errors.push(`${c.label}: enter a whole number from 0 to ${c.max}.`);
+    else scores[c.key] = n;
+  }
+  return { scores, errors };
+};
+
+/** totals are ALWAYS computed here - any total/percentage sent by the browser is ignored */
+const totals = (scores) => {
+  const totalMarks = KEYS.reduce((sum, k) => sum + (Number.isInteger(scores && scores[k]) ? scores[k] : 0), 0);
+  return { totalMarks, maxMarks: MAX_TOTAL, percentage: Math.round((totalMarks * 10000) / MAX_TOTAL) / 100 };
+};
+
+const evaluationView = (ev, { includeRevisions = false } = {}) => {
+  if (!ev) return null;
+  const o = plain(ev);
+  const scores = o.scores || {};
+  return {
+    state: o.state,
+    scores: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max, score: Number.isInteger(scores[c.key]) ? scores[c.key] : null })),
+    totalMarks: o.totalMarks || 0, maxMarks: o.maxMarks || MAX_TOTAL, percentage: o.percentage || 0,
+    remarks: o.remarks || '', strengths: o.strengths || '', improvements: o.improvements || '',
+    submittedAt: o.submittedAt || null, updatedAt: o.updatedAt || null,
+    ...(includeRevisions ? { revisions: (o.revisions || []).map((r) => ({ at: r.at, reason: r.reason, previous: r.previous })) } : {}),
+  };
+};
+
+const evaluationSummary = (ev) => (ev && ev.state === 'SUBMITTED'
+  ? { state: 'SUBMITTED', totalMarks: ev.totalMarks, maxMarks: ev.maxMarks, percentage: ev.percentage, submittedAt: ev.submittedAt }
+  : ev ? { state: 'DRAFT' } : null);
+
+const feedbackOf = (body) => ({ remarks: cleanText(body && body.remarks), strengths: cleanText(body && body.strengths), improvements: cleanText(body && body.improvements) });
+
+const scoreError = (errors) => new InterviewError(400, errors[0], 'INVALID_SCORE', { errors });
+
+/** The assigned teacher reads their own draft / final evaluation (+ the criteria to render the form) */
+const getEvaluation = async (teacher, id) => {
+  const iv = await load(id);
+  assertAssignedTeacher(iv, teacher);
+  const ev = await InterviewEvaluation.findOne({ interview: iv._id });
+  return { criteria: CRITERIA, maxMarks: MAX_TOTAL, interviewStatus: iv.status, evaluation: evaluationView(ev) };
+};
+
+/** Save a draft: partial scores allowed, nothing is finalised, the interview stays as it is. */
+const saveEvaluationDraft = async (teacher, id, body) => {
+  const iv = await load(id);
+  assertAssignedTeacher(iv, teacher);
+  if (iv.status === 'COMPLETED') throw new InterviewError(409, 'This evaluation has already been submitted and is locked.', 'EVALUATION_LOCKED');
+  if (iv.status !== EVALUATING && iv.status !== 'IN_PROGRESS') {
+    throw new InterviewError(409, 'You can evaluate an interview once the video call has started.', 'INVALID_STATE');
+  }
+  const { scores, errors } = parseScores(body && body.scores);
+  if (errors.length) throw scoreError(errors);
+  const existing = await InterviewEvaluation.findOne({ interview: iv._id });
+  if (existing && existing.state === 'SUBMITTED') throw new InterviewError(409, 'This evaluation has already been submitted and is locked.', 'EVALUATION_LOCKED');
+  const merged = { ...((existing && existing.scores) || {}), ...scores };
+  // a score the teacher cleared stays cleared
+  for (const c of CRITERIA) {
+    const raw = body && body.scores && body.scores[c.key];
+    if (raw === null || raw === '') delete merged[c.key];
+  }
+  const doc = await InterviewEvaluation.findOneAndUpdate(
+    { interview: iv._id, state: { $ne: 'SUBMITTED' } },
+    { $set: { student: iv.student, teacher: teacher._id, exam: iv.exam, attempt: iv.attempt, scores: merged, ...totals(merged), ...feedbackOf(body), state: 'DRAFT' } },
+    { upsert: true, new: true }
+  );
+  return { evaluation: evaluationView(doc), interviewStatus: iv.status };
+};
+
+/** Mark the interview COMPLETED once its evaluation is final (idempotent, atomic, releases the teacher's slot). */
+const completeAfterEvaluation = async (iv, teacher) => {
+  const filter = { _id: iv._id, teacher: teacher._id, status: EVALUATING };
+  const endedAt = iv.endedAt || new Date();
+  const next = await transition(
+    filter,
+    { status: 'COMPLETED', ...flagsFor('COMPLETED'), endedAt },
+    note(teacher._id, 'teacher', 'EVALUATION_SUBMITTED')
+  );
+  if (next) emitChanged(next);
+  return next;
+};
+
+/**
+ * Final submission. Validates every criterion on the server, computes the totals, stores the evaluation and ONLY THEN marks
+ * the interview COMPLETED. Repeating the request (double click, retry after a network error) never creates a second result.
+ */
+const submitEvaluation = async (teacher, id, body) => {
+  const iv = await load(id);
+  assertAssignedTeacher(iv, teacher);
+  if (iv.status === 'COMPLETED') {
+    const done = await InterviewEvaluation.findOne({ interview: iv._id });
+    return { interview: iv, evaluation: evaluationView(done), alreadySubmitted: true };
+  }
+  if (iv.status !== EVALUATING) {
+    throw new InterviewError(409, 'End the video interview first, then submit the evaluation.', 'INVALID_STATE');
+  }
+  const { scores, errors } = parseScores(body && body.scores);
+  if (errors.length) throw scoreError(errors);
+  const missing = CRITERIA.filter((c) => !Number.isInteger(scores[c.key])).map((c) => c.label);
+  if (missing.length) throw new InterviewError(400, `Please score every criterion before submitting (missing: ${missing.join(', ')}).`, 'INCOMPLETE_EVALUATION', { missing });
+
+  let ev;
+  try {
+    ev = await InterviewEvaluation.findOneAndUpdate(
+      { interview: iv._id, state: { $ne: 'SUBMITTED' } },
+      { $set: { student: iv.student, teacher: teacher._id, exam: iv.exam, attempt: iv.attempt, scores, ...totals(scores), ...feedbackOf(body), state: 'SUBMITTED', submittedAt: new Date() } },
+      { upsert: true, new: true }
+    );
+  } catch (e) {
+    if (!isDup(e)) throw e;
+    ev = await InterviewEvaluation.findOne({ interview: iv._id }); // already final (parallel request): keep the first result untouched
+  }
+  const done = await completeAfterEvaluation(iv, teacher);
+  const fresh = done || await TeacherInterview.findById(iv._id);
+  if (!done && (!fresh || fresh.status !== 'COMPLETED')) {
+    throw await conflict(iv._id, 'The evaluation was saved, but the interview could not be completed. Please try again.', 'INVALID_STATE');
+  }
+  return { interview: fresh, evaluation: evaluationView(ev), alreadySubmitted: !done };
+};
+
+/** Authorised correction of a FINAL evaluation (admin only): reason required, the previous values are kept in `revisions`. */
+const adminCorrectEvaluation = async (admin, id, body) => {
+  const iv = await load(id);
+  const ev = await InterviewEvaluation.findOne({ interview: iv._id });
+  if (!ev || ev.state !== 'SUBMITTED') throw new InterviewError(409, 'Only a submitted evaluation can be corrected.', 'INVALID_STATE');
+  const reason = cleanText(body && body.reason).slice(0, 300);
+  if (reason.length < 5) throw new InterviewError(400, 'Please write the reason for the correction (at least 5 characters).', 'REASON_REQUIRED');
+  const { scores, errors } = parseScores(body && body.scores);
+  if (errors.length) throw scoreError(errors);
+  const merged = { ...(ev.scores || {}), ...scores };
+  const hasText = ['remarks', 'strengths', 'improvements'].some((k) => body && typeof body[k] === 'string');
+  const previous = { scores: ev.scores, totalMarks: ev.totalMarks, percentage: ev.percentage, remarks: ev.remarks, strengths: ev.strengths, improvements: ev.improvements };
+  const set = { scores: merged, ...totals(merged), ...(hasText ? feedbackOf({ remarks: body.remarks ?? ev.remarks, strengths: body.strengths ?? ev.strengths, improvements: body.improvements ?? ev.improvements }) : {}) };
+  const next = await InterviewEvaluation.findOneAndUpdate(
+    { _id: ev._id, state: 'SUBMITTED' },
+    { $set: set, $push: { revisions: { at: new Date(), by: admin._id, reason, previous } } },
+    { new: true }
+  );
+  if (!next) throw new InterviewError(409, 'Could not apply the correction. Please try again.', 'INVALID_STATE');
+  await TeacherInterview.updateOne({ _id: iv._id }, { $push: { audit: note(admin._id, 'admin', 'EVALUATION_CORRECTED', reason) } });
+  emitChanged(iv);
+  return evaluationView(next, { includeRevisions: true });
+};
+
+/** The student's FINAL results only. Drafts and pending evaluations are never exposed. */
+const studentResults = async (student) => {
+  const evals = await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' });
+  const ivs = await TeacherInterview.find({ student: student._id });
+  const examIds = [...new Set(ivs.map((i) => oid(i.exam)))];
+  const teacherIds = [...new Set(ivs.filter((i) => i.teacher).map((i) => oid(i.teacher)))];
+  const [exams, teachers] = await Promise.all([
+    examIds.length ? OlympiadExam.find({ _id: { $in: examIds } }) : [],
+    teacherIds.length ? User.find({ _id: { $in: teacherIds } }) : [],
+  ]);
+  const examById = new Map(exams.map((e) => [oid(e._id), e]));
+  const teacherById = new Map(teachers.map((t) => [oid(t._id), t]));
+  const ivById = new Map(ivs.map((i) => [oid(i._id), i]));
+  const results = evals
+    .map((ev) => ({ ev, iv: ivById.get(oid(ev.interview)) }))
+    .filter(({ iv }) => iv && iv.status === 'COMPLETED')
+    .sort((a, b) => new Date(b.ev.submittedAt) - new Date(a.ev.submittedAt))
+    .map(({ ev, iv }) => {
+      const e = examById.get(oid(iv.exam)); const t = iv.teacher ? teacherById.get(oid(iv.teacher)) : null;
+      const v = evaluationView(ev);
+      return {
+        interviewId: oid(iv._id), student: { name: student.name, standard: student.currentStandard != null ? student.currentStandard : (e ? e.standard : null) },
+        exam: e ? { _id: oid(e._id), title: e.title, standard: e.standard } : null, teacher: t ? { name: t.name } : null,
+        interviewDate: iv.startedAt || iv.endedAt || ev.submittedAt, ...v,
+      };
+    });
+  const pending = ivs.filter((i) => i.status === EVALUATING).map((i) => {
+    const e = examById.get(oid(i.exam));
+    return { interviewId: oid(i._id), exam: e ? { _id: oid(e._id), title: e.title } : null, message: 'Your interview evaluation has not been submitted yet.' };
+  });
+  return { results, pending, criteria: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max })), maxMarks: MAX_TOTAL };
 };
 
 /** student / assigned teacher / admin. Students may cancel only before the teacher approves them. */
@@ -438,6 +662,8 @@ const eligibleRows = async () => {
   const teacherIds = [...new Set(interviews.filter((i) => i.teacher).map((i) => oid(i.teacher)))];
   const teachers = teacherIds.length ? await User.find({ _id: { $in: teacherIds } }) : [];
   const teacherById = new Map(teachers.map((t) => [oid(t._id), t]));
+  const evals = interviews.length ? await InterviewEvaluation.find({ interview: { $in: interviews.map((i) => oid(i._id)) } }) : [];
+  const evalByInterview = new Map(evals.map((e) => [oid(e.interview), e]));
   // the interview that matters for a student+exam: the open one, otherwise the newest finished one
   const best = new Map();
   for (const i of interviews) {
@@ -452,12 +678,12 @@ const eligibleRows = async () => {
       const student = studentById.get(oid(a.student));
       const iv = best.get(`${oid(a.student)}:${oid(a.exam)}`) || null;
       const t = iv && iv.teacher ? teacherById.get(oid(iv.teacher)) : null;
-      return { attempt: a, exam, student, interview: iv, teacher: t };
+      return { attempt: a, exam, student, interview: iv, teacher: t, evaluation: iv ? evalByInterview.get(oid(iv._id)) || null : null };
     });
 };
 
 const STATUS_LABEL = { NONE: 'Not Requested' };
-const rowView = ({ attempt, exam, student, interview, teacher }, viewerId) => ({
+const rowView = ({ attempt, exam, student, interview, teacher, evaluation }, viewerId) => ({
   student: userBrief(student),
   standard: standardOf(exam),
   exam: { _id: oid(exam._id), title: exam.title, standard: exam.standard },
@@ -467,6 +693,7 @@ const rowView = ({ attempt, exam, student, interview, teacher }, viewerId) => ({
   interviewStatusLabel: interview ? interview.status : STATUS_LABEL.NONE,
   assignedTeacher: teacher ? { _id: oid(teacher), name: teacher.name } : null,
   assignedToMe: !!(teacher && viewerId && same(teacher, viewerId)),
+  evaluation: evaluationSummary(evaluation), // marks summary only (no feedback text) in the shared directory
 });
 
 const matchesSearch = (r, q) => {
@@ -482,7 +709,7 @@ const teacherDirectory = async (teacher, { q, standard, status } = {}) => {
   if (standard) rows = rows.filter((r) => String(r.standard) === String(standard));
   if (status) rows = rows.filter((r) => r.interviewStatus === status);
   rows = rows.filter((r) => matchesSearch(r, q));
-  const order = { REQUESTED: 0, WAITING_FOR_APPROVAL: 1, ASSIGNED: 2, CONNECTING: 3, IN_PROGRESS: 4, NONE: 5, COMPLETED: 6, CANCELLED: 7, FAILED: 8 };
+  const order = { REQUESTED: 0, WAITING_FOR_APPROVAL: 1, ASSIGNED: 2, APPROVED: 3, CONNECTING: 3, IN_PROGRESS: 4, EVALUATION_PENDING: 4, NONE: 5, COMPLETED: 6, CANCELLED: 7, FAILED: 8 };
   rows.sort((a, b) => (order[a.interviewStatus] - order[b.interviewStatus]) || (new Date(b.submission.submittedAt) - new Date(a.submission.submittedAt)));
   const mine = await TeacherInterview.findOne({ teacher: teacher._id, holdsTeacherSlot: true });
   const all = await TeacherInterview.find({});
@@ -491,9 +718,29 @@ const teacherDirectory = async (teacher, { q, standard, status } = {}) => {
     waitingApproval: all.filter((i) => i.teacher && same(i.teacher, teacher._id) && i.status === 'WAITING_FOR_APPROVAL').length,
     assigned: all.filter((i) => i.status === 'ASSIGNED').length,
     active: all.filter((i) => ['APPROVED', 'CONNECTING', 'IN_PROGRESS'].includes(i.status)).length,
+    evaluationPending: all.filter((i) => i.teacher && same(i.teacher, teacher._id) && i.status === EVALUATING).length,
     completed: all.filter((i) => i.status === 'COMPLETED').length,
   };
   return { rows, counts, myActive: mine ? view(mine) : null };
+};
+
+/**
+ * Where this purchase is in "exam + interview", from persisted data only:
+ *   LOCKED → AVAILABLE (submitted, interview not requested / cancelled / failed) → REQUESTED → IN_PROGRESS →
+ *   EVALUATION_PENDING → COMPLETED.  Only COMPLETED (evaluation submitted) means the whole workflow is done.
+ */
+const workflowOf = (eligible, iv, evaluation) => {
+  let stage = 'LOCKED';
+  if (eligible) {
+    stage = 'AVAILABLE';
+    if (iv) {
+      if (['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL'].includes(iv.status)) stage = 'REQUESTED';
+      else if (ROOM_STATUSES.includes(iv.status)) stage = 'IN_PROGRESS';
+      else if (iv.status === EVALUATING) stage = 'EVALUATION_PENDING';
+      else if (iv.status === 'COMPLETED') stage = 'COMPLETED';
+    }
+  }
+  return { stage, workflowComplete: stage === 'COMPLETED', evaluation: evaluation ? evaluationSummary(evaluation) : null };
 };
 
 const studentOverview = async (student) => {
@@ -501,6 +748,7 @@ const studentOverview = async (student) => {
     OlympiadPayment.find({ student: student._id, status: 'SUCCESS' }),
     TeacherInterview.find({ student: student._id }),
   ]);
+  const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
   const byExam = {};
   for (const p of payments) {
     const e = await checkEligibility(student._id, oid(p.exam));
@@ -512,6 +760,7 @@ const studentOverview = async (student) => {
       code: e.eligible ? null : e.code,
       message: e.eligible ? null : e.message,
       interview: iv ? view(iv) : null,
+      ...workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null),
     };
   }
   return { byExam, requestsEnabled: (await getSettings()).requestsEnabled };
@@ -556,6 +805,8 @@ const adminList = async ({ q, status, standard, teacher, from, to } = {}) => {
   const examById = new Map(exams.map((e) => [oid(e._id), e]));
   const payments = await OlympiadPayment.find({ _id: { $in: ivs.map((i) => i.payment).filter(Boolean) } });
   const payById = new Map(payments.map((p) => [oid(p._id), p]));
+  const evals = ivs.length ? await InterviewEvaluation.find({ interview: { $in: ivs.map((i) => oid(i._id)) } }) : [];
+  const evalByInterview = new Map(evals.map((e) => [oid(e.interview), e]));
   const staleCut = Date.now() - STALE_MS();
   let rows = ivs.map((i) => {
     const s = userById.get(oid(i.student)); const t = i.teacher ? userById.get(oid(i.teacher)) : null; const e = examById.get(oid(i.exam));
@@ -567,6 +818,12 @@ const adminList = async ({ q, status, standard, teacher, from, to } = {}) => {
       teacher: t ? { _id: oid(t), name: t.name } : null,
       status: i.status, requestedAt: i.requestedAt, startedAt: i.startedAt || null, endedAt: i.endedAt || null,
       durationSeconds: i.durationSeconds || 0, endReason: i.endReason || null, endedBy: i.endedBy || null,
+      evaluation: (() => {
+        const ev = evalByInterview.get(oid(i._id));
+        if (!ev) return null;
+        const sc = ev.scores || {};
+        return { state: ev.state, scores: Object.fromEntries(KEYS.map((k) => [k, Number.isInteger(sc[k]) ? sc[k] : null])), totalMarks: ev.totalMarks, maxMarks: ev.maxMarks, percentage: ev.percentage, submittedAt: ev.submittedAt || null };
+      })(),
       teacherPresent: !!i.teacherPresent, studentPresent: !!i.studentPresent,
       stale: ACTIVE.includes(i.status) && !i.teacherPresent && !i.studentPresent && new Date(i.lastActivityAt).getTime() < staleCut,
     };
@@ -592,6 +849,7 @@ const adminStats = async () => {
     assigned: count('ASSIGNED'),
     waitingApproval: count('WAITING_FOR_APPROVAL'),
     active: count('APPROVED', 'CONNECTING', 'IN_PROGRESS'),
+    evaluationPending: count(EVALUATING),
     completed: count('COMPLETED'),
     cancelled: count('CANCELLED'),
     failed: count('FAILED'),
@@ -619,7 +877,8 @@ const adminTeachers = async () => {
 const adminDetail = async (id) => {
   const iv = await load(id);
   const o = plain(iv);
-  return { ...view(iv), audit: (o.audit || []).map((a) => ({ at: a.at, role: a.role, action: a.action, note: a.note || null })), stale: ACTIVE.includes(iv.status) && !iv.teacherPresent && !iv.studentPresent };
+  const ev = await InterviewEvaluation.findOne({ interview: iv._id });
+  return { ...view(iv), evaluation: evaluationView(ev, { includeRevisions: true }), audit: (o.audit || []).map((a) => ({ at: a.at, role: a.role, action: a.action, note: a.note || null })), stale: ACTIVE.includes(iv.status) && !iv.teacherPresent && !iv.studentPresent };
 };
 
 const csvCell = (v) => {
@@ -629,11 +888,15 @@ const csvCell = (v) => {
 };
 /** metadata only - no room ids, tokens, credentials or media */
 const toCsv = (rows) => {
-  const head = ['Interview ID', 'Student', 'Student Email', 'Standard', 'Exam', 'Teacher', 'Status', 'Requested At', 'Started At', 'Ended At', 'Duration (s)', 'Ended By', 'Reason'];
+  const head = ['Interview ID', 'Student', 'Student Email', 'Standard', 'Exam', 'Teacher', 'Status', 'Requested At', 'Started At', 'Ended At', 'Duration (s)', 'Ended By', 'Reason',
+    ...CRITERIA.map((c) => `${c.label} (/${c.max})`), 'Total Marks', 'Max Marks', 'Percentage', 'Evaluation Submitted At'];
   const lines = [head.map(csvCell).join(',')];
   for (const r of rows) {
     lines.push([r._id, r.student && r.student.name, r.student && r.student.email, r.standard, r.exam && r.exam.title, r.teacher && r.teacher.name,
-      r.status, r.requestedAt, r.startedAt, r.endedAt, r.durationSeconds, r.endedBy, r.endReason].map(csvCell).join(','));
+      r.status, r.requestedAt, r.startedAt, r.endedAt, r.durationSeconds, r.endedBy, r.endReason,
+      ...KEYS.map((k) => (r.evaluation && r.evaluation.state === 'SUBMITTED' ? r.evaluation.scores[k] : '')),
+      r.evaluation && r.evaluation.state === 'SUBMITTED' ? r.evaluation.totalMarks : '', r.evaluation && r.evaluation.state === 'SUBMITTED' ? r.evaluation.maxMarks : '',
+      r.evaluation && r.evaluation.state === 'SUBMITTED' ? r.evaluation.percentage : '', r.evaluation && r.evaluation.state === 'SUBMITTED' ? r.evaluation.submittedAt : ''].map(csvCell).join(','));
   }
   return `${lines.join('\r\n')}\r\n`;
 };
@@ -642,7 +905,8 @@ module.exports = {
   InterviewError, events, isValidId, oid, same,
   getSettings, setRequestsEnabled, checkEligibility,
   requestInterview, studentJoinRequest, cancel,
-  teacherStart, teacherApprove, teacherRejectJoin, teacherRelease, teacherComplete,
+  teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd,
+  getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,
   studentOverview, detailFor, teacherDirectory, adminList, adminStats, adminTeachers, adminDetail, toCsv, view,

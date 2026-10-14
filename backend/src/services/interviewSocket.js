@@ -24,7 +24,7 @@ const setupInterviewSockets = (io) => {
     if (interview.teacher) io.to(`ivuser:${svc.oid(interview.teacher)}`).emit('interview:changed', payload);
     io.to('iv:teachers').emit('interview:changed', payload);
     io.to('iv:admins').emit('interview:changed', payload);
-    if (TERMINAL.includes(interview.status)) {
+    if (TERMINAL.includes(interview.status) || interview.status === 'EVALUATION_PENDING') { // the call is over: the room closes for everyone
       io.to(roomOf(id)).emit('interview:ended', payload);
       io.in(roomOf(id)).socketsLeave(roomOf(id)); // the room is closed for everyone, this interview only
     }
