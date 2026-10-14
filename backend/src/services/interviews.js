@@ -90,9 +90,30 @@ const newRoomId = () => `iv_${crypto.randomBytes(18).toString('hex')}`;
 
 const findOpen = (studentId, examId) => TeacherInterview.findOne({ student: studentId, exam: examId, isOpen: true });
 
+/**
+ * ONLY the student can create an interview request. A record created by the old "teacher starts the interview" path
+ * (requestedBy 'teacher') is NOT a request: it can never be accepted/approved, never opens a room, and it is invisible to the
+ * tables until the student really asks (which adopts it) or the sweeper cancels it. Pre-room = nobody has been admitted yet.
+ */
+const PRE_ROOM = ['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL'];
+const isGenuineRequest = (iv) => !!iv && iv.requestedBy !== 'teacher';
+const isBogus = (iv) => !!iv && iv.requestedBy === 'teacher' && PRE_ROOM.includes(iv.status);
+const NOT_REQUESTED_ERROR = () => new InterviewError(403, 'The student has not requested this interview yet. Only the student can send the request.', 'NO_STUDENT_REQUEST');
+
 /** Returns the open interview for this student+exam, creating a REQUESTED one when there is none. */
 const findOrCreateOpen = async ({ studentId, examId, eligibility, requestedBy, actor }) => {
+  if (requestedBy !== 'student' || !actor || !same(actor._id, studentId)) throw NOT_REQUESTED_ERROR(); // structural guard: nobody creates a request for a student
   const existing = await findOpen(studentId, examId);
+  if (existing && isBogus(existing)) { // the student's own click turns a teacher-created leftover into a genuine request
+    const adopted = await transition(
+      { _id: existing._id, requestedBy: 'teacher', status: { $in: PRE_ROOM } },
+      { requestedBy: 'student', status: 'REQUESTED', requestedAt: new Date(), ...flagsFor('REQUESTED') },
+      note(actor._id, 'student', 'REQUESTED', 'adopted a teacher-created record'),
+      { teacher: 1, assignedAt: 1, joinRequestedAt: 1, approvedAt: 1 }
+    );
+    const cur = adopted || (await findOpen(studentId, examId));
+    if (cur) { if (adopted) emitChanged(adopted); return { interview: cur, created: !!adopted }; }
+  }
   if (existing) return { interview: existing, created: false };
   const done = await TeacherInterview.findOne({ student: studentId, exam: examId, status: 'COMPLETED' });
   if (done) throw new InterviewError(409, 'The interview for this exam is already completed.', 'ALREADY_COMPLETED');
@@ -162,36 +183,17 @@ const studentJoinRequest = async (student, id) => {
 
 // ── teacher ──────────────────────────────────────────────────────────────────────────────────
 /**
- * Start (claim) the interview of an eligible student. Works for a student who already requested AND for one who has not
- * yet (the teacher initiates). The claim is atomic: only ONE teacher can move REQUESTED → ASSIGNED, and the partial
- * unique index on `teacher` keeps each teacher to one live interview at a time.
+ * "Start Interview" no longer exists as a teacher-initiated action: a teacher can only OPEN an interview that is already hers
+ * (idempotent) or ACCEPT a real student request. Without a persisted student request nothing is created, claimed or approved,
+ * and no room authorisation is ever issued. (The route is kept so old clients get a clear refusal instead of a 404.)
  */
 const teacherStart = async (teacher, { studentId, examId, interviewId }) => {
-  let iv;
-  if (interviewId) {
-    iv = await load(interviewId);
-  } else {
-    if (!isValidId(studentId)) throw new InterviewError(400, 'A valid student is required.', 'INVALID_REQUEST');
-    const eligibility = await requireEligible(studentId, examId);
-    ({ interview: iv } = await findOrCreateOpen({ studentId, examId: eligibility.exam._id, eligibility, requestedBy: 'teacher', actor: teacher }));
-  }
+  let iv = null;
+  if (interviewId) iv = isValidId(interviewId) ? await TeacherInterview.findById(interviewId) : null;
+  else if (isValidId(studentId) && isValidId(examId)) iv = await findOpen(studentId, examId);
+  if (!iv || !isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR();
   if (same(iv.teacher, teacher._id) && ACTIVE.includes(iv.status)) return iv; // my own interview: idempotent
-  if (iv.status !== 'REQUESTED') {
-    throw await conflict(iv._id, iv.teacher ? 'Another teacher has already started this interview.' : 'This interview can no longer be started.', 'ALREADY_CLAIMED');
-  }
-  try {
-    const next = await transition(
-      { _id: iv._id, status: 'REQUESTED', isOpen: true },
-      { teacher: teacher._id, status: 'ASSIGNED', assignedAt: new Date(), ...flagsFor('ASSIGNED') },
-      note(teacher._id, 'teacher', 'CLAIMED')
-    );
-    if (!next) throw await conflict(iv._id, 'Another teacher has already started this interview.', 'ALREADY_CLAIMED');
-    emitChanged(next);
-    return next;
-  } catch (e) {
-    if (isDup(e)) throw new InterviewError(409, 'You already have a live interview. Finish or release it before starting another.', 'TEACHER_BUSY');
-    throw e;
-  }
+  return teacherAccept(teacher, oid(iv._id)); // a real pending request: the single, validated accept path
 };
 
 const assertAssignedTeacher = (iv, teacher) => {
@@ -203,7 +205,7 @@ const teacherApprove = async (teacher, id) => {
   assertAssignedTeacher(iv, teacher);
   if (iv.status === 'APPROVED') return iv;
   const next = await transition(
-    { _id: iv._id, teacher: teacher._id, status: 'WAITING_FOR_APPROVAL' },
+    { _id: iv._id, teacher: teacher._id, status: 'WAITING_FOR_APPROVAL', requestedBy: { $ne: 'teacher' } },
     { status: 'APPROVED', approvedAt: new Date(), ...flagsFor('APPROVED') },
     note(teacher._id, 'teacher', 'APPROVED')
   );
@@ -265,6 +267,7 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
  */
 const teacherAccept = async (teacher, id) => {
   const iv = await load(id);
+  if (!isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR(); // a record the student never requested can not be accepted
   if (same(iv.teacher, teacher._id)) { // my own interview: accepting again is harmless
     if (iv.status === 'WAITING_FOR_APPROVAL') return teacherApprove(teacher, id);
     if (ACTIVE.includes(iv.status)) return iv;
@@ -275,7 +278,7 @@ const teacherAccept = async (teacher, id) => {
   try {
     const now = new Date();
     const next = await transition(
-      { _id: iv._id, status: 'REQUESTED', isOpen: true },
+      { _id: iv._id, status: 'REQUESTED', isOpen: true, requestedBy: { $ne: 'teacher' } },
       { teacher: teacher._id, status: 'APPROVED', assignedAt: now, approvedAt: now, ...flagsFor('APPROVED') },
       note(teacher._id, 'teacher', 'ACCEPTED')
     );
@@ -298,6 +301,29 @@ const teacherEnd = async (teacher, id) => {
   if (iv.status === EVALUATING || iv.status === 'COMPLETED') return iv;
   const next = await finish(iv, { teacher: teacher._id, status: 'IN_PROGRESS' }, { status: EVALUATING, by: teacher._id, role: 'teacher', action: 'CALL_ENDED' });
   if (!next) throw await conflict(iv._id, 'Only a running interview can be ended and evaluated. Cancel it instead if it never started.', 'INVALID_STATE');
+  emitChanged(next);
+  return next;
+};
+
+/** how a session that never ran was closed (stored in endReason + the audit trail, so admins can tell it from a conducted interview) */
+const CLOSED_BEFORE_START = 'TEACHER_CLOSED_BEFORE_START';
+/**
+ * The teacher closes an approved session in which the interview NEVER RAN (student has not joined / media never connected).
+ * It is a cancellation, not a completion: no evaluation is required or created, the status becomes CANCELLED (startedAt stays
+ * empty), the teacher's slot is released and the student's waiting screen is told through the normal 'changed' event.
+ * A running interview (IN_PROGRESS) is refused here - it must go through End & Evaluate - and so is anything already finished.
+ */
+const teacherCloseWaiting = async (teacher, id) => {
+  const iv = await load(id);
+  assertAssignedTeacher(iv, teacher);
+  if (iv.status === 'CANCELLED' && iv.endReason === CLOSED_BEFORE_START) return iv; // repeated click / retry: already closed, harmless
+  if (iv.status === 'IN_PROGRESS') throw new InterviewError(409, 'This interview is already running. End it and evaluate instead.', 'RUNNING', { status: iv.status });
+  const next = await finish(
+    iv,
+    { teacher: teacher._id, status: { $in: ['ASSIGNED', 'WAITING_FOR_APPROVAL', 'APPROVED', 'CONNECTING'] }, startedAt: { $exists: false } },
+    { status: 'CANCELLED', by: teacher._id, role: 'teacher', action: 'CLOSED_BEFORE_START', reason: CLOSED_BEFORE_START }
+  );
+  if (!next) throw await conflict(iv._id, 'This interview can no longer be closed as a waiting session.', 'INVALID_STATE');
   emitChanged(next);
   return next;
 };
@@ -518,7 +544,7 @@ const adminAssign = async (admin, id, teacherId) => {
   }
   try {
     const next = await transition(
-      { _id: iv._id, status: { $in: ['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL'] } },
+      { _id: iv._id, status: { $in: PRE_ROOM }, requestedBy: { $ne: 'teacher' } },
       { teacher: teacher._id, status: 'ASSIGNED', assignedAt: new Date(), ...flagsFor('ASSIGNED') },
       note(admin._id, 'admin', 'ASSIGNED', `to ${teacher.name}`),
       { joinRequestedAt: 1 }
@@ -543,7 +569,9 @@ const roleIn = (iv, user) => {
 const authorizeRoom = (iv, user) => {
   const role = roleIn(iv, user);
   if (!role) return { ok: false, code: 'FORBIDDEN', message: 'You are not a participant of this interview.' };
-  if (role === 'teacher' && !ACTIVE.includes(iv.status)) return { ok: false, code: 'NOT_ACTIVE', message: 'This interview is not active.' };
+  if (!isGenuineRequest(iv)) return { ok: false, code: 'NO_STUDENT_REQUEST', message: 'The student has not requested this interview.' };
+  // the room opens only AFTER the request was accepted/approved (APPROVED and later) - for the teacher exactly as for the student
+  if (role === 'teacher' && !ROOM_STATUSES.includes(iv.status)) return { ok: false, code: 'NOT_APPROVED', message: 'Accept the student\'s request before entering the room.' };
   if (role === 'student' && !ROOM_STATUSES.includes(iv.status)) {
     return { ok: false, code: 'NOT_APPROVED', message: iv.status === 'WAITING_FOR_APPROVAL' ? 'Waiting for the teacher to approve you.' : 'You cannot enter yet.' };
   }
@@ -566,7 +594,7 @@ const iceServers = () => {
 const roomAccess = async (user, id) => {
   const iv = await load(id);
   const auth = authorizeRoom(iv, user);
-  if (!auth.ok) throw new InterviewError(auth.code === 'FORBIDDEN' ? 403 : 409, auth.message, auth.code);
+  if (!auth.ok) throw new InterviewError(['FORBIDDEN', 'NO_STUDENT_REQUEST'].includes(auth.code) ? 403 : 409, auth.message, auth.code);
   return { interview: iv, role: auth.role, iceServers: iceServers() };
 };
 
@@ -623,10 +651,27 @@ const recoverStale = async ({ actor, staleMs, now = new Date() } = {}) => {
   return { recovered: recovered.length, ids: recovered };
 };
 
+/**
+ * One-time-safe data repair for the old bug: interviews a TEACHER created for a student who never asked. They are only
+ * CANCELLED (status + audit entry, nothing deleted) so the teacher's slot is freed and the student can request for real.
+ * Idempotent; interviews that already went live are left alone.
+ */
+const cancelTeacherInitiated = async () => {
+  const bogus = await TeacherInterview.find({ requestedBy: 'teacher', status: { $in: PRE_ROOM } });
+  const cancelled = [];
+  for (const iv of bogus) {
+    const next = await finish(iv, { status: iv.status, requestedBy: 'teacher' }, { status: 'CANCELLED', role: 'system', action: 'CANCELLED_NO_STUDENT_REQUEST', reason: 'No student request existed' });
+    if (next) { cancelled.push(oid(next._id)); emitChanged(next); }
+  }
+  return { cancelled: cancelled.length, ids: cancelled };
+};
+
 let sweeper = null;
 const startInterviewSweeper = (intervalMs = 60 * 1000) => {
   if (sweeper) return sweeper;
-  sweeper = setInterval(() => { recoverStale().catch((e) => console.error('[interview] sweeper:', e && e.message)); }, intervalMs);
+  const tick = () => Promise.all([recoverStale(), cancelTeacherInitiated()]).catch((e) => console.error('[interview] sweeper:', e && e.message));
+  tick();
+  sweeper = setInterval(tick, intervalMs);
   if (sweeper.unref) sweeper.unref();
   return sweeper;
 };
@@ -672,6 +717,7 @@ const eligibleRows = async () => {
   // the interview that matters for a student+exam: the open one, otherwise the newest finished one
   const best = new Map();
   for (const i of interviews) {
+    if (isBogus(i)) continue; // a teacher-created leftover is not a request: the row reads "Not requested"
     const k = `${oid(i.student)}:${oid(i.exam)}`;
     const cur = best.get(k);
     if (!cur || (i.isOpen && !cur.isOpen) || (i.isOpen === cur.isOpen && new Date(i.requestedAt) > new Date(cur.requestedAt))) best.set(k, i);
@@ -973,7 +1019,7 @@ module.exports = {
   InterviewError, events, isValidId, oid, same,
   getSettings, setRequestsEnabled, checkEligibility,
   requestInterview, studentJoinRequest, cancel,
-  teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd,
+  cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
   getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,

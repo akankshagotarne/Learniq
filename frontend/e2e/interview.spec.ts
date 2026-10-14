@@ -100,7 +100,7 @@ test.describe('student interview', () => {
     }
   });
 
-  test('"Join Interview" appears only for a teacher-started interview, then waits for approval', async ({ page }) => {
+  test('"Join Interview" appears only for an admin-assigned student request, then waits for approval', async ({ page }) => {
     const state = { status: 'ASSIGNED' };
     const base = studentOverride(state);
     await mockApi(page, 'student', (m, p) => {

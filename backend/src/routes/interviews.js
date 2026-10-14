@@ -38,6 +38,7 @@ router.post('/:id/approve', ...teacher, perUser(30), ctrl.approve);
 router.post('/:id/reject-join', ...teacher, perUser(30), ctrl.rejectJoin);
 router.post('/:id/release', ...teacher, perUser(30), ctrl.release);
 router.post('/:id/end', ...teacher, perUser(30), ctrl.end);
+router.post('/:id/close-waiting', ...teacher, perUser(30), ctrl.closeWaiting); // the interview never ran: cancel it (no evaluation)
 router.get('/:id/evaluation', ...teacher, ctrl.getEvaluation);
 router.put('/:id/evaluation', ...teacher, perUser(60), ctrl.saveDraft);
 router.post('/:id/evaluation/submit', ...teacher, perUser(20), ctrl.submitEvaluation);

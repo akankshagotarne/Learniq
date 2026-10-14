@@ -177,7 +177,6 @@ export const interviewApi = {
     },
   studentDetails: async (studentId: string, examId: string, signal?: AbortSignal): Promise<StudentDetails> =>
     (await api.get(`${base}/teacher/student-details`, { params: { studentId, examId }, signal })).data,
-  start: async (body: { studentId?: string; examId?: string; interviewId?: string }): Promise<InterviewView> => (await api.post(`${base}/teacher/start`, body)).data.interview,
   accept: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/accept`)).data.interview,
   approve: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/approve`)).data.interview,
   rejectJoin: async (id: string, reason?: string): Promise<InterviewView> => (await api.post(`${base}/${id}/reject-join`, { reason })).data.interview,

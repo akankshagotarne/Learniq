@@ -19,7 +19,7 @@ export const studentStatusLabel = (s: InterviewStatus | undefined | null): strin
 
 export const studentStatusHint = (s: InterviewStatus | undefined | null): string => {
   switch (s) {
-    case 'REQUESTED': return 'Your request has been sent to the teachers. Please keep this page open - you will join automatically when a teacher approves.';
+    case 'REQUESTED': return 'Your interview request has been sent. Please wait for your teacher to approve it. Keep this page open - you will join automatically once a teacher approves.';
     case 'ASSIGNED': return 'A teacher is getting ready to start your interview.';
     case 'WAITING_FOR_APPROVAL': return 'Your teacher is ready. Waiting for the teacher to let you in.';
     case 'APPROVED': return 'Approved! Connecting your camera and microphone…';
@@ -36,7 +36,7 @@ export const studentStatusHint = (s: InterviewStatus | undefined | null): string
 /** Teacher / admin facing short label. */
 export const staffStatusLabel = (s: InterviewStatus | 'NONE' | undefined | null): string => {
   switch (s) {
-    case 'REQUESTED': return 'Requested';
+    case 'REQUESTED': return 'Waiting for Approval';
     case 'ASSIGNED': return 'Assigned';
     case 'WAITING_FOR_APPROVAL': return 'Awaiting approval';
     case 'APPROVED': return 'Approved';
