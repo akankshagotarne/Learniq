@@ -688,12 +688,17 @@ const eligibleRows = async () => {
 };
 
 const STATUS_LABEL = { NONE: 'Not Requested' };
+/**
+ * One row of the shared teacher table. DELIBERATELY minimal: exactly what the six table columns (+ the actions) need.
+ * No email, no phone, no exam title/score, no interview remarks - those are only served by teacherStudentDetails() when a
+ * teacher explicitly opens one student's details.
+ */
 const rowView = ({ attempt, exam, student, interview, teacher, evaluation }, viewerId) => ({
-  student: userBrief(student),
+  student: { _id: oid(student), name: student.name },
   standard: standardOf(exam),
-  exam: { _id: oid(exam._id), title: exam.title, standard: exam.standard },
+  exam: { _id: oid(exam._id), standard: exam.standard },
   submission: { status: 'SUBMITTED', submittedAt: attempt.submittedAt },
-  interview: interview ? view(interview) : null,
+  interview: interview ? { _id: oid(interview._id), status: interview.status } : null,
   interviewStatus: interview ? interview.status : 'NONE',
   interviewStatusLabel: interview ? interview.status : STATUS_LABEL.NONE,
   assignedTeacher: teacher ? { _id: oid(teacher), name: teacher.name } : null,
@@ -701,19 +706,29 @@ const rowView = ({ attempt, exam, student, interview, teacher, evaluation }, vie
   evaluation: evaluationSummary(evaluation), // marks summary only (no feedback text) in the shared directory
 });
 
-const matchesSearch = (r, q) => {
+/**
+ * Server-side search over the RAW student record (name, and - for terms of 3+ characters - email / phone). Only the match
+ * decision leaves this function: contact details are never copied into the list payload, and short terms can only match
+ * names so a one-character probe cannot be used to walk through contact data.
+ */
+const MIN_CONTACT_SEARCH = 3;
+const matchesSearch = (raw, q) => {
   if (!q) return true;
-  const s = String(q).toLowerCase();
-  const u = r.student;
-  return [u.name, u.email, u.phone, String(r.exam.standard)].some((v) => v && String(v).toLowerCase().includes(s));
+  const s = String(q).trim().toLowerCase();
+  if (!s) return true;
+  const u = raw.student;
+  const fields = [u.name, String(raw.exam.standard)];
+  if (s.length >= MIN_CONTACT_SEARCH) fields.push(u.email, u.phone);
+  return fields.some((v) => v && String(v).toLowerCase().includes(s));
 };
 
 /** The shared teacher directory: every approved teacher sees the same data, from the backend. */
 const teacherDirectory = async (teacher, { q, standard, status } = {}) => {
-  let rows = (await eligibleRows()).map((r) => rowView(r, teacher._id));
-  if (standard) rows = rows.filter((r) => String(r.standard) === String(standard));
-  if (status) rows = rows.filter((r) => r.interviewStatus === status);
-  rows = rows.filter((r) => matchesSearch(r, q));
+  let raws = await eligibleRows();
+  if (standard) raws = raws.filter((r) => String(standardOf(r.exam)) === String(standard));
+  if (status) raws = raws.filter((r) => (r.interview ? r.interview.status : 'NONE') === status);
+  raws = raws.filter((r) => matchesSearch(r, q));
+  let rows = raws.map((r) => rowView(r, teacher._id));
   const order = { REQUESTED: 0, WAITING_FOR_APPROVAL: 1, ASSIGNED: 2, APPROVED: 3, CONNECTING: 3, IN_PROGRESS: 4, EVALUATION_PENDING: 4, NONE: 5, COMPLETED: 6, CANCELLED: 7, FAILED: 8 };
   rows.sort((a, b) => (order[a.interviewStatus] - order[b.interviewStatus]) || (new Date(b.submission.submittedAt) - new Date(a.submission.submittedAt)));
   const mine = await TeacherInterview.findOne({ teacher: teacher._id, holdsTeacherSlot: true });
@@ -727,6 +742,46 @@ const teacherDirectory = async (teacher, { q, standard, status } = {}) => {
     completed: all.filter((i) => i.status === 'COMPLETED').length,
   };
   return { rows, counts, myActive: mine ? view(mine) : null };
+};
+
+/**
+ * Everything the teacher may see about ONE student of the shared table, fetched only when the teacher opens that student's
+ * details (this is where email / phone are served). Allowed only for a student who is in the table, i.e. paid (or holds an
+ * interview-inclusive exception) AND submitted that exam; anything else is a uniform 404 so it cannot be used to probe accounts.
+ */
+const teacherStudentDetails = async (teacher, { studentId, examId } = {}) => {
+  const notFound = () => new InterviewError(404, 'This student is not in your interview list.', 'NOT_FOUND');
+  if (!isValidId(studentId) || !isValidId(examId)) throw notFound();
+  const [student, e] = await Promise.all([User.findById(studentId), checkEligibility(studentId, examId)]);
+  if (!student || student.role !== 'student' || !e.eligible) throw notFound();
+  const own = (await TeacherInterview.find({ student: student._id, exam: e.exam._id })).sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+  const iv = own.find((i) => i.isOpen) || own[0] || null;
+  const schedule = require('./interviewSchedule');
+  const [assigned, ev, sum] = await Promise.all([
+    iv && iv.teacher ? User.findById(iv.teacher) : null,
+    iv ? InterviewEvaluation.findOne({ interview: iv._id }) : null,
+    schedule.summaries([{ student: student._id, exam: e.exam._id }]),
+  ]);
+  const sched = sum.get(`${oid(student._id)}:${oid(e.exam._id)}`) || null;
+  const marks = ev && ev.state === 'SUBMITTED' ? evaluationSummary(ev) : null; // an unsaved / draft evaluation is never shown as marks
+  const a = e.attempt;
+  return {
+    student: { _id: oid(student), name: student.name, standard: student.currentStandard != null ? student.currentStandard : null, phone: student.phone || null, email: student.email || null },
+    exam: { _id: oid(e.exam._id), title: e.exam.title, standard: e.exam.standard },
+    submission: { status: 'SUBMITTED', submittedAt: a.submittedAt, score: a.score != null ? a.score : null, totalMarks: a.totalMarks != null ? a.totalMarks : null, percentage: a.percentage != null ? a.percentage : null },
+    interview: {
+      _id: iv ? oid(iv._id) : null,
+      status: iv ? iv.status : 'NONE',
+      requestedAt: iv ? iv.requestedAt || null : null,
+      assignedTeacher: assigned ? { _id: oid(assigned), name: assigned.name } : null,
+      assignedToMe: !!(assigned && same(assigned, teacher._id)),
+      completed: !!(iv && iv.status === 'COMPLETED'),
+      startedAt: iv ? iv.startedAt || null : null,
+      endedAt: iv ? iv.endedAt || null : null,
+      marks,
+    },
+    schedule: { configured: !!sched, when: sched ? schedule.messageFor(sched).when : null, exactTime: !!(sched && sched.scope === 'individual') },
+  };
 };
 
 /**
@@ -922,5 +977,5 @@ module.exports = {
   getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,
-  studentOverview, detailFor, teacherDirectory, adminList, adminStats, adminTeachers, adminDetail, toCsv, view,
+  studentOverview, detailFor, teacherDirectory, teacherStudentDetails, adminList, adminStats, adminTeachers, adminDetail, toCsv, view,
 };

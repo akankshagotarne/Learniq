@@ -53,16 +53,29 @@ export interface StudentExamInterview {
   interview: InterviewView | null;
 }
 
+/** One row of the teacher table: only what the six columns and the actions need - NO contact details (those come from studentDetails). */
 export interface DirectoryRow {
-  student: { _id: string; name: string; email: string | null; phone: string | null; standard: number | null };
+  student: { _id: string; name: string };
   standard: number;
-  exam: { _id: string; title: string; standard: number };
+  exam: { _id: string; standard: number };
   submission: { status: 'SUBMITTED'; submittedAt: string };
-  interview: InterviewView | null;
+  interview: { _id: string; status: InterviewStatus } | null;
   interviewStatus: InterviewStatus | 'NONE';
   evaluation: EvaluationSummary | null;
   assignedTeacher: { _id: string; name: string } | null;
   assignedToMe: boolean;
+}
+
+/** Served only when a teacher opens ONE student's details. */
+export interface StudentDetails {
+  student: { _id: string; name: string; standard: number | null; phone: string | null; email: string | null };
+  exam: { _id: string; title: string; standard: number };
+  submission: { status: 'SUBMITTED'; submittedAt: string; score: number | null; totalMarks: number | null; percentage: number | null };
+  interview: {
+    _id: string | null; status: InterviewStatus | 'NONE'; requestedAt: string | null; assignedTeacher: { _id: string; name: string } | null; assignedToMe: boolean;
+    completed: boolean; startedAt: string | null; endedAt: string | null; marks: EvaluationSummary | null;
+  };
+  schedule: { configured: boolean; when: string | null; exactTime: boolean };
 }
 
 export interface AdminRow {
@@ -162,6 +175,8 @@ export const interviewApi = {
       rows: DirectoryRow[]; myActive: InterviewView | null;
       counts: { pending: number; waitingApproval: number; assigned: number; active: number; evaluationPending: number; completed: number };
     },
+  studentDetails: async (studentId: string, examId: string, signal?: AbortSignal): Promise<StudentDetails> =>
+    (await api.get(`${base}/teacher/student-details`, { params: { studentId, examId }, signal })).data,
   start: async (body: { studentId?: string; examId?: string; interviewId?: string }): Promise<InterviewView> => (await api.post(`${base}/teacher/start`, body)).data.interview,
   accept: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/accept`)).data.interview,
   approve: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/approve`)).data.interview,

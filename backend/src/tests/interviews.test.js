@@ -68,7 +68,7 @@ const api = async (method, url, { token, body } = {}) => {
   });
   const text = await res.text();
   let json; try { json = JSON.parse(text); } catch (e) { json = { raw: text }; }
-  return { status: res.status, body: json, text };
+  return { status: res.status, body: json, text, headers: res.headers };
 };
 
 test.before(async () => {
@@ -199,7 +199,7 @@ test('request interview: idempotent, concurrent clicks create exactly ONE open r
 });
 
 // ═════════════════ 3. teacher directory ═════════════════
-test('teacher directory: shared by ALL teachers, only submitted+paid students, with contact details, search and filters', async () => {
+test('teacher directory: shared by ALL teachers, only submitted+paid students, NO contact details in rows, server-side search and filters', async () => {
   M.TeacherInterview.docs = []; M.OlympiadAttempt.docs = []; M.OlympiadPayment.docs = [];
   const exam = await mkExam(5);
   const done = await submittedStudent({ exam, standard: 5, name: 'Tushar Patil', phone: '+919876500001' });
@@ -214,14 +214,20 @@ test('teacher directory: shared by ALL teachers, only submitted+paid students, w
   assert.deepEqual(d1.body.rows.map((r) => r.student.name).sort(), ['Dikshita Rao', 'Tushar Patil']);
   assert.deepEqual(d1.body.rows.map((r) => r.student._id).sort(), d2.body.rows.map((r) => r.student._id).sort(), 'every teacher sees the same list');
   const tushar = d1.body.rows.find((r) => r.student.name === 'Tushar Patil');
-  assert.equal(tushar.student.email, done.user.email); assert.equal(tushar.student.phone, '+919876500001');
+  assert.deepEqual(Object.keys(tushar.student).sort(), ['_id', 'name'], 'rows carry no email / phone');
+  assert.deepEqual(Object.keys(tushar.exam).sort(), ['_id', 'standard'], 'no exam title in rows');
+  const listJson = JSON.stringify(d1.body);
+  assert.ok(!listJson.includes(done.user.email) && !listJson.includes('+919876500001') && !listJson.includes('@'), 'no contact detail anywhere in the list payload');
   assert.equal(tushar.standard, 5); assert.equal(tushar.submission.status, 'SUBMITTED'); assert.equal(tushar.interviewStatus, 'REQUESTED');
   const dik = d1.body.rows.find((r) => r.student.name === 'Dikshita Rao');
-  assert.equal(dik.interviewStatus, 'NONE'); assert.equal(dik.student.phone, null, 'missing contact info is null, never invented');
+  assert.equal(dik.interviewStatus, 'NONE');
 
   assert.equal((await api('GET', '/teacher/directory?q=dikshita', { token: t1.token })).body.rows.length, 1);
   assert.equal((await api('GET', `/teacher/directory?q=${encodeURIComponent('+919876500001')}`, { token: t1.token })).body.rows.length, 1);
   assert.equal((await api('GET', `/teacher/directory?q=${done.user.email}`, { token: t1.token })).body.rows.length, 1);
+  const byPhone = await api('GET', `/teacher/directory?q=${encodeURIComponent('+919876500001')}`, { token: t1.token });
+  assert.ok(!JSON.stringify(byPhone.body).includes('+919876500001'), 'a contact-based search still returns no contact details');
+  assert.equal((await api('GET', '/teacher/directory?q=9', { token: t1.token })).body.rows.length, 0, 'terms shorter than 3 characters cannot match contact fields');
   assert.equal((await api('GET', '/teacher/directory?standard=9', { token: t1.token })).body.rows.length, 0);
   assert.equal((await api('GET', '/teacher/directory?status=REQUESTED', { token: t1.token })).body.rows.length, 1);
 
@@ -231,6 +237,67 @@ test('teacher directory: shared by ALL teachers, only submitted+paid students, w
   assert.equal((await api('GET', '/teacher/directory', { token: pending.token })).status, 403, 'unapproved teachers cannot');
   const admin = await mkUser({ role: 'admin' });
   assert.equal((await api('GET', '/teacher/directory', { token: admin.token })).status, 403, 'admins are not interviewers');
+});
+
+
+// ═════════════════ 3b. student details (contact info only on explicit request) ═════════════════
+test('student details: contact info is served only to an approved teacher for a student who is in the table; uniform 404 otherwise', async () => {
+  M.TeacherInterview.docs = []; M.OlympiadAttempt.docs = []; M.OlympiadPayment.docs = [];
+  const exam = await mkExam(5);
+  const ok = await submittedStudent({ exam, standard: 5, name: 'Tushar Patil', phone: '+919876500001' });
+  const noEmail = await submittedStudent({ exam, standard: 5, name: 'No Email' });
+  const stored = M.User.docs.find((u) => String(u._id) === String(noEmail.user._id)); delete stored.email; delete stored.phone; // a student with no email and no phone on record
+  const unpaid = await mkUser({ name: 'Never Paid', standard: 5 });
+  const unsub = await mkUser({ name: 'Never Submitted', standard: 5 }); const p = await pay(unsub.user, exam); await attempt(unsub.user, exam, p, { status: 'IN_PROGRESS' });
+  const t = await mkUser({ role: 'teacher', name: 'Nikhil Sir' });
+  const url = (u, e = exam) => `/teacher/student-details?studentId=${u.user._id}&examId=${e._id}`;
+
+  const d = await api('GET', url(ok), { token: t.token });
+  assert.equal(d.status, 200);
+  assert.equal(d.body.student.email, ok.user.email); assert.equal(d.body.student.phone, '+919876500001'); assert.equal(d.body.student.standard, 5);
+  assert.equal(d.body.exam.title, exam.title); assert.equal(d.body.submission.status, 'SUBMITTED'); assert.ok(d.body.submission.submittedAt);
+  assert.equal(d.body.interview.status, 'NONE'); assert.equal(d.body.interview.assignedTeacher, null); assert.equal(d.body.interview.marks, null);
+  assert.equal(d.body.schedule.configured, false);
+  const missing = await api('GET', url(noEmail), { token: t.token });
+  assert.equal(missing.body.student.email, null); assert.equal(missing.body.student.phone, null);
+
+  // opening the details changes nothing
+  assert.equal(M.TeacherInterview.docs.length, 0, 'viewing details never creates / starts an interview');
+
+  // not in the table -> same 404 as an unknown id (no account probing)
+  for (const u of [unpaid, unsub]) assert.equal((await api('GET', url(u), { token: t.token })).status, 404);
+  assert.equal((await api('GET', `/teacher/student-details?studentId=${'a'.repeat(24)}&examId=${exam._id}`, { token: t.token })).status, 404);
+  assert.equal((await api('GET', '/teacher/student-details?studentId=x&examId=y', { token: t.token })).status, 404);
+  const other = await mkExam(6);
+  assert.equal((await api('GET', url(ok, other), { token: t.token })).status, 404, 'right student, wrong exam');
+  assert.equal((await api('GET', `/teacher/student-details?studentId=${t.user._id}&examId=${exam._id}`, { token: t.token })).status, 404, 'a teacher id is not a student');
+
+  // roles
+  assert.equal((await api('GET', url(ok), { token: ok.token })).status, 403, 'a student cannot read it (not even their own through this route)');
+  assert.equal((await api('GET', url(ok), { token: noEmail.token })).status, 403);
+  assert.equal((await api('GET', url(ok))).status, 401, 'not public');
+  const pending = await mkUser({ role: 'teacher', approved: false });
+  assert.equal((await api('GET', url(ok), { token: pending.token })).status, 403, 'unapproved teacher');
+  const admin = await mkUser({ role: 'admin' });
+  assert.equal((await api('GET', url(ok), { token: admin.token })).status, 403, 'admins are not interviewers');
+});
+
+test('student details: interview status, assigned teacher and FINAL marks only (a draft is never shown as marks); no contact data cached', async () => {
+  const t = await mkUser({ role: 'teacher', name: 'Nikhil Sir' }); const viewer = await mkUser({ role: 'teacher', name: 'Kruti Mam' });
+  const { s, iv } = await runningPair(t);
+  const url = `/teacher/student-details?studentId=${s.user._id}&examId=${s.exam._id}`;
+  let d = await api('GET', url, { token: viewer.token });
+  assert.equal(d.body.interview.assignedTeacher.name, 'Nikhil Sir'); assert.equal(d.body.interview.assignedToMe, false); assert.equal(d.body.interview.completed, false);
+  assert.equal(d.body.interview.marks, null);
+  await api('POST', `/${iv._id}/end`, { token: t.token });
+  await api('PUT', `/${iv._id}/evaluation`, { token: t.token, body: { scores: { communication: 9 }, remarks: 'draft only' } });
+  d = await api('GET', url, { token: viewer.token });
+  assert.equal(d.body.interview.status, 'EVALUATION_PENDING'); assert.equal(d.body.interview.marks, null, 'draft is not finalized marks');
+  assert.ok(!JSON.stringify(d.body).includes('draft only'), 'no feedback text');
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: t.token, body: { scores: FULL } });
+  d = await api('GET', url, { token: viewer.token });
+  assert.equal(d.body.interview.completed, true); assert.equal(d.body.interview.marks.totalMarks, 40); assert.equal(d.body.interview.marks.maxMarks, 50);
+  assert.equal(d.headers.get('cache-control'), 'no-store');
 });
 
 // ═════════════════ 4. atomic claim ═════════════════

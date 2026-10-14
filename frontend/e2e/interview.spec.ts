@@ -146,13 +146,14 @@ const CRITERIA = [
 ];
 
 test.describe('teacher interview directory and evaluation', () => {
-  const row = (name: string, email: string | null, phone: string | null, status = 'NONE', extra: Record<string, unknown> = {}) => ({
-    student: { _id: `s-${name}`, name, email, phone, standard: 9 }, standard: 9, exam: { _id: 'oly-done', title: 'Olympiad Std 9', standard: 9 },
+  // the table payload carries NO contact details (they are served only by /teacher/student-details)
+  const row = (name: string, _email: string | null, _phone: string | null, status = 'NONE', extra: Record<string, unknown> = {}) => ({
+    student: { _id: `s-${name}`, name }, standard: 9, exam: { _id: 'oly-done', standard: 9 },
     submission: { status: 'SUBMITTED', submittedAt: new Date().toISOString() }, interview: status === 'NONE' ? null : { _id: 'iv1', status },
     interviewStatus: status, evaluation: null, assignedTeacher: null, assignedToMe: false, ...extra,
   });
 
-  test('lists submitted students with placeholders, Accept Request for a waiting student, and works on a phone', async ({ page }) => {
+  test('lists submitted students (no contact details), Accept Request for a waiting student, and works on a phone', async ({ page }) => {
     await page.setViewportSize(PHONE);
     let accepted = false;
     await mockApi(page, 'teacher', (m, p) => {
@@ -168,7 +169,7 @@ test.describe('teacher interview directory and evaluation', () => {
     });
     await page.goto('/teacher/interview');
     await expect(page.locator('[data-testid="interview-row"]:visible')).toHaveCount(2); // phone: cards
-    await expect(page.getByText('Not provided').first()).toBeVisible();
+    await expect(page.locator('body')).not.toContainText('@');
     await noOverflow(page);
     await page.locator('[data-testid="interview-accept"]:visible').click();
     await expect(page).toHaveURL(/\/teacher\/interview\/iv1$/);

@@ -55,6 +55,12 @@ const directory = handler(async (req, res) => {
   res.json({ success: true, ...(await svc.teacherDirectory(req.user, { q: str(q, 80), standard: str(standard, 4), status: str(status, 30) })) });
 });
 
+const studentDetails = handler(async (req, res) => {
+  const { studentId, examId } = req.query;
+  res.set('Cache-Control', 'no-store'); // contact details must not be cached by browsers / proxies
+  res.json({ success: true, ...(await svc.teacherStudentDetails(req.user, { studentId: str(studentId, 24), examId: str(examId, 24) })) });
+});
+
 const teacherStart = handler(async (req, res) => {
   const { studentId, examId, interviewId } = req.body || {};
   res.json({ success: true, interview: svc.view(await svc.teacherStart(req.user, { studentId, examId, interviewId })) });
@@ -138,6 +144,6 @@ const adminExport = handler(async (req, res) => {
 
 module.exports = {
   myOverview, eligibility, requestInterview, joinRequest, detail, roomAccess, cancel,
-  directory, teacherStart, accept, approve, rejectJoin, release, end, getEvaluation, saveDraft, submitEvaluation, myResults, adminCorrect,
+  directory, studentDetails, teacherStart, accept, approve, rejectJoin, release, end, getEvaluation, saveDraft, submitEvaluation, myResults, adminCorrect,
   adminStats, adminList, adminDetail, adminAssign, adminRecover, adminSettings, adminUpdateSettings, adminExport,
 };
