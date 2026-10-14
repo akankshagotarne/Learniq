@@ -21,6 +21,7 @@ process.env.CLIENT_URL = 'https://learniq.example.com';
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => null },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,

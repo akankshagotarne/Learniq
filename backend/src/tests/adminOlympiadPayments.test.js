@@ -27,6 +27,7 @@ const counter = (n = 0) => ({ countDocuments: async () => n, find: () => ({ sort
 
 const rzp = { client: { orders: { create: async (o) => ({ id: `order_new_${Math.random().toString(36).slice(2, 8)}`, amount: o.amount, currency: o.currency }), fetchPayments: async () => ({ items: [] }) } } };
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,

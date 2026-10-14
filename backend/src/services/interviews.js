@@ -7,6 +7,8 @@
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { OlympiadExam, OlympiadPayment, OlympiadAttempt } = require('../models/Olympiad');
+const examAccess = require('./examAccess');
+const { OlympiadAccessGrant } = require('../models/ExamAccess');
 const User = require('../models/User');
 const {
   TeacherInterview, InterviewSetting, InterviewEvaluation, ACTIVE, OPEN, ROOM_STATUSES, EVALUATING, flagsFor,
@@ -63,8 +65,10 @@ const checkEligibility = async (studentId, examId) => {
   if (exam.examType !== 'olympiad' || !(exam.standard >= 1 && exam.standard <= 10)) {
     return { eligible: false, code: 'NOT_OLYMPIAD', message: 'Interviews are available for Olympiad exams only.', exam };
   }
-  const payment = await OlympiadPayment.findOne({ student: studentId, exam: exam._id, status: 'SUCCESS' });
-  if (!payment) return { eligible: false, code: 'NOT_PAID', message: 'Complete the Olympiad payment first.', exam };
+  // the ₹20 package = exam + teacher interview. An administrator exception counts only if it was granted WITH the interview.
+  const ent = await examAccess.entitlementFor(studentId, exam._id);
+  const payment = ent.payment || (ent.grant && ent.grant.includesInterview ? { _id: undefined, grant: ent.grant } : null);
+  if (!payment) return { eligible: false, code: 'NOT_PAID', message: ent.grant ? 'The interview is not included in your exam access.' : 'Complete the Olympiad payment first.', exam };
   const attempt = await OlympiadAttempt.findOne({ student: studentId, exam: exam._id });
   if (!attempt || attempt.status !== 'COMPLETED' || !attempt.submittedAt) {
     return { eligible: false, code: 'NOT_SUBMITTED', message: 'Submit your Olympiad exam to unlock the interview.', exam, payment, attempt };
@@ -97,7 +101,7 @@ const findOrCreateOpen = async ({ studentId, examId, eligibility, requestedBy, a
   }
   try {
     const iv = await TeacherInterview.create({
-      student: studentId, exam: examId, attempt: eligibility.attempt._id, payment: eligibility.payment._id,
+      student: studentId, exam: examId, attempt: eligibility.attempt._id, payment: eligibility.payment && eligibility.payment._id ? eligibility.payment._id : undefined,
       roomId: newRoomId(), status: 'REQUESTED', ...flagsFor('REQUESTED'), requestedBy,
       requestedAt: new Date(), lastActivityAt: new Date(),
       audit: [note(actor._id, requestedBy, 'REQUESTED')],
@@ -653,7 +657,8 @@ const eligibleRows = async () => {
   const attempts = await OlympiadAttempt.find({ exam: { $in: [...examById.keys()] }, status: 'COMPLETED', submittedAt: { $exists: true } });
   if (!attempts.length) return [];
   const payments = await OlympiadPayment.find({ exam: { $in: [...examById.keys()] }, status: 'SUCCESS' });
-  const paid = new Set(payments.map((p) => `${oid(p.student)}:${oid(p.exam)}`));
+  const grants = await OlympiadAccessGrant.find({ exam: { $in: [...examById.keys()] }, status: 'ACTIVE', includesInterview: true });
+  const paid = new Set([...payments, ...grants].map((p) => `${oid(p.student)}:${oid(p.exam)}`));
   const eligible = attempts.filter((a) => paid.has(`${oid(a.student)}:${oid(a.exam)}`));
   const studentIds = [...new Set(eligible.map((a) => oid(a.student)))];
   const students = studentIds.length ? await User.find({ _id: { $in: studentIds } }) : [];
@@ -744,10 +749,13 @@ const workflowOf = (eligible, iv, evaluation) => {
 };
 
 const studentOverview = async (student) => {
-  const [payments, interviews] = await Promise.all([
+  const [paid, grants, interviews] = await Promise.all([
     OlympiadPayment.find({ student: student._id, status: 'SUCCESS' }),
+    OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE', includesInterview: true }),
     TeacherInterview.find({ student: student._id }),
   ]);
+  // one entry per exam the student is entitled to (verified payment, or an administrator exception that includes the interview)
+  const payments = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
   const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
   const byExam = {};
   const sched = require('./interviewSchedule');

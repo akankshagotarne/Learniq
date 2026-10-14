@@ -47,6 +47,7 @@ const UserModel = Object.assign(Object.create(fake.User), {
   },
 });
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'models', 'User.js')]: UserModel,
   [path.join(SRC, 'models', 'Course.js')]: fake.Course,

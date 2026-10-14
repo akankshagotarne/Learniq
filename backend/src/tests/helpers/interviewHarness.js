@@ -21,6 +21,8 @@ const overrides = {
   [path.join(SRC, 'models', 'Olympiad.js')]: { OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion, OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt },
   [path.join(SRC, 'models', 'User.js')]: fake.User,
   [path.join(SRC, 'models', 'TeacherInterview.js')]: fake.interviewModels,
+  [path.join(SRC, 'models', 'InterviewSchedule.js')]: fake.scheduleModels,
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
 };
 const originalLoad = Module._load;
 Module._load = function patched(request, parent, isMain) {

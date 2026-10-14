@@ -7,6 +7,7 @@ const { Notification } = require('../models/index');
 const { getRazorpayInstance } = require('../services/razorpayClient');
 const certificates = require('../services/certificateService');
 const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
+const examAccess = require('../services/examAccess');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
 
@@ -329,16 +330,17 @@ const buildApprovalState = async (exam, userId, now) => {
 
 const buildState = async (exam, userId, now = new Date()) => {
   if (isApprovalExam(exam)) return buildApprovalState(exam, userId, now);
-  const [success, latest, foundAttempt] = await Promise.all([
+  const [success, latest, foundAttempt, grant] = await Promise.all([
     OlympiadPayment.findOne({ student: userId, exam: exam._id, status: 'SUCCESS' }),
     OlympiadPayment.findOne({ student: userId, exam: exam._id }).sort({ createdAt: -1 }),
     OlympiadAttempt.findOne({ student: userId, exam: exam._id }),
+    examAccess.activeGrant(userId, exam._id), // an administrator exception: shown to the student as an ordinary available exam
   ]);
   const payment = success || latest; // a SUCCESS payment always wins
   const attempt = await expireIfNeeded(foundAttempt, now);
 
   const win = windowState(exam, now);
-  const paid = !!success;
+  const paid = !!success || !!grant; // entitled to start (payment OR administrator exception); paymentStatus below stays the truth about payments
   let state; let message = null;
 
   if (attempt && attempt.status === 'COMPLETED') state = 'completed';
@@ -474,6 +476,8 @@ const createOrder = handler(async (req, res) => {
   }
   const attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
   if (attempt) throw new ApiError(409, 'You have already registered for this examination.', 'ALREADY_REGISTERED');
+  // an administrator already authorised this exam for the student: no payment is needed (and none is taken)
+  if (await examAccess.activeGrant(req.user._id, exam._id)) throw new ApiError(409, 'You can start this examination now. No payment is needed.', 'ALREADY_PAID');
 
   assertWindowOpen(exam, 'register');
 
@@ -723,16 +727,17 @@ const startExam = handler(async (req, res) => {
   if (isApprovalExam(exam)) {
     unlock = { accessRequest: (await resolveAccess(exam, req.user))._id };
   } else {
-    const payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
-    if (!payment) {
+    const ent = await examAccess.entitlementFor(req.user._id, exam._id);
+    if (!ent.entitled) {
       throw new ApiError(402, `Please complete the ₹${exam.fee} payment before starting the examination.`, 'PAYMENT_REQUIRED');
     }
-    unlock = { payment: payment._id };
+    unlock = ent.payment ? { payment: ent.payment._id } : { accessGrant: ent.grant._id };
   }
 
   const naturalDeadline = new Date(now.getTime() + exam.durationMinutes * 60 * 1000);
   // hard-close exam: the attempt can never outlive the closing time (a student cannot gain time by starting late)
   const deadline = exam.hardClose && exam.endDate < naturalDeadline ? exam.endDate : naturalDeadline;
+  let startedNow = false;
   try {
     attempt = await OlympiadAttempt.create({
       student: req.user._id,
@@ -743,11 +748,13 @@ const startExam = handler(async (req, res) => {
       naturalDeadline,
       status: 'IN_PROGRESS',
     });
+    startedNow = true;
   } catch (err) {
     if (!isDuplicateKey(err)) throw err;
     attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id }); // double-click / two tabs
     if (attempt.status === 'COMPLETED') respondAlreadyCompleted();
   }
+  if (startedNow) await examAccess.linkRetake(req.user._id, exam._id, attempt._id); // an authorised retake: link it to the archived attempt
   res.json({ success: true, resumed: false, ...(await buildAttemptPayload(exam, attempt, now)) });
 });
 

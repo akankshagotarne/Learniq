@@ -5,6 +5,7 @@ import {
   Award, BookOpen, CheckCircle2, CreditCard, Flame, IndianRupee, KeyRound, Mail, Phone, Power, Trash2, Trophy, UserCheck, UserX, Users,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import ExamAccessPanel from '../../components/admin/ExamAccessPanel';
 import {
   Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor, maskEmail,
 } from '../../components/admin/ProfileParts';
@@ -229,6 +230,7 @@ const AdminStudentProfilePage: React.FC = () => {
 
               {tab === 'olympiad' && (
                 <div className="space-y-6">
+                  <ExamAccessPanel studentId={profile.user._id} onChanged={() => void load()} />
                   <Section title="Registrations">
                     {profile.olympiad.registrations.length === 0 ? <EmptyState icon={<Trophy className="w-10 h-10" />} text="No paid Olympiad registration yet." /> : (
                       <ul className="divide-y divide-border-subtle">

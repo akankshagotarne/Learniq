@@ -169,7 +169,9 @@ const olympiadAttemptSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   // Paid Olympiad: the verified payment that unlocked this attempt. Free engineering test: the approved access request instead.
-  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest; } },
+  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest && !this.accessGrant; } },
+  // Administrator exception (models/ExamAccess.js): lets ONE student start ONE exam without a payment record
+  accessGrant: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadAccessGrant' },
   accessRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'EngineeringRequest' },
 
   status: { type: String, enum: ['IN_PROGRESS', 'COMPLETED'], default: 'IN_PROGRESS' },

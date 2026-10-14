@@ -48,6 +48,7 @@ rzp.client = {
 
 const fake = createFakeDb();
 const overrides = {
+  [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => rzp.client },
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
 };
