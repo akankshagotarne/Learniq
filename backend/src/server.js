@@ -196,7 +196,6 @@ const startServer = async () => {
     await connectDB();
     await verifyUserIndexes();
     await backfillLegacyPhones();
-    await require('./bootstrap/adminOnce').runBootstrapAdminOnce({ User: require('./models/User'), identity: require('./services/identity') }); // no-op unless BOOTSTRAP_ADMIN_ONCE=1
     await verifySessionIndexes();
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     startExamSweeper(); // same for teacher exams (server-owned deadline)
