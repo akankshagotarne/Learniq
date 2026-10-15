@@ -33,6 +33,25 @@ export interface OlympiadSectionResult {
   maxScore: number;
 }
 
+/** What a student receives for a SUBMITTED test whose results have not been published yet - no marks of any kind. */
+export interface OlympiadResultHidden {
+  released: false;
+  status: 'SUBMITTED';
+  submittedAt: string;
+  submissionType?: 'MANUAL' | 'TIMER' | 'SYSTEM';
+}
+/** Backend-decided facts for the completion screen (persisted submission, interview eligibility, interview date). */
+export interface OlympiadCompletion {
+  submitted: true;
+  submittedAt: string;
+  interviewDate: string;
+  interviewOpensAt: string;
+  interviewSelected: boolean;
+  resultsReleased: boolean;
+}
+export type OlympiadResultView = OlympiadResultSummary | OlympiadResultHidden;
+export const isResultReleased = (r: OlympiadResultView | null | undefined): r is OlympiadResultSummary => !!r && (r as OlympiadResultHidden).released !== false;
+
 export interface OlympiadResultSummary {
   score: number;
   totalMarks: number;
@@ -54,6 +73,7 @@ export interface OlympiadResultSummary {
   result?: 'PASS' | 'FAIL';
   grade?: CertificateGrade | null;
   passPercentage?: number;
+  released?: true;
 }
 
 // ── Certificates (mirror the backend serialisers; the server decides everything, the browser only displays it) ──
@@ -148,7 +168,8 @@ export interface OlympiadExam {
   message: string | null;
   paymentStatus: OlympiadPaymentStatus;
   attemptStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
-  result: OlympiadResultSummary | null;
+  result: OlympiadResultView | null;
+  completion?: OlympiadCompletion | null;
   remainingSeconds: number | null;
   /** completed exams only: the certificate issued for a PASS (null for a FAIL) */
   certificate?: OlympiadCertificate | null;

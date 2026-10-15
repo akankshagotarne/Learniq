@@ -132,6 +132,9 @@ const adminSettings = handler(async (req, res) => {
   res.json({ success: true, settings: await svc.getSettings() });
 });
 const adminUpdateSettings = handler(async (req, res) => {
+  if (req.body && req.body.resultsMode !== undefined) { // publish / hold / follow the schedule: audited
+    return res.json({ success: true, settings: await svc.setResultsMode(req.user, req.body.resultsMode) });
+  }
   if (typeof (req.body && req.body.requestsEnabled) !== 'boolean') {
     return res.status(400).json({ success: false, code: 'INVALID_REQUEST', message: 'requestsEnabled must be true or false.' });
   }

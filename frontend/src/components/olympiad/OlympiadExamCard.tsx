@@ -5,7 +5,7 @@ import {
   ChevronRight, Loader2, Lock, PlayCircle, UserCheck, GraduationCap, Hourglass, XCircle, Send, Video,
 } from 'lucide-react';
 import { StudentExamInterview, OPEN_STATUSES } from '../../services/interview';
-import { OlympiadExam } from '../../types/olympiad';
+import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 import { formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
 
 interface Props {
@@ -144,14 +144,18 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           <span className="min-w-0">{approval ? <>Closes: <b>{formatISTDateTime(exam.endDate)}</b></> : <>Available: {formatISTRange(exam.startDate, exam.endDate)}</>}</span>
         </div>
 
-        {state === 'completed' && exam.result && (
+        {state === 'completed' && exam.result && (isResultReleased(exam.result) ? (
           <div className="mb-3 p-3 rounded-xl bg-[#4ADE9A]/10 border border-[#4ADE9A]/30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
             <span className="text-text-secondary font-medium">Your score</span>
             <span className="font-heading font-bold text-text-primary">
               {exam.result.score}/{exam.result.totalMarks} ({exam.result.percentage}%)
             </span>
           </div>
-        )}
+        ) : (
+          <div className="mb-3 p-3 rounded-xl bg-[#4ADE9A]/10 border border-[#4ADE9A]/30 text-xs text-text-secondary" data-testid="test-submitted-note">
+            <span className="font-semibold text-text-primary">Test submitted successfully.</span> Your result will be shown once it is officially published.
+          </div>
+        ))}
 
         {state === 'completed' && interview?.workflowComplete && interview.evaluation?.state === 'SUBMITTED' && (
           <div className="mb-3 p-3 rounded-xl bg-[#09ACEF]/10 border border-[#09ACEF]/30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs" data-testid="interview-marks">
@@ -234,7 +238,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
                 className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
                 data-testid="interview-results-link"
               >
-                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> Interview Completed — View Results <ChevronRight className="w-3.5 h-3.5" />
+                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> {interview.resultsReleased === false ? 'Interview Completed — Results Announcement' : 'Interview Completed — View Results'} <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             ) : interview.interview && ['REQUESTED', 'IN_PROGRESS', 'EVALUATION_PENDING'].includes(interview.stage) ? (
               <Link
@@ -261,8 +265,10 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
               </>
             ) : interview.eligible && interview.interviewOpen === false ? (
               <>
-                <p className="mb-2 p-3 rounded-xl bg-[#4ADE9A]/10 border border-[#4ADE9A]/30 text-[11px] text-text-secondary" data-testid="interview-scheduled-note">
-                  Congratulations! You have successfully completed your test. Your teacher interview is scheduled for {interview.interviewOpensOn || '18 October 2026'}. Please check your WhatsApp group for your assigned interview time and join on time.
+                <p className="mb-2 p-3 rounded-xl bg-[#6C63F2]/10 border border-[#6C63F2]/30 text-[11px] text-text-secondary" data-testid="interview-scheduled-note">
+                  {interview.interviewWindow === 'closed'
+                    ? 'The interview window has closed. New interview requests are no longer accepted.'
+                    : `Your teacher interview opens on ${interview.interviewOpensOn || '18 October 2026'} at 9:00 AM IST. Please check your WhatsApp group for your interview instructions.`}
                 </p>
                 <button
                   type="button"
@@ -271,7 +277,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
                   className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
                   data-testid="interview-scheduled"
                 >
-                  <Clock className="w-3.5 h-3.5" /> Scheduled — {interview.interviewOpensOn || '18 October 2026'}
+                  <Clock className="w-3.5 h-3.5" /> {interview.interviewWindow === 'closed' ? 'Interview Window Closed' : `Scheduled — ${interview.interviewOpensOn || '18 October 2026'}, 9:00 AM IST`}
                 </button>
               </>
             ) : (

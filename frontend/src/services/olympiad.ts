@@ -1,6 +1,6 @@
 import api from './api';
 import {
-  OlympiadAttemptPayload, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem, OlympiadAdminStats, OlympiadPaymentSummary, OlympiadCertificate,
+  OlympiadAttemptPayload, OlympiadExam, OlympiadResultSummary, OlympiadResultView, OlympiadCompletion, OlympiadReviewItem, OlympiadAdminStats, OlympiadPaymentSummary, OlympiadCertificate,
 } from '../types/olympiad';
 
 /** Friendly message for any failed Olympiad API call (never shows raw stack traces). */
@@ -46,10 +46,10 @@ export const olympiadApi = {
   getAttempt: async (id: string): Promise<OlympiadAttemptPayload> => (await api.get(`/olympiad/exams/${id}/attempt`)).data,
   saveAnswers: async (id: string, answers: AnswerUpdate[]): Promise<{ remainingSeconds: number; savedAt: string }> =>
     (await api.put(`/olympiad/exams/${id}/attempt/answers`, { answers })).data,
-  submit: async (id: string, answers?: AnswerUpdate[]): Promise<{ result: OlympiadResultSummary; certificate?: OlympiadCertificate | null; alreadySubmitted?: boolean; autoSubmitted?: boolean }> =>
+  submit: async (id: string, answers?: AnswerUpdate[]): Promise<{ result: OlympiadResultView; completion?: OlympiadCompletion; certificate?: OlympiadCertificate | null; alreadySubmitted?: boolean; autoSubmitted?: boolean }> =>
     (await api.post(`/olympiad/exams/${id}/submit`, { answers })).data,
 
-  getResult: async (id: string): Promise<{ exam: OlympiadExam; result: OlympiadResultSummary; certificate: OlympiadCertificate | null }> =>
+  getResult: async (id: string): Promise<{ exam: OlympiadExam; result: OlympiadResultView; completion?: OlympiadCompletion; certificate: OlympiadCertificate | null }> =>
     (await api.get(`/olympiad/exams/${id}/result`)).data,
   getReview: async (id: string): Promise<OlympiadReviewItem[]> => (await api.get(`/olympiad/exams/${id}/review`)).data.review,
   completed: async (): Promise<OlympiadExam[]> => (await api.get('/olympiad/completed')).data.exams || [],
@@ -57,6 +57,7 @@ export const olympiadApi = {
   // admin
   adminExams: async (): Promise<(OlympiadExam & { stats: OlympiadAdminStats })[]> => (await api.get('/olympiad/admin/exams')).data.exams || [],
   adminSeed: async () => (await api.post('/olympiad/admin/seed')).data,
+  adminSetResults: async (id: string, publish: boolean): Promise<{ resultsPublishedAt: string | null }> => (await api.post(`/olympiad/admin/exams/${id}/results`, { publish })).data,
   adminAttempts: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/attempts`)).data.attempts || [],
   /** One exam's payments. view 'active' (default) hides Not confirmed / archived records; 'history' returns every record. */
   adminPayments: async (id: string, view: 'active' | 'history' = 'active'): Promise<{ payments: any[]; historyCount: number }> => {

@@ -91,6 +91,18 @@ const AdminInterviews: React.FC = () => {
                   <Power className="w-4 h-4" /> {stats.settings.requestsEnabled ? 'Pause new requests' : 'Requests paused — enable'}
                 </button>
               )}
+              {stats && (
+                <label className="min-h-[44px] px-3 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2 text-text-primary max-w-full">
+                  Results
+                  <select data-testid="results-mode" value={stats.settings.resultsMode || 'schedule'} disabled={busy === 'results'}
+                    onChange={(e) => run('results', () => interviewApi.adminSetResultsMode(e.target.value as 'schedule' | 'published' | 'held'), 'Interview result visibility updated.')}
+                    className="bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs min-w-0 max-w-[10.5rem]">
+                    <option value="schedule">Auto (6 PM IST)</option>
+                    <option value="published">Published now</option>
+                    <option value="held">Held back</option>
+                  </select>
+                </label>
+              )}
               <button type="button" disabled={busy === 'recover'} onClick={() => run('recover', async () => { const r = await interviewApi.adminRecoverStale(); toast.success(`${r.recovered} stale interview(s) recovered.`); })} className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2"><Wrench className="w-4 h-4" /> Recover stale</button>
               <Link to="/admin/interview-schedule" className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2" data-testid="open-schedule"><CalendarClock className="w-4 h-4" /> Schedule &amp; reminders</Link>
               <button type="button" disabled={busy === 'csv'} onClick={exportCsv} className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2" data-testid="export-csv"><Download className="w-4 h-4" /> Export CSV</button>

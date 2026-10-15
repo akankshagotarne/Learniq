@@ -13,7 +13,7 @@ import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadAdminStats, OlympiadExam, OlympiadPaymentSummary } from '../../types/olympiad';
 import { formatDuration, formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
 
-type AdminExam = OlympiadExam & { stats: OlympiadAdminStats; isPublished?: boolean };
+type AdminExam = OlympiadExam & { stats: OlympiadAdminStats; isPublished?: boolean; resultsPublishedAt?: string | null };
 
 /** Dropdown value for the combined view of every standard's payments. */
 const ALL = 'all';
@@ -173,6 +173,27 @@ const AdminOlympiad: React.FC = () => {
                   </option>
                 ))}
               </select>
+
+              {exam && (
+                <div className="mb-4 p-3 rounded-xl border border-border-subtle bg-surface-alt flex flex-wrap items-center justify-between gap-3" data-testid="results-publication">
+                  <p className="text-sm text-text-primary">
+                    <b>Student test results:</b>{' '}
+                    {exam.resultsPublishedAt ? <span className="text-[#16A34A]">Published {formatISTDateTime(exam.resultsPublishedAt)}</span> : <span className="text-[#B7791F]">Hidden — students see a completion message only</span>}
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="toggle-results"
+                    onClick={async () => {
+                      const publish = !exam.resultsPublishedAt;
+                      if (publish && !window.confirm(`Publish the test results of Standard ${exam.standard} to every student who submitted it? Students will see their marks, answers and certificates.`)) return;
+                      try { await olympiadApi.adminSetResults(exam._id, publish); toast.success(publish ? 'Results published.' : 'Results withdrawn.'); await loadExams(); } catch (err: any) { toast.error(olympiadErrorMessage(err, 'Could not change result publication.')); }
+                    }}
+                    className="min-h-[44px] px-4 rounded-xl text-xs font-bold border border-border-subtle bg-surface text-text-primary"
+                  >
+                    {exam.resultsPublishedAt ? 'Withdraw results' : 'Publish results to students'}
+                  </button>
+                </div>
+              )}
 
               {/* Exam info */}
               {exam && (

@@ -280,30 +280,89 @@ test.describe('admin interview management', () => {
   }
 });
 
-test.describe('interview day (18 October 2026)', () => {
+test.describe('interview day (18 October 2026, 9 AM - 7 PM IST)', () => {
   test.beforeEach(async ({ page }) => { await page.setViewportSize(PHONE); });
-  const withOpen = (open: boolean): Override => (method, path) => {
+  const withWindow = (w: 'upcoming' | 'open' | 'closed'): Override => (method, path) => {
     if (method === 'GET' && path === '/interviews/mine') {
-      const m = mine('NONE'); (m.byExam['oly-done'] as Record<string, unknown>).interviewOpen = open; (m.byExam['oly-done'] as Record<string, unknown>).interviewOpensOn = '18 October 2026';
+      const m = mine('NONE'); const row = m.byExam['oly-done'] as Record<string, unknown>;
+      row.interviewOpen = w === 'open'; row.interviewWindow = w; row.interviewOpensOn = '18 October 2026';
       return { body: m };
     }
     return undefined;
   };
 
-  test('before the interview day: congratulations message + disabled "Scheduled — 18 October 2026", no way to request', async ({ page }) => {
-    await mockApi(page, 'student', withOpen(false));
+  test('before 9:00 AM IST: disabled "Scheduled" button and the opening time, no way to request', async ({ page }) => {
+    await mockApi(page, 'student', withWindow('upcoming'));
     await page.goto('/student/exams');
-    await expect(page.getByTestId('interview-scheduled-note')).toHaveText('Congratulations! You have successfully completed your test. Your teacher interview is scheduled for 18 October 2026. Please check your WhatsApp group for your assigned interview time and join on time.');
+    await expect(page.getByTestId('interview-scheduled-note')).toContainText('18 October 2026 at 9:00 AM IST');
     const b = page.getByTestId('interview-scheduled');
-    await expect(b).toBeDisabled(); await expect(b).toContainText('Scheduled — 18 October 2026');
+    await expect(b).toBeDisabled(); await expect(b).toContainText('Scheduled — 18 October 2026, 9:00 AM IST');
     await expect(page.getByTestId('interview-start')).toHaveCount(0);
     await noOverflow(page);
   });
 
-  test('on the interview day: Start Interview is enabled', async ({ page }) => {
-    await mockApi(page, 'student', withOpen(true));
+  test('inside the window: Start Interview is enabled', async ({ page }) => {
+    await mockApi(page, 'student', withWindow('open'));
     await page.goto('/student/exams');
     await expect(page.getByTestId('interview-start')).toBeEnabled();
     await expect(page.getByTestId('interview-scheduled')).toHaveCount(0);
+  });
+
+  test('after 7:00 PM IST: window closed, nothing to click', async ({ page }) => {
+    await mockApi(page, 'student', withWindow('closed'));
+    await page.goto('/student/exams');
+    await expect(page.getByTestId('interview-scheduled')).toContainText('Interview Window Closed');
+    await expect(page.getByTestId('interview-start')).toHaveCount(0);
+  });
+});
+
+test.describe('completion screens (no marks before publication)', () => {
+  test.beforeEach(async ({ page }) => { await page.setViewportSize(PHONE); });
+
+  test('test completion screen: congratulations + selected + interview date; no score anywhere', async ({ page }) => {
+    await mockApi(page, 'student', (method, path) => {
+      if (method === 'GET' && /^\/olympiad\/exams\/[^/]+\/result$/.test(path)) {
+        return { body: { success: true, exam: { _id: 'oly-done', title: 'Olympiad', standard: 10, totalQuestions: 60, accessMode: 'payment' }, result: { released: false, status: 'SUBMITTED', submittedAt: new Date().toISOString() }, completion: { submitted: true, submittedAt: new Date().toISOString(), interviewDate: '18 October 2026', interviewOpensAt: '2026-10-18T03:30:00.000Z', interviewSelected: true, resultsReleased: false }, certificate: null } };
+      }
+      if (method === 'GET' && /\/review$/.test(path)) return { status: 403, body: { success: false, code: 'RESULT_NOT_PUBLISHED' } };
+      return undefined;
+    });
+    await page.goto('/student/olympiad/oly-done/result');
+    const c = page.getByTestId('test-completion');
+    await expect(c).toBeVisible();
+    await expect(c).toContainText('Congratulations!');
+    await expect(c).toContainText('Your Test Has Been Completed Successfully!');
+    await expect(page.getByTestId('completion-selected')).toHaveText("You are selected for tomorrow's interview!");
+    await expect(page.getByTestId('completion-date')).toContainText('Interview Date: 18 October 2026');
+    await expect(c).toContainText('— Team LearnIQ');
+    await expect(page.locator('body')).not.toContainText(/Score|Percentage|Accuracy|Correct|Wrong/i);
+    await noOverflow(page);
+  });
+
+  test('test completion screen without selection shows the honest alternative', async ({ page }) => {
+    await mockApi(page, 'student', (method, path) => {
+      if (method === 'GET' && /^\/olympiad\/exams\/[^/]+\/result$/.test(path)) {
+        return { body: { success: true, exam: { _id: 'oly-done', title: 'Olympiad', standard: 10, totalQuestions: 60, accessMode: 'payment' }, result: { released: false, status: 'SUBMITTED', submittedAt: new Date().toISOString() }, completion: { submitted: true, submittedAt: new Date().toISOString(), interviewDate: '18 October 2026', interviewOpensAt: '', interviewSelected: false, resultsReleased: false }, certificate: null } };
+      }
+      return undefined;
+    });
+    await page.goto('/student/olympiad/oly-done/result');
+    await expect(page.getByTestId('completion-pending')).toHaveText('Your test has been submitted successfully. Please wait for confirmation of your interview eligibility.');
+    await expect(page.getByTestId('completion-selected')).toHaveCount(0);
+  });
+
+  test('interview completion screen before the release: 6:00 PM announcement, no marks; after 6 PM unreleased it says results are being finalised', async ({ page }) => {
+    const data = (passed: boolean) => ({ success: true, released: false, announceAt: '2026-10-18T12:30:00.000Z', announcePassed: passed, announceText: '18 October 2026, 6:00 PM IST', awaiting: [{ interviewId: 'iv1', exam: { _id: 'oly-done', title: 'Olympiad' } }], results: [], pending: [], criteria: [], maxMarks: 50 });
+    await mockApi(page, 'student', (m, p) => (m === 'GET' && p === '/interviews/results' ? { body: data(false) } : undefined));
+    await page.goto('/student/interview-results');
+    const c = page.getByTestId('interview-completion');
+    await expect(c).toContainText('Your Interview Has Been Completed Successfully!');
+    await expect(page.getByTestId('announce-time')).toHaveText('Your results will be declared today at 6:00 PM.');
+    await expect(page.getByTestId('interview-result')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText(/Total Interview Marks|Strengths/);
+    await page.unroute('**/*').catch(() => {});
+    await mockApi(page, 'student', (m, p) => (m === 'GET' && p === '/interviews/results' ? { body: data(true) } : undefined));
+    await page.goto('/student/interview-results');
+    await expect(page.getByTestId('announce-pending')).toBeVisible();
   });
 });

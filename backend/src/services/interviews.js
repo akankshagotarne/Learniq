@@ -14,7 +14,7 @@ const {
   TeacherInterview, InterviewSetting, InterviewEvaluation, ACTIVE, OPEN, ROOM_STATUSES, EVALUATING, flagsFor,
 } = require('../models/TeacherInterview');
 const { CRITERIA, MAX_TOTAL, KEYS } = require('../config/interviewCriteria');
-const { INTERVIEW_OPENS_AT, istDate } = require('../config/schedule');
+const { INTERVIEW_OPENS_AT, INTERVIEW_CLOSES_AT, INTERVIEW_RESULTS_AT, istDate, istTime } = require('../config/schedule');
 
 class InterviewError extends Error {
   constructor(status, message, code, extra) {
@@ -40,15 +40,42 @@ const note = (by, role, action, text) => ({ at: new Date(), by: by || undefined,
 
 const emitChanged = (iv) => { try { events.emit('changed', { interview: plain(iv) }); } catch (_) { /* listeners must never break a request */ } };
 
-// ── interview date (server clock, IST): nothing about an interview can start before the interview day ──────────
-const interviewOpen = (now = new Date()) => now.getTime() >= INTERVIEW_OPENS_AT.getTime();
+// ── interview day (server clock, IST): opens inclusive, closes exclusive ───────────────────────────────────────
+const interviewWindow = (now = new Date()) => (now.getTime() < INTERVIEW_OPENS_AT.getTime() ? 'upcoming' : now.getTime() >= INTERVIEW_CLOSES_AT.getTime() ? 'closed' : 'open');
+const interviewOpen = (now = new Date()) => interviewWindow(now) === 'open';
 const interviewOpensOn = () => istDate(INTERVIEW_OPENS_AT);
-const notOpenError = (status = 403) => new InterviewError(status, `The interview opens on ${interviewOpensOn()}. You can request it then.`, 'INTERVIEW_NOT_OPEN', { opensAt: INTERVIEW_OPENS_AT.toISOString() });
+const opensAtText = () => `${interviewOpensOn()} at ${istTime(INTERVIEW_OPENS_AT)} IST`;
+const notOpenError = (status = 403, now = new Date()) => (interviewWindow(now) === 'closed'
+  ? new InterviewError(status, `The interview window closed on ${interviewOpensOn()} at ${istTime(INTERVIEW_CLOSES_AT)} IST. New interview requests are no longer accepted.`, 'INTERVIEW_CLOSED', { closedAt: INTERVIEW_CLOSES_AT.toISOString() })
+  : new InterviewError(status, `The interview opens on ${opensAtText()}. You can request it then.`, 'INTERVIEW_NOT_OPEN', { opensAt: INTERVIEW_OPENS_AT.toISOString() }));
 
 // ── settings ─────────────────────────────────────────────────────────────────────────────────
 const getSettings = async () => {
   const s = await InterviewSetting.findOne({ key: 'global' });
-  return { requestsEnabled: s ? s.requestsEnabled !== false : true, updatedAt: s ? s.updatedAt : null };
+  return { requestsEnabled: s ? s.requestsEnabled !== false : true, resultsMode: s && s.resultsMode ? s.resultsMode : 'schedule', updatedAt: s ? s.updatedAt : null };
+};
+/**
+ * Interview RESULTS are shown to students only when (a) the evaluation is final and (b) they are released:
+ *   schedule (default) -> from the announcement time (18 Oct 2026 6:00 PM IST, server clock)
+ *   published          -> an administrator released them now (earlier, or later than the schedule)
+ *   held               -> an administrator is holding them back, even after the announcement time
+ */
+const resultsReleased = (settings, now = new Date()) => {
+  const mode = (settings && settings.resultsMode) || 'schedule';
+  if (mode === 'published') return true;
+  if (mode === 'held') return false;
+  return now.getTime() >= INTERVIEW_RESULTS_AT.getTime();
+};
+const RESULT_MODES = ['schedule', 'published', 'held'];
+const setResultsMode = async (admin, mode) => {
+  if (!RESULT_MODES.includes(mode)) throw new InterviewError(400, 'resultsMode must be schedule, published or held.', 'INVALID_REQUEST');
+  await InterviewSetting.findOneAndUpdate(
+    { key: 'global' },
+    { $set: { resultsMode: mode, updatedBy: admin._id }, $push: { resultsAudit: { at: new Date(), by: admin._id, mode } } },
+    { upsert: true, new: true }
+  );
+  console.log(`[interviews] results mode -> ${mode} by ${admin._id}`);
+  return getSettings();
 };
 const setRequestsEnabled = async (admin, enabled) => {
   await InterviewSetting.findOneAndUpdate(
@@ -169,7 +196,7 @@ const transition = (filter, set, auditEntry, extraUnset) => TeacherInterview.fin
 // ── student ──────────────────────────────────────────────────────────────────────────────────
 const requestInterview = async (student, examId) => {
   const eligibility = await requireEligible(student._id, examId); // paid / authorised AND submitted first ...
-  if (!interviewOpen()) throw notOpenError(); // ... then the interview day (a submitted student still cannot request early)
+  if (!interviewOpen()) throw notOpenError(); // ... then the interview window (9 AM-7 PM IST): not before, not at/after the close
   const { interview, created } = await findOrCreateOpen({ studentId: student._id, examId: eligibility.exam._id, eligibility, requestedBy: 'student', actor: student });
   return { interview, created };
 };
@@ -178,6 +205,7 @@ const studentJoinRequest = async (student, id) => {
   const iv = await load(id);
   if (!same(iv.student, student._id)) throw new InterviewError(403, 'This is not your interview.', 'FORBIDDEN');
   if (iv.status === 'WAITING_FOR_APPROVAL') return iv; // idempotent
+  if (interviewWindow() === 'closed') throw notOpenError(409); // a new start after the close is refused
   const next = await transition(
     { _id: iv._id, student: student._id, status: 'ASSIGNED' },
     { status: 'WAITING_FOR_APPROVAL', joinRequestedAt: new Date(), ...flagsFor('WAITING_FOR_APPROVAL') },
@@ -211,6 +239,7 @@ const teacherApprove = async (teacher, id) => {
   const iv = await load(id);
   assertAssignedTeacher(iv, teacher);
   if (iv.status === 'APPROVED') return iv;
+  if (interviewWindow() === 'closed') throw notOpenError(409); // approving a waiting student is a new start: refused once the window has closed
   const next = await transition(
     { _id: iv._id, teacher: teacher._id, status: 'WAITING_FOR_APPROVAL', requestedBy: { $ne: 'teacher' } },
     { status: 'APPROVED', approvedAt: new Date(), ...flagsFor('APPROVED') },
@@ -275,7 +304,7 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
 const teacherAccept = async (teacher, id) => {
   const iv = await load(id);
   if (!isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR(); // a record the student never requested can not be accepted
-  if (!interviewOpen()) throw notOpenError(409);
+  if (!interviewOpen()) throw notOpenError(409); // accepting is a NEW start: only inside the window
   if (same(iv.teacher, teacher._id)) { // my own interview: accepting again is harmless
     if (iv.status === 'WAITING_FOR_APPROVAL') return teacherApprove(teacher, id);
     if (ACTIVE.includes(iv.status)) return iv;
@@ -505,7 +534,11 @@ const studentResults = async (student) => {
   const examById = new Map(exams.map((e) => [oid(e._id), e]));
   const teacherById = new Map(teachers.map((t) => [oid(t._id), t]));
   const ivById = new Map(ivs.map((i) => [oid(i._id), i]));
-  const results = evals
+  const released = resultsReleased(await getSettings());
+  const finished = evals.map((ev) => ({ ev, iv: ivById.get(oid(ev.interview)) })).filter(({ iv }) => iv && iv.status === 'COMPLETED');
+  // before the official release the student learns only THAT the interview is finished - no marks, remarks or selection
+  const awaiting = released ? [] : finished.map(({ iv }) => { const e = examById.get(oid(iv.exam)); return { interviewId: oid(iv._id), exam: e ? { _id: oid(e._id), title: e.title } : null }; });
+  const results = (released ? evals : [])
     .map((ev) => ({ ev, iv: ivById.get(oid(ev.interview)) }))
     .filter(({ iv }) => iv && iv.status === 'COMPLETED')
     .sort((a, b) => new Date(b.ev.submittedAt) - new Date(a.ev.submittedAt))
@@ -522,7 +555,7 @@ const studentResults = async (student) => {
     const e = examById.get(oid(i.exam));
     return { interviewId: oid(i._id), exam: e ? { _id: oid(e._id), title: e.title } : null, message: 'Your interview evaluation has not been submitted yet.' };
   });
-  return { results, pending, criteria: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max })), maxMarks: MAX_TOTAL };
+  return { released, announceAt: INTERVIEW_RESULTS_AT.toISOString(), announcePassed: Date.now() >= INTERVIEW_RESULTS_AT.getTime(), announceText: `${istDate(INTERVIEW_RESULTS_AT)}, ${istTime(INTERVIEW_RESULTS_AT)} IST`, awaiting, results, pending, criteria: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max })), maxMarks: MAX_TOTAL };
 };
 
 /** student / assigned teacher / admin. Students may cancel only before the teacher approves them. */
@@ -578,7 +611,8 @@ const authorizeRoom = (iv, user) => {
   const role = roleIn(iv, user);
   if (!role) return { ok: false, code: 'FORBIDDEN', message: 'You are not a participant of this interview.' };
   if (!isGenuineRequest(iv)) return { ok: false, code: 'NO_STUDENT_REQUEST', message: 'The student has not requested this interview.' };
-  if (!interviewOpen()) return { ok: false, code: 'INTERVIEW_NOT_OPEN', message: `The interview room opens on ${interviewOpensOn()}.` };
+  // before the opening nobody enters; an interview approved inside the window may finish after the close (its own lifecycle)
+  if (interviewWindow() === 'upcoming') return { ok: false, code: 'INTERVIEW_NOT_OPEN', message: `The interview room opens on ${opensAtText()}.` };
   // the room opens only AFTER the request was accepted/approved (APPROVED and later) - for the teacher exactly as for the student
   if (role === 'teacher' && !ROOM_STATUSES.includes(iv.status)) return { ok: false, code: 'NOT_APPROVED', message: 'Accept the student\'s request before entering the room.' };
   if (role === 'student' && !ROOM_STATUSES.includes(iv.status)) {
@@ -858,6 +892,16 @@ const workflowOf = (eligible, iv, evaluation) => {
   return { stage, workflowComplete: stage === 'COMPLETED', evaluation: evaluation ? evaluationSummary(evaluation) : null };
 };
 
+/**
+ * What the STUDENT may see of the workflow: the marks / evaluation summary only once the interview results are released;
+ * before that a finished interview exposes just the completion state and the announcement time.
+ */
+const studentWorkflow = (wf, released) => {
+  const out = { ...wf, resultsReleased: released, resultsAnnounceAt: INTERVIEW_RESULTS_AT.toISOString(), announcePassed: Date.now() >= INTERVIEW_RESULTS_AT.getTime(), resultsAnnounceText: `${istDate(INTERVIEW_RESULTS_AT)}, ${istTime(INTERVIEW_RESULTS_AT)} IST` };
+  if (!released) out.evaluation = null;
+  return out;
+};
+
 const studentOverview = async (student) => {
   const [paid, grants, interviews] = await Promise.all([
     OlympiadPayment.find({ student: student._id, status: 'SUCCESS' }),
@@ -867,6 +911,8 @@ const studentOverview = async (student) => {
   // one entry per exam the student is entitled to (verified payment, or an administrator exception that includes the interview)
   const payments = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
   const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
+  const settings = await getSettings();
+  const released = resultsReleased(settings);
   const byExam = {};
   const sched = require('./interviewSchedule');
   const now = new Date();
@@ -882,12 +928,12 @@ const studentOverview = async (student) => {
       code: e.eligible ? null : e.code,
       message: e.eligible ? null : e.message,
       interview: iv ? view(iv) : null,
-      interviewOpen: interviewOpen(now), interviewOpensOn: interviewOpensOn(), interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(),
+      interviewOpen: interviewOpen(now), interviewWindow: interviewWindow(now), interviewOpensOn: interviewOpensOn(), interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(), interviewClosesAt: INTERVIEW_CLOSES_AT.toISOString(),
       schedule: { summary: sum, ...sched.messageFor(sum, now) },
-      ...workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null),
+      ...studentWorkflow(workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null), released),
     };
   }
-  return { byExam, requestsEnabled: (await getSettings()).requestsEnabled };
+  return { byExam, requestsEnabled: settings.requestsEnabled, resultsReleased: released, resultsAnnounceAt: INTERVIEW_RESULTS_AT.toISOString() };
 };
 
 /** One interview as the viewer may see it, with the other party's display name. */
@@ -1029,7 +1075,7 @@ module.exports = {
   InterviewError, events, isValidId, oid, same,
   getSettings, setRequestsEnabled, checkEligibility,
   requestInterview, studentJoinRequest, cancel,
-  interviewOpen, INTERVIEW_OPENS_AT, cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
+  interviewOpen, interviewWindow, resultsReleased, setResultsMode, INTERVIEW_OPENS_AT, INTERVIEW_CLOSES_AT, INTERVIEW_RESULTS_AT, cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
   getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,

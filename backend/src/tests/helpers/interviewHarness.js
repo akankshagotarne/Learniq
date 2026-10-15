@@ -12,6 +12,10 @@ const cors = require('cors');
 
 process.env.JWT_SECRET = 'harness-jwt-secret';
 process.env.NODE_ENV = 'test';
+// the harness runs on any day: open the interview window and let the results be released (the real schedule is covered by interviews.test.js)
+process.env.OLYMPIAD_INTERVIEW_OPENS_AT = '2000-01-01T00:00:00+05:30';
+process.env.OLYMPIAD_INTERVIEW_CLOSES_AT = '2099-01-01T00:00:00+05:30';
+process.env.OLYMPIAD_INTERVIEW_RESULTS_AT = '2000-01-01T00:00:00+05:30';
 
 const SRC = path.join(__dirname, '..', '..');
 const { createFakeDb } = require('./fakeDb');

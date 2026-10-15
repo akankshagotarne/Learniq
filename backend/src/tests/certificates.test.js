@@ -93,7 +93,7 @@ test.before(async () => {
   server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   BASE = `http://127.0.0.1:${server.address().port}`;
 
-  S.exam = await fake.OlympiadExam.create({
+  S.exam = await fake.OlympiadExam.create({ resultsPublishedAt: new Date(),
     title: 'LearnIQ – All India Olympiad Examination 2026', slug: 'cert-test-std-10', standard: 10,
     startDate: new Date(Date.now() - 3600e3), endDate: new Date(Date.now() + 2 * 86400e3),
     durationMinutes: 60, totalQuestions: 100, totalMarks: 100, fee: 20,

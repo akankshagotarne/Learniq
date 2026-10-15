@@ -8,7 +8,7 @@
 const connectDB = require('../config/db');
 const { OlympiadExam, OlympiadQuestion, OlympiadAttempt } = require('../models/Olympiad');
 
-// Availability window: 17 Oct 2026 00:00:00 IST -> 17 Oct 2026 23:59:59.999 IST (config/schedule.js is the single definition).
+// Availability window: 17 Oct 2026 09:00:00 IST -> 17 Oct 2026 21:00:00 IST (closing exclusive) (config/schedule.js is the single definition).
 // Exams already in the database keep their stored dates until services/olympiadSchedule.js (run at server start) or
 // `node src/scripts/setOlympiadEndDate.js --apply` brings them to this window.
 const { EXAM_OPENS_AT: START, EXAM_CLOSES_AT: END } = require('../config/schedule');

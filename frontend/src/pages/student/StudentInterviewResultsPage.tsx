@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Award, Calendar, ClipboardList, Loader2, UserCheck } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import { fmtDateTime } from '../../components/interview/interviewLabels';
+import InterviewCompletionScreen from '../../components/interview/InterviewCompletionScreen';
 import { InterviewResult, interviewApi, interviewErrorMessage } from '../../services/interview';
 
 type Data = Awaited<ReturnType<typeof interviewApi.results>>;
@@ -80,7 +81,9 @@ const StudentInterviewResultsPage: React.FC = () => {
             </div>
           ))}
 
-          {data && data.results.length === 0 && data.pending.length === 0 && (
+          {data && data.released === false && (data.awaiting?.length ?? 0) > 0 && <div className="mb-5"><InterviewCompletionScreen announcePassed={data.announcePassed} /></div>}
+
+          {data && data.results.length === 0 && data.pending.length === 0 && !(data.awaiting?.length) && (
             <div className="card-soft p-8 rounded-2xl text-center" data-testid="no-results">
               <ClipboardList className="w-8 h-8 text-text-muted mx-auto mb-2" aria-hidden="true" />
               <p className="text-sm text-text-secondary">No interview results are available yet.</p>

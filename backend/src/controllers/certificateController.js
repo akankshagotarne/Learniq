@@ -38,6 +38,11 @@ const parseNumber = (raw) => {
 };
 
 const isAdmin = (user) => user && user.role === 'admin';
+/** A certificate reveals pass/fail and the grade, so a student gets it only once the exam's results are published. */
+const releasedExamIds = async (examIds) => {
+  const exams = await OlympiadExam.find({ _id: { $in: examIds } }).select('examType resultsPublishedAt');
+  return new Set(exams.filter((e) => e.examType === 'engineering' || e.resultsPublishedAt).map((e) => String(e._id)));
+};
 const sameId = (a, b) => String(a) === String(b);
 
 /** Load a certificate the caller may see: its owner, or an admin. Anyone else gets a plain 404 (no existence leak). */
@@ -46,6 +51,9 @@ const loadAccessible = async (req) => {
   const cert = await Certificate.findOne({ certificateNumber: number });
   if (!cert || (!isAdmin(req.user) && !sameId(cert.student, req.user._id))) {
     throw new ApiError(404, 'Certificate not found.', 'NOT_FOUND');
+  }
+  if (!isAdmin(req.user) && !(await releasedExamIds([cert.exam])).has(String(cert.exam))) {
+    throw new ApiError(404, 'Certificate not found.', 'NOT_FOUND'); // results unpublished: no hint that one exists
   }
   return cert;
 };
@@ -66,6 +74,9 @@ const generate = handler(async (req, res) => {
   if (attempt.status !== 'COMPLETED') {
     throw new ApiError(409, 'Your certificate is available after you submit the examination.', 'NOT_SUBMITTED');
   }
+  if (!exam.resultsPublishedAt && exam.examType !== 'engineering') {
+    throw new ApiError(403, 'Your results and certificate will be available after the results are officially published.', 'RESULT_NOT_PUBLISHED');
+  }
   // make sure the official result exists (idempotent, backend-only evaluation)
   attempt = await require('./olympiadController')._internals.ensureEvaluated(attempt);
 
@@ -82,7 +93,9 @@ const generate = handler(async (req, res) => {
 
 // GET /api/certificates/mine
 const mine = handler(async (req, res) => {
-  const rows = await Certificate.find({ student: req.user._id }).sort({ createdAt: -1 });
+  const all = await Certificate.find({ student: req.user._id }).sort({ createdAt: -1 });
+  const released = await releasedExamIds(all.map((c) => c.exam));
+  const rows = all.filter((c) => released.has(String(c.exam)));
   res.json({ success: true, certificates: rows.map(svc.toOwnerView) });
 });
 

@@ -24,6 +24,7 @@ router.post('/payments/webhook', ctrl.razorpayWebhook);
 router.get('/admin/exams', ...adminAuth, ctrl.adminListExams);
 router.post('/admin/seed', ...adminAuth, perUser(5), ctrl.adminSeedExam);
 router.get('/admin/exams/:id/attempts', ...adminAuth, ctrl.adminAttempts);
+router.post('/admin/exams/:id/results', ...adminAuth, perUser(20), ctrl.adminSetResults); // publish / withdraw the test results
 router.put('/admin/exams/:id/proctoring', ...adminAuth, perUser(30), ctrl.adminUpdateProctoring);
 router.put('/admin/exams/:id/teacher', ...adminAuth, ctrl.adminAssignTeacher);
 router.get('/admin/exams/:id/payments', ...adminAuth, ctrl.adminPayments);

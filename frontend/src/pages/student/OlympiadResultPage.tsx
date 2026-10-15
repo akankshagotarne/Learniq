@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
-import { OlympiadCertificate, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem } from '../../types/olympiad';
+import { OlympiadCertificate, OlympiadCompletion, OlympiadExam, OlympiadResultSummary, OlympiadReviewItem, isResultReleased } from '../../types/olympiad';
+import TestCompletionScreen from '../../components/olympiad/TestCompletionScreen';
 import CertificateBanner from '../../components/olympiad/CertificateBanner';
 import { interviewApi, ScheduleInfo } from '../../services/interview';
 import InterviewScheduleBanner from '../../components/interview/InterviewScheduleBanner';
@@ -40,6 +41,8 @@ const OlympiadResultPage: React.FC = () => {
   const navigate = useNavigate();
   const [exam, setExam] = useState<OlympiadExam | null>(null);
   const [result, setResult] = useState<OlympiadResultSummary | null>(null);
+  const [completion, setCompletion] = useState<OlympiadCompletion | null>(null);
+  const [hidden, setHidden] = useState(false); // submitted, results not published yet
   const [certificate, setCertificate] = useState<OlympiadCertificate | null>(null);
   const [review, setReview] = useState<OlympiadReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,9 +54,13 @@ const OlympiadResultPage: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const [res, rev] = await Promise.all([olympiadApi.getResult(examId), olympiadApi.getReview(examId)]);
+        const res = await olympiadApi.getResult(examId);
         if (cancelled) return;
         setExam(res.exam);
+        setCompletion(res.completion ?? null);
+        if (!isResultReleased(res.result)) { setHidden(true); return; } // submitted, results not published: completion screen only (no review request)
+        const rev = await olympiadApi.getReview(examId);
+        if (cancelled) return;
         setResult(res.result);
         setCertificate(res.certificate ?? null);
         setReview([...rev].sort((a, b) => a.questionNumber - b.questionNumber));
@@ -86,6 +93,8 @@ const OlympiadResultPage: React.FC = () => {
       </Shell>
     );
   }
+
+  if (hidden && !error) return <Shell><TestCompletionScreen completion={completion} /></Shell>;
 
   if (error || !result || !exam) {
     return (

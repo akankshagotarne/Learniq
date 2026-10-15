@@ -1,4 +1,4 @@
-process.env.OLYMPIAD_INTERVIEW_OPENS_AT = '2000-01-01T00:00:00+05:30'; // these tests cover the interview workflow; the interview-date gate has its own tests (schedule.test.js)
+process.env.OLYMPIAD_INTERVIEW_OPENS_AT = '2000-01-01T00:00:00+05:30'; process.env.OLYMPIAD_INTERVIEW_CLOSES_AT = '2099-01-01T00:00:00+05:30'; // these tests cover the interview workflow; the interview-date gate has its own tests (schedule.test.js)
 /**
  * Teacher–Student interviews — backend tests, run with:  npm run test:interviews
  *
@@ -864,6 +864,7 @@ test('a teacher who leaves the room / a network drop never completes the intervi
 });
 
 test('student results: only FINAL evaluations of their own interview; drafts and pending evaluations stay hidden; exam marks stay separate', async () => {
+  await svc.setResultsMode({ _id: ADMIN_ID }, 'published'); // (the release rules themselves are tested in 'INTERVIEW RESULTS')
   const t = await mkUser({ role: 'teacher' });
   const { s, iv } = await runningPair(t, { score: 37 });
   const other = await submittedStudent();
@@ -1241,26 +1242,26 @@ test('C7 admin can tell a closed-before-start interview from a conducted one', a
 });
 
 // ═════════════════ the interview day: 18 Oct 2026, 00:00 IST (server clock, controllable here) ═════════════════
-const fresh = (u) => ({ ...u, token: fake.sessionToken(u.user) }); // sessions idle out when the mocked clock jumps days
+const fresh = (u) => { const A = fake.sessionStore.AuthSession; A.docs = A.docs.filter((d) => String(d.user) !== String(u.user._id)); return { ...u, token: fake.sessionToken(u.user) }; }; // sessions idle out when the mocked clock jumps: sign in again
 const withInterviewClock = async (t, nowIso, fn) => {
-  const real = svc.INTERVIEW_OPENS_AT.getTime();
-  svc.INTERVIEW_OPENS_AT.setTime(Date.parse('2026-10-18T00:00:00.000+05:30')); // the real configured opening (the file-level override opens it for the other tests)
+  const real = [svc.INTERVIEW_OPENS_AT.getTime(), svc.INTERVIEW_CLOSES_AT.getTime()];
+  svc.INTERVIEW_OPENS_AT.setTime(Date.parse('2026-10-18T09:00:00.000+05:30')); svc.INTERVIEW_CLOSES_AT.setTime(Date.parse('2026-10-18T19:00:00.000+05:30')); // the real configured opening (the file-level override opens it for the other tests)
   t.mock.timers.enable({ apis: ['Date'], now: new Date(nowIso) });
-  try { return await fn(); } finally { t.mock.timers.reset(); svc.INTERVIEW_OPENS_AT.setTime(real); }
+  try { return await fn(); } finally { t.mock.timers.reset(); svc.INTERVIEW_OPENS_AT.setTime(real[0]); svc.INTERVIEW_CLOSES_AT.setTime(real[1]); }
 };
 
-test('INTERVIEW DAY: no request, accept or room access before 00:00 IST on 18 Oct; a submitted student can request from 00:00:00.000; the teacher must approve the real request', async (t) => {
+test('INTERVIEW DAY: no request, accept or room access before 09:00 IST on 18 Oct; a submitted student can request from 09:00:00.000 until 18:59:59.999, never at/after 19:00; the teacher must approve the real request', async (t) => {
   M.TeacherInterview.docs = [];
   const s = await submittedStudent(); const ns = await mkUser(); const teacher = await mkUser({ role: 'teacher' });
   const mine = () => M.OlympiadPayment.docs.filter((p) => String(p.student) === String(s.user._id)).map((p) => [String(p._id), p.amount]);
   const payments = JSON.stringify(mine());
-  await withInterviewClock(t, '2026-10-17T23:59:59.999+05:30', async () => {
+  await withInterviewClock(t, '2026-10-18T08:59:59.999+05:30', async () => {
     const S1 = fresh(s), NS = fresh(ns);
     const early = await api('POST', '/request', { token: S1.token, body: { examId: String(s.exam._id) } });
-    assert.equal(early.status, 403); assert.equal(early.body.code, 'INTERVIEW_NOT_OPEN'); assert.match(early.body.message, /18 October 2026/);
+    assert.equal(early.status, 403); assert.equal(early.body.code, 'INTERVIEW_NOT_OPEN'); assert.match(early.body.message, /18 October 2026 at 9:00 AM IST/);
     assert.equal(M.TeacherInterview.docs.length, 0, 'nothing was created');
     const row = (await api('GET', '/mine', { token: S1.token })).body.byExam[String(s.exam._id)];
-    assert.equal(row.interviewOpen, false); assert.equal(row.interviewOpensOn, '18 October 2026');
+    assert.equal(row.interviewOpen, false); assert.equal(row.interviewWindow, 'upcoming'); assert.equal(row.interviewOpensOn, '18 October 2026');
     // a student who has NOT submitted is refused for the exam reason on both sides of the date
     const exam2 = await mkExam(10); await pay(ns.user, exam2);
     const r0 = await api('POST', '/request', { token: NS.token, body: { examId: String(exam2._id) } });
@@ -1268,8 +1269,8 @@ test('INTERVIEW DAY: no request, accept or room access before 00:00 IST on 18 Oc
   });
   // an old request created while the gate was open cannot be accepted or entered early either
   let leftover;
-  await withInterviewClock(t, '2026-10-18T00:00:00.000+05:30', async () => { leftover = await requestFor(fresh(s)); });
-  await withInterviewClock(t, '2026-10-17T12:00:00+05:30', async () => {
+  await withInterviewClock(t, '2026-10-18T09:00:00.000+05:30', async () => { leftover = await requestFor(fresh(s)); });
+  await withInterviewClock(t, '2026-10-18T08:00:00+05:30', async () => {
     const T1 = fresh(teacher), S2 = fresh(s);
     const acc = await api('POST', `/${leftover._id}/accept`, { token: T1.token });
     assert.equal(acc.status, 409); assert.equal(acc.body.code, 'INTERVIEW_NOT_OPEN');
@@ -1277,7 +1278,7 @@ test('INTERVIEW DAY: no request, accept or room access before 00:00 IST on 18 Oc
     assert.equal(room.status === 200, false);
   });
   // 18 Oct: open
-  await withInterviewClock(t, '2026-10-18T00:00:00.000+05:30', async () => {
+  await withInterviewClock(t, '2026-10-18T09:00:00.000+05:30', async () => {
     const T2 = fresh(teacher), S3 = fresh(s);
     const row = (await api('GET', '/mine', { token: S3.token })).body.byExam[String(s.exam._id)]; assert.equal(row.interviewOpen, true);
     assert.equal(ivDoc(leftover._id).status, 'REQUESTED', 'waiting for a teacher: nobody started it for the student');
@@ -1286,4 +1287,78 @@ test('INTERVIEW DAY: no request, accept or room access before 00:00 IST on 18 Oc
     assert.equal((await api('POST', `/${leftover._id}/room-access`, { token: S3.token })).status, 200);
   });
   assert.equal(JSON.stringify(mine()), payments, 'the ₹20 payment covered both: no new payment record, no re-charge');
+});
+
+test('INTERVIEW WINDOW CLOSE: 18:59:59.999 IST still accepts requests; from 19:00:00.000 new requests, accepts, joins and approvals are rejected; an interview already approved may finish', async (t) => {
+  M.TeacherInterview.docs = [];
+  const [a, b, c] = [await submittedStudent(), await submittedStudent(), await submittedStudent()];
+  const [t1, t2] = [await mkUser({ role: 'teacher' }), await mkUser({ role: 'teacher' })];
+  const approved = await approvedFor(t1, a); // approved inside the window (real clock), it will still be running after the close
+  await svc.setPresence(approved._id, 'teacher', true); await svc.setPresence(approved._id, 'student', true); await svc.markConnected(approved._id);
+  let pendingReq;
+  await withInterviewClock(t, '2026-10-18T18:59:59.999+05:30', async () => {
+    const r = await api('POST', '/request', { token: fresh(b).token, body: { examId: String(b.exam._id) } });
+    assert.ok([200, 201].includes(r.status), r.text); pendingReq = r.body.interview;
+  });
+  await withInterviewClock(t, '2026-10-18T19:00:00.000+05:30', async () => {
+    const r = await api('POST', '/request', { token: fresh(c).token, body: { examId: String(c.exam._id) } });
+    assert.equal(r.status, 403); assert.equal(r.body.code, 'INTERVIEW_CLOSED'); assert.match(r.body.message, /closed/);
+    assert.equal(M.TeacherInterview.docs.filter((d) => String(d.student) === String(c.user._id)).length, 0, 'no record created');
+    const acc = await api('POST', `/${pendingReq._id}/accept`, { token: fresh(t2).token });
+    assert.equal(acc.status, 409); assert.equal(acc.body.code, 'INTERVIEW_CLOSED');
+    assert.equal(ivDoc(pendingReq._id).status, 'REQUESTED');
+    // the approved, running interview still works and can be ended + evaluated after 7 PM
+    assert.equal((await api('POST', `/${approved._id}/room-access`, { token: fresh(a).token })).status, 200);
+    assert.equal((await api('POST', `/${approved._id}/end`, { token: fresh(t1).token })).status, 200);
+    const sub = await api('POST', `/${approved._id}/evaluation/submit`, { token: fresh(t1).token, body: { scores: FULL } });
+    assert.equal(sub.status, 200, sub.text); assert.equal(ivDoc(approved._id).status, 'COMPLETED');
+  });
+});
+
+test('INTERVIEW RESULTS: finished = completion screen only; marks/feedback/selection appear only when released (18:00 IST, or an admin publishes; an admin can hold them); pending evaluations get an honest message', async (t) => {
+  M.TeacherInterview.docs = []; M.InterviewEvaluation.docs = [];
+  await svc.setResultsMode({ _id: ADMIN_ID }, 'schedule');
+  const teacher = await mkUser({ role: 'teacher' }); const teacher2 = await mkUser({ role: 'teacher' });
+  const { s, iv } = await runningPair(teacher, { score: 12 });
+  await api('POST', `/${iv._id}/end`, { token: teacher.token });
+  const pend = await runningPair(teacher2, {}); await api('POST', `/${pend.iv._id}/end`, { token: teacher2.token }); // call ended, evaluation NOT submitted
+  await api('POST', `/${iv._id}/evaluation/submit`, { token: teacher.token, body: { scores: FULL, remarks: 'PRIVATE-REMARK', strengths: 'S', improvements: 'I' } });
+  const exId = String(s.exam._id);
+  const LEAK = /PRIVATE-REMARK|"totalMarks"|"percentage"|"scores"|"strengths"|"improvements"/;
+  // before 18:00 IST: completed, but nothing about the outcome
+  await withInterviewClock(t, '2026-10-18T17:59:59.999+05:30', async () => {
+    const S1 = fresh(s);
+    const ov = await api('GET', '/mine', { token: S1.token }); const row = ov.body.byExam[exId];
+    assert.equal(row.stage, 'COMPLETED'); assert.equal(row.workflowComplete, true); assert.equal(row.resultsReleased, false); assert.equal(row.evaluation, null);
+    assert.match(row.resultsAnnounceText, /18 October 2026, 6:00 PM IST/); assert.equal(LEAK.test(JSON.stringify(row)), false, JSON.stringify(row));
+    const res = await api('GET', '/results', { token: S1.token });
+    assert.equal(res.body.released, false); assert.equal(res.body.results.length, 0); assert.equal(res.body.awaiting.length, 1); assert.equal(LEAK.test(res.text), false, res.text);
+    const p = fresh(pend.s); const pr = await api('GET', '/results', { token: p.token });
+    assert.equal(pr.body.results.length, 0); assert.equal(pr.body.pending.length, 1); assert.match(pr.body.pending[0].message, /not been submitted/);
+  });
+  // from 18:00:00.000: the finalised result is shown, the unfinished one is not fabricated
+  await withInterviewClock(t, '2026-10-18T18:00:00.000+05:30', async () => {
+    const res = await api('GET', '/results', { token: fresh(s).token });
+    assert.equal(res.body.released, true); assert.equal(res.body.results.length, 1); assert.equal(res.body.results[0].totalMarks, 40); assert.equal(res.body.results[0].remarks, 'PRIVATE-REMARK');
+    assert.equal((await api('GET', '/mine', { token: fresh(s).token })).body.byExam[exId].evaluation.totalMarks, 40);
+    const pr = await api('GET', '/results', { token: fresh(pend.s).token });
+    assert.equal(pr.body.results.length, 0); assert.equal(pr.body.pending.length, 1);
+    assert.equal((await api('GET', '/results', { token: fresh(await submittedStudent()).token })).body.results.length, 0, 'never another student\'s result');
+  });
+  // an administrator can hold the results past the schedule ...
+  await svc.setResultsMode({ _id: ADMIN_ID }, 'held');
+  await withInterviewClock(t, '2026-10-18T20:00:00.000+05:30', async () => {
+    const res = await api('GET', '/results', { token: fresh(s).token }); assert.equal(res.body.released, false); assert.equal(res.body.results.length, 0); assert.equal(LEAK.test(res.text), false);
+  });
+  // ... or publish before it
+  await svc.setResultsMode({ _id: ADMIN_ID }, 'published');
+  await withInterviewClock(t, '2026-10-18T10:00:00.000+05:30', async () => {
+    assert.equal((await api('GET', '/results', { token: fresh(s).token })).body.results.length, 1);
+  });
+  // only an admin can change the mode
+  assert.equal((await api('PUT', '/admin/settings', { token: fresh(s).token, body: { resultsMode: 'published' } })).status, 403);
+  assert.equal((await api('PUT', '/admin/settings', { token: fresh(teacher).token, body: { resultsMode: 'published' } })).status, 403);
+  const admin = await mkUser({ role: 'admin' });
+  assert.equal((await api('PUT', '/admin/settings', { token: admin.token, body: { resultsMode: 'bogus' } })).status, 400);
+  assert.equal((await api('PUT', '/admin/settings', { token: admin.token, body: { resultsMode: 'schedule' } })).body.settings.resultsMode, 'schedule');
 });

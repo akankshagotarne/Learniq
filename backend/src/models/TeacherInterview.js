@@ -88,6 +88,9 @@ teacherInterviewSchema.index({ status: 1, requestedAt: -1 });
 const interviewSettingSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'global' },
   requestsEnabled: { type: Boolean, default: true },
+  // interview results visibility: 'schedule' (from the announcement time), 'published' (released now by an admin), 'held' (withheld by an admin)
+  resultsMode: { type: String, enum: ['schedule', 'published', 'held'], default: 'schedule' },
+  resultsAudit: { type: [new mongoose.Schema({ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, mode: String }, { _id: false })], default: [] },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
