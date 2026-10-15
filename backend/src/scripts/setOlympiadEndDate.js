@@ -5,7 +5,7 @@
  * deadline changes.
  *
  *   node src/scripts/setOlympiadEndDate.js          DRY RUN (default): lists exams whose endDate differs, writes nothing
- *   node src/scripts/setOlympiadEndDate.js --apply  sets every Olympiad exam's endDate to the seeder's END (17 Oct 2026 23:59:59.999 IST; the start-up sync also sets startDate)
+ *   node src/scripts/setOlympiadEndDate.js --apply  sets every Olympiad exam's endDate to the seeder's END (17 Oct 2026 21:00:00 IST; the start-up sync also sets startDate)
  *
  * Only the `endDate` field of exam records is written. Payments, attempts, students and questions are never touched.
  * Needs MONGODB_URI (never printed).

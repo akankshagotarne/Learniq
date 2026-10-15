@@ -10,7 +10,7 @@ const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, Polic
 const examAccess = require('../services/examAccess');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
-const { istDate } = require('../config/schedule');
+const { istDate, istTime, INTERVIEW_OPENS_AT } = require('../config/schedule');
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -61,7 +61,8 @@ const oid = (v) => String(v);
 
 const windowState = (exam, now = new Date()) => {
   if (now < exam.startDate) return 'upcoming';
-  if (now > exam.endDate) return 'closed';
+  // Olympiad: the closing instant itself is already closed ("at or after 9:00 PM"); the engineering mock test keeps its inclusive end
+  if (exam.examType === 'engineering' ? now > exam.endDate : now >= exam.endDate) return 'closed';
   return 'open';
 };
 
@@ -104,7 +105,7 @@ const assertCanAccessExam = async (user, exam) => {
   assertEligibleStudent(user, exam);
 };
 
-const opensOn = (exam) => `This examination opens on ${istDate(exam.startDate)}.`;
+const opensOn = (exam) => `This examination opens on ${istDate(exam.startDate)} at ${istTime(exam.startDate)} IST.`;
 
 const assertWindowOpen = (exam, purpose) => {
   const state = windowState(exam);
@@ -227,8 +228,9 @@ const ensureEvaluated = async (attempt) => {
 /** The student's certificate for an evaluated attempt: null when they did not pass (no record exists for a FAIL). */
 const certificatePayload = async (attempt) => {
   if (!certificates.isPass(attempt.percentage)) return null;
-  const owner = await OlympiadExam.findById(attempt.exam).select('examType');
+  const owner = await OlympiadExam.findById(attempt.exam).select('examType resultsPublishedAt');
   if (owner && owner.examType === 'engineering') return null;
+  if (owner && !resultsReleased(owner)) return null; // a certificate would reveal the outcome: nothing until the results are published
   const { certificate } = await certificates.safeIssueForAttempt(attempt);
   return certificate ? certificates.toOwnerView(certificate) : null;
 };
@@ -277,6 +279,29 @@ const resultSummary = (a) => ({
   submittedAt: a.submittedAt,
   submissionType: a.submissionType,
   sectionResults: a.sectionResults,
+});
+
+/** Test results are visible to a student only after an administrator has published them for the exam. */
+const resultsReleased = (exam) => !!exam && (exam.examType === 'engineering' || !!exam.resultsPublishedAt); // the engineering mock test keeps its own result flow
+
+/**
+ * What a student may be told about a SUBMITTED attempt. Marks, percentage, counts, grade, outcome, section results - everything that
+ * reveals performance - are withheld until the exam's results are published. The attempt keeps its full evaluation in the database.
+ */
+const studentResult = (attempt, exam) => {
+  if (resultsReleased(exam)) return { released: true, ...resultSummary(attempt) };
+  return { released: false, status: 'SUBMITTED', submittedAt: attempt.submittedAt, submissionType: attempt.submissionType };
+};
+
+/** The completion screen's payload: submission is persisted; eligibility for the interview comes from the backend rules. */
+const completionFor = (attempt, exam) => ({
+  submitted: true,
+  submittedAt: attempt.submittedAt,
+  interviewDate: istDate(INTERVIEW_OPENS_AT),
+  interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(),
+  resultsReleased: resultsReleased(exam),
+  // every valid, paid-and-submitted Olympiad attempt is eligible for the interview (checkEligibility is the single rule)
+  interviewSelected: exam.examType !== 'engineering',
 });
 
 const examPublic = (exam) => ({
@@ -373,7 +398,8 @@ const buildState = async (exam, userId, now = new Date()) => {
     message,
     paymentStatus: payment ? payment.status : 'NONE',
     attemptStatus: attempt ? attempt.status : 'NOT_STARTED',
-    result: attempt && attempt.status === 'COMPLETED' ? resultSummary(attempt) : null,
+    result: attempt && attempt.status === 'COMPLETED' ? studentResult(attempt, exam) : null,
+    completion: attempt && attempt.status === 'COMPLETED' ? completionFor(attempt, exam) : null,
     remainingSeconds:
       attempt && attempt.status === 'IN_PROGRESS'
         ? Math.max(0, Math.ceil((attempt.deadline.getTime() - now.getTime()) / 1000))
@@ -428,7 +454,7 @@ const getCompleted = handler(async (req, res) => {
   for (const a of attempts) {
     if (!a.exam) continue;
     const done = await ensureEvaluated(a);
-    exams.push({ ...examPublic(a.exam), state: 'completed', result: resultSummary(done), certificate: await certificatePayload(done) });
+    exams.push({ ...examPublic(a.exam), state: 'completed', result: studentResult(done, a.exam), completion: completionFor(done, a.exam), certificate: await certificatePayload(done) });
   }
   res.json({ success: true, exams });
 });
@@ -712,7 +738,7 @@ const buildAttemptPayload = async (exam, attempt, now = new Date()) => {
 const respondAlreadyCompleted = () => {
   throw new ApiError(
     409,
-    'You have already submitted this examination. Your result is available.',
+    'You have already submitted this examination. Your submission has been recorded.',
     'ALREADY_COMPLETED'
   );
 };
@@ -870,12 +896,12 @@ const submitExam = handler(async (req, res) => {
   // Idempotent: double-click / retry after a network failure just returns the stored result.
   if (attempt.status === 'COMPLETED') {
     attempt = await ensureEvaluated(attempt);
-    return res.json({ success: true, alreadySubmitted: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
+    return res.json({ success: true, alreadySubmitted: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), certificate: await certificatePayload(attempt) });
   }
 
   if (isExpired(attempt, now)) {
     attempt = await finalizeAttempt(attempt._id, 'TIMER', now);
-    return res.json({ success: true, autoSubmitted: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
+    return res.json({ success: true, autoSubmitted: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), certificate: await certificatePayload(attempt) });
   }
 
   await requireProctoring(exam, attempt);
@@ -886,7 +912,7 @@ const submitExam = handler(async (req, res) => {
 
   const type = now.getTime() > attempt.deadline.getTime() ? 'TIMER' : 'MANUAL';
   attempt = await finalizeAttempt(attempt._id, type, now);
-  res.json({ success: true, result: resultSummary(attempt), certificate: await certificatePayload(attempt) });
+  res.json({ success: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), certificate: await certificatePayload(attempt) });
 });
 
 // ──────────────────────────────────────────────
@@ -911,7 +937,8 @@ const getResult = handler(async (req, res) => {
   res.json({
     success: true,
     exam: examPublic(exam),
-    result: { ...resultSummary(attempt), totalQuestions: exam.totalQuestions, status: 'COMPLETED' },
+    result: resultsReleased(exam) ? { ...resultSummary(attempt), released: true, totalQuestions: exam.totalQuestions, status: 'COMPLETED' } : studentResult(attempt, exam),
+    completion: completionFor(attempt, exam),
     certificate: await certificatePayload(attempt),
   });
 });
@@ -919,6 +946,8 @@ const getResult = handler(async (req, res) => {
 // GET /api/olympiad/exams/:id/review
 const getReview = handler(async (req, res) => {
   const { exam, attempt } = await loadCompletedAttempt(req);
+  // the answer key, the student's marks per question and the explanations are results: nothing until an administrator publishes them
+  if (!resultsReleased(exam)) throw new ApiError(403, 'Your detailed results will be available after they are officially published.', 'RESULT_NOT_PUBLISHED');
   const questions = await OlympiadQuestion.find({ exam: exam._id })
     .sort('questionNumber')
     .select('+correctAnswer +explanation');
@@ -1003,7 +1032,7 @@ const adminListExams = handler(async (req, res) => {
   const exams = await OlympiadExam.find(NOT_ENGINEERING).sort({ standard: 1 }).populate('teacher', 'name email');
   const out = [];
   for (const exam of exams) {
-    out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, window: windowState(exam), stats: await examStats(exam) });
+    out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, resultsPublishedAt: exam.resultsPublishedAt || null, window: windowState(exam), stats: await examStats(exam) });
   }
   res.json({ success: true, exams: out });
 });
@@ -1220,6 +1249,23 @@ const adminSeedExam = handler(async (req, res) => {
   });
 });
 
+// POST /api/olympiad/admin/exams/:id/results   { publish: true | false }
+// Releases (or withdraws) the stored test results for the students of this exam. Nothing publishes automatically.
+const adminSetResults = handler(async (req, res) => {
+  const exam = await loadExamAdmin(req.params.id);
+  if (exam.examType === 'engineering') throw new ApiError(400, 'The engineering mock test has its own result flow.', 'NOT_APPLICABLE');
+  const publish = !!(req.body && req.body.publish === true);
+  const already = !!exam.resultsPublishedAt;
+  if (publish !== already) {
+    exam.resultsPublishedAt = publish ? new Date() : null;
+    exam.resultsPublishedBy = req.user._id;
+    exam.resultsAudit = [...(exam.resultsAudit || []), { at: new Date(), by: req.user._id, action: publish ? 'PUBLISHED' : 'WITHDRAWN' }];
+    await exam.save();
+    console.log(`[olympiad] results ${publish ? 'PUBLISHED' : 'WITHDRAWN'} for exam ${exam._id} by ${req.user._id}`);
+  }
+  res.json({ success: true, resultsPublishedAt: exam.resultsPublishedAt || null, changed: publish !== already });
+});
+
 // GET /api/olympiad/admin/exams/:id/attempts
 const adminAttempts = handler(async (req, res) => {
   const exam = await loadExamAdmin(req.params.id);
@@ -1407,7 +1453,7 @@ const startOlympiadSweeper = (intervalMs = 60 * 1000) => {
 module.exports = {
   listExams, getExam, getCompleted,
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
-  startExam, getAttempt, saveAnswers, submitExam,
+  startExam, getAttempt, saveAnswers, submitExam, adminSetResults,
   getResult, getReview,
   adminListExams, adminAttempts, adminPayments, adminAllPayments, adminSeedExam, adminUpdateProctoring, adminAssignTeacher,
   teacherListExams, teacherAttempts,

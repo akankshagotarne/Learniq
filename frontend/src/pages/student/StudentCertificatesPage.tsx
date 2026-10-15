@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import Sidebar from '../../components/layout/Sidebar';
 import CertificateActions from '../../components/olympiad/CertificateActions';
 import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
-import { OlympiadExam } from '../../types/olympiad';
+import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 
 /** Student Dashboard → My Results → Certificates */
 const StudentCertificatesPage: React.FC = () => {
@@ -77,7 +77,8 @@ const StudentCertificatesPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(exams || []).map(e => {
+                      {(exams || []).map(e0 => {
+                        const e = { ...e0, result: isResultReleased(e0.result) ? e0.result : null }; // unpublished results show no marks, outcome or grade
                         const passed = e.result?.passed ?? (e.result ? e.result.percentage >= 60 : false);
                         return (
                           <tr key={e._id} className="border-t border-border-subtle">

@@ -343,7 +343,8 @@ test('UNCONFIRMED grants no NEW access — Olympiad: cannot start, is told to pa
 test('existing exam attempts / results stay intact and reachable for the student', async () => {
   const a = S.olyMismatch[0]; // Std 3, UNCONFIRMED payment, COMPLETED attempt
   const list = (await api('/olympiad/exams', a.st.token)).body.exams.find((e) => e.standard === 3);
-  assert.equal(list.state, 'completed'); assert.equal(list.result.score, 31);
+  assert.equal(list.state, 'completed'); assert.equal(list.result.released, false); // marks are withheld from students until published ...
+  assert.equal(fake.OlympiadAttempt.docs.find((x) => String(x.student) === String(a.st.user._id)).score, 31); // ... but the stored result is intact
   const b = S.olyMismatch[1]; // Std 1, IN_PROGRESS attempt
   assert.equal((await api('/olympiad/exams', b.st.token)).body.exams.find((e) => e.standard === 1).state, 'in_progress');
   assert.deepEqual(clonePlain(fake.OlympiadAttempt.docs), S.original.attempts);

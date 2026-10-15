@@ -50,8 +50,15 @@ export interface StudentExamInterview {
   locked: boolean;
   /** server clock: the interview day has begun (18 Oct 2026, 00:00 IST). Absent on older servers = treat as open. */
   interviewOpen?: boolean;
+  interviewWindow?: 'upcoming' | 'open' | 'closed';
   interviewOpensOn?: string;
   interviewOpensAt?: string;
+  interviewClosesAt?: string;
+  /** interview results visibility (server decides): false until the official release */
+  resultsReleased?: boolean;
+  announcePassed?: boolean;
+  resultsAnnounceAt?: string;
+  resultsAnnounceText?: string;
   code: string | null;
   message: string | null;
   interview: InterviewView | null;
@@ -126,7 +133,7 @@ export interface InterviewResult extends EvaluationView {
 export interface AdminStats {
   eligibleStudents: number; notRequested: number; pending: number; assigned: number; waitingApproval: number; active: number; evaluationPending: number;
   completed: number; cancelled: number; failed: number; stale: number; teachersTotal: number; teachersAvailable: number;
-  settings: { requestsEnabled: boolean };
+  settings: { requestsEnabled: boolean; resultsMode?: 'schedule' | 'published' | 'held' };
 }
 
 export interface AdminTeacher {
@@ -163,7 +170,7 @@ export const interviewApi = {
   mine: async (): Promise<{ byExam: Record<string, StudentExamInterview>; requestsEnabled: boolean }> => (await api.get(`${base}/mine`)).data,
   request: async (examId: string): Promise<InterviewView> => (await api.post(`${base}/request`, { examId })).data.interview,
   joinRequest: async (id: string): Promise<InterviewView> => (await api.post(`${base}/${id}/join-request`)).data.interview,
-  results: async (): Promise<{ results: InterviewResult[]; pending: { interviewId: string; exam: { title: string } | null; message: string }[]; criteria: { key: string; label: string; max: number }[]; maxMarks: number }> => (await api.get(`${base}/results`)).data,
+  results: async (): Promise<{ released: boolean; announceAt: string; announcePassed: boolean; announceText: string; awaiting: { interviewId: string; exam: { _id: string; title: string } | null }[]; results: InterviewResult[]; pending: { interviewId: string; exam: { title: string } | null; message: string }[]; criteria: { key: string; label: string; max: number }[]; maxMarks: number }> => (await api.get(`${base}/results`)).data,
   // shared
   detail: async (id: string): Promise<{
     interview: InterviewView; role: string;
@@ -199,6 +206,7 @@ export const interviewApi = {
   adminCorrect: async (id: string, body: EvaluationPayload & { reason: string }): Promise<EvaluationView> => (await api.put(`${base}/admin/${id}/evaluation`, body)).data.evaluation,
   adminRecoverStale: async (): Promise<{ recovered: number }> => (await api.post(`${base}/admin/recover-stale`, {})).data,
   adminSetRequestsEnabled: async (requestsEnabled: boolean) => (await api.put(`${base}/admin/settings`, { requestsEnabled })).data.settings as { requestsEnabled: boolean },
+  adminSetResultsMode: async (resultsMode: 'schedule' | 'published' | 'held') => (await api.put(`${base}/admin/settings`, { resultsMode })).data.settings as { requestsEnabled: boolean; resultsMode: 'schedule' | 'published' | 'held' },
   // admin: schedule + reminders
   adminSchedule: async (): Promise<AdminScheduleData> => (await api.get(`${base}/admin/schedule`)).data,
   adminSetSchedule: async (body: { examIds: string[] | 'all'; interviewDate: string; startTime?: string; endTime?: string; note?: string }): Promise<{ updated: number }> => (await api.put(`${base}/admin/schedule`, body)).data,

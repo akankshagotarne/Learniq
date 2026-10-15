@@ -7,6 +7,7 @@ import InterviewRoomView from '../../components/interview/InterviewRoomView';
 import { studentStatusHint, studentStatusLabel, statusTone } from '../../components/interview/interviewLabels';
 import { interviewApi, interviewErrorMessage, ROOM_STATUSES } from '../../services/interview';
 import { useInterviewLive } from '../../hooks/useInterviewLive';
+import InterviewCompletionScreen from '../../components/interview/InterviewCompletionScreen';
 
 type Detail = Awaited<ReturnType<typeof interviewApi.detail>>;
 
@@ -16,6 +17,7 @@ const StudentInterviewPage: React.FC = () => {
   const [data, setData] = useState<Detail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<{ released: boolean; announcePassed: boolean } | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await interviewApi.detail(interviewId)); setLoadError(null); }
@@ -25,6 +27,10 @@ const StudentInterviewPage: React.FC = () => {
   useInterviewLive(load, { pollMs: 6000 });
 
   const status = data?.interview.status;
+  React.useEffect(() => { // a finished interview: ask the server whether the results are out (never decided in the browser)
+    if (status !== 'COMPLETED') return;
+    interviewApi.results().then((r) => setOutcome({ released: r.released, announcePassed: r.announcePassed })).catch(() => setOutcome({ released: false, announcePassed: false }));
+  }, [status]);
   const act = async (fn: () => Promise<unknown>, okMsg?: string) => {
     setBusy(true);
     try { await fn(); if (okMsg) toast.success(okMsg); await load(); }
@@ -81,7 +87,7 @@ const StudentInterviewPage: React.FC = () => {
                   </button>
                 )}
                 {(status === 'REQUESTED' || status === 'WAITING_FOR_APPROVAL') && <p className="text-[11px] text-text-muted mt-3 flex items-center gap-1"><Clock className="w-3 h-3" /> This page updates by itself.</p>}
-                {status === 'COMPLETED' && (
+                {status === 'COMPLETED' && outcome?.released && (
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <p className="text-sm text-[#15803D] dark:text-[#4ADE9A] flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Interview completed.</p>
                     <Link to="/student/interview-results" className="btn-primary min-h-[44px] px-5 rounded-xl text-sm font-bold inline-flex items-center gap-2" data-testid="view-results">View Interview Results</Link>
@@ -91,6 +97,8 @@ const StudentInterviewPage: React.FC = () => {
                   <Link to="/student/exams" className="btn-primary mt-4 min-h-[44px] px-5 rounded-xl text-sm font-bold inline-flex items-center gap-2" data-testid="request-again">Request Interview Again</Link>
                 )}
               </div>
+
+              {status === 'COMPLETED' && outcome && !outcome.released && <InterviewCompletionScreen announcePassed={outcome.announcePassed} />}
 
               {inRoom && (
                 <InterviewRoomView interviewId={interviewId} role="student" peerLabel={data.teacher?.name || 'Teacher'} onEnded={load} />

@@ -14,7 +14,7 @@ import { interviewApi, interviewErrorMessage, StudentExamInterview } from '../..
 import { useInterviewLive } from '../../hooks/useInterviewLive';
 import toast from 'react-hot-toast';
 import { olympiadTab } from '../../utils/examTabs';
-import { OlympiadExam } from '../../types/olympiad';
+import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
 import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
 import { standardLabel } from '../../constants/standards';
@@ -141,7 +141,7 @@ const StudentExamsPage: React.FC = () => {
   const completedCount = regularCompleted + olympiadCompleted.length;
   const percentageSum =
     exams.filter(e => e.myBestAttempt).reduce((sum, e) => sum + (e.myBestAttempt?.percentage || 0), 0) +
-    olympiadCompleted.reduce((sum, o) => sum + (o.result?.percentage || 0), 0);
+    olympiadCompleted.reduce((sum, o) => sum + (isResultReleased(o.result) ? o.result.percentage : 0), 0);
   const avgScore = completedCount > 0 ? Math.round(percentageSum / completedCount) : 0;
   const availableCount = exams.filter(e => e.availability === 'available').length + olympiadAvailable.length;
   const upcomingCount = exams.filter(e => e.availability === 'upcoming').length + olympiadUpcoming.length;

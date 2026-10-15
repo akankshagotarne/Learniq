@@ -71,6 +71,12 @@ const olympiadExamSchema = new mongoose.Schema({
 
   isPublished: { type: Boolean, default: true },
 
+  // Test results are stored at submission but stay hidden from students until an administrator publishes them
+  // (null = hidden). Publishing / withdrawing is audited. Students are never told their marks before this is set.
+  resultsPublishedAt: { type: Date, default: null },
+  resultsPublishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  resultsAudit: { type: [new mongoose.Schema({ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, action: String }, { _id: false })], default: [] },
+
   // Online proctoring rules (admin-configured; off until enabled) - see services/proctoring/policy.js
   proctoring: { type: proctoringPolicySchema, default: () => ({}) },
 }, { timestamps: true });
