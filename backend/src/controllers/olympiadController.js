@@ -10,6 +10,7 @@ const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, Polic
 const examAccess = require('../services/examAccess');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
+const { istDate } = require('../config/schedule');
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -103,10 +104,13 @@ const assertCanAccessExam = async (user, exam) => {
   assertEligibleStudent(user, exam);
 };
 
+const opensOn = (exam) => `This examination opens on ${istDate(exam.startDate)}.`;
+
 const assertWindowOpen = (exam, purpose) => {
   const state = windowState(exam);
-  if (state === 'upcoming') {
-    throw new ApiError(403, 'The examination has not started yet.', 'NOT_STARTED');
+  // paying (registering) is allowed in advance; only STARTING the examination waits for the exam day
+  if (state === 'upcoming' && purpose !== 'register') {
+    throw new ApiError(403, opensOn(exam), 'NOT_STARTED');
   }
   if (state === 'closed') {
     throw new ApiError(
@@ -313,7 +317,7 @@ const buildApprovalState = async (exam, userId, now) => {
   if (attempt && attempt.status === 'COMPLETED') state = 'completed';
   else if (attempt && attempt.status === 'IN_PROGRESS') state = 'in_progress';
   else if (win === 'closed') { state = 'closed'; message = 'The examination is closed.'; }
-  else if (win === 'upcoming') { state = 'upcoming'; message = 'The examination has not started yet.'; }
+  else if (win === 'upcoming') { state = 'upcoming'; message = opensOn(exam); }
   else if (exam.accessEnabled === false) { state = 'disabled'; message = 'Access to this examination is currently disabled.'; }
   else if (!request || (request.status === 'REJECTED' && request.allowResubmit)) state = 'request';
   else if (request.status === 'PENDING') state = 'pending';
@@ -357,8 +361,9 @@ const buildState = async (exam, userId, now = new Date()) => {
   else if (attempt && attempt.status === 'IN_PROGRESS') state = 'in_progress';
   else if (paid) {
     if (win === 'closed') { state = 'closed'; message = 'The examination is no longer available.'; }
+    else if (win === 'upcoming') { state = 'upcoming'; message = opensOn(exam); } // paid (or authorised) in advance: scheduled, NOT startable until the exam day
     else state = 'ready';
-  } else if (win === 'upcoming') { state = 'upcoming'; message = 'The examination has not started yet.'; }
+  } else if (win === 'upcoming') { state = 'pay'; message = `You can pay ₹${exam.fee} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
   else if (win === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
   else state = 'pay';
 

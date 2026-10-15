@@ -279,3 +279,31 @@ test.describe('admin interview management', () => {
     });
   }
 });
+
+test.describe('interview day (18 October 2026)', () => {
+  test.beforeEach(async ({ page }) => { await page.setViewportSize(PHONE); });
+  const withOpen = (open: boolean): Override => (method, path) => {
+    if (method === 'GET' && path === '/interviews/mine') {
+      const m = mine('NONE'); (m.byExam['oly-done'] as Record<string, unknown>).interviewOpen = open; (m.byExam['oly-done'] as Record<string, unknown>).interviewOpensOn = '18 October 2026';
+      return { body: m };
+    }
+    return undefined;
+  };
+
+  test('before the interview day: congratulations message + disabled "Scheduled — 18 October 2026", no way to request', async ({ page }) => {
+    await mockApi(page, 'student', withOpen(false));
+    await page.goto('/student/exams');
+    await expect(page.getByTestId('interview-scheduled-note')).toHaveText('Congratulations! You have successfully completed your test. Your teacher interview is scheduled for 18 October 2026. Please check your WhatsApp group for your assigned interview time and join on time.');
+    const b = page.getByTestId('interview-scheduled');
+    await expect(b).toBeDisabled(); await expect(b).toContainText('Scheduled — 18 October 2026');
+    await expect(page.getByTestId('interview-start')).toHaveCount(0);
+    await noOverflow(page);
+  });
+
+  test('on the interview day: Start Interview is enabled', async ({ page }) => {
+    await mockApi(page, 'student', withOpen(true));
+    await page.goto('/student/exams');
+    await expect(page.getByTestId('interview-start')).toBeEnabled();
+    await expect(page.getByTestId('interview-scheduled')).toHaveCount(0);
+  });
+});

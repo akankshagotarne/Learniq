@@ -1,3 +1,4 @@
+process.env.OLYMPIAD_INTERVIEW_OPENS_AT = '2000-01-01T00:00:00+05:30'; // these tests cover the interview workflow; the interview-date gate has its own tests (schedule.test.js)
 /**
  * Teacher–Student interviews — backend tests, run with:  npm run test:interviews
  *
@@ -1237,4 +1238,52 @@ test('C7 admin can tell a closed-before-start interview from a conducted one', a
   const iv = await approvedFor(t, s); await close(t, iv._id);
   const row = (await api('GET', '/admin/list', { token: admin.token })).body.interviews.find((r) => r._id === String(iv._id));
   assert.equal(row.status, 'CANCELLED'); assert.equal(row.endReason, svc.CLOSED_BEFORE_START); assert.equal(row.startedAt, null); assert.equal(row.evaluation, null);
+});
+
+// ═════════════════ the interview day: 18 Oct 2026, 00:00 IST (server clock, controllable here) ═════════════════
+const fresh = (u) => ({ ...u, token: fake.sessionToken(u.user) }); // sessions idle out when the mocked clock jumps days
+const withInterviewClock = async (t, nowIso, fn) => {
+  const real = svc.INTERVIEW_OPENS_AT.getTime();
+  svc.INTERVIEW_OPENS_AT.setTime(Date.parse('2026-10-18T00:00:00.000+05:30')); // the real configured opening (the file-level override opens it for the other tests)
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(nowIso) });
+  try { return await fn(); } finally { t.mock.timers.reset(); svc.INTERVIEW_OPENS_AT.setTime(real); }
+};
+
+test('INTERVIEW DAY: no request, accept or room access before 00:00 IST on 18 Oct; a submitted student can request from 00:00:00.000; the teacher must approve the real request', async (t) => {
+  M.TeacherInterview.docs = [];
+  const s = await submittedStudent(); const ns = await mkUser(); const teacher = await mkUser({ role: 'teacher' });
+  const mine = () => M.OlympiadPayment.docs.filter((p) => String(p.student) === String(s.user._id)).map((p) => [String(p._id), p.amount]);
+  const payments = JSON.stringify(mine());
+  await withInterviewClock(t, '2026-10-17T23:59:59.999+05:30', async () => {
+    const S1 = fresh(s), NS = fresh(ns);
+    const early = await api('POST', '/request', { token: S1.token, body: { examId: String(s.exam._id) } });
+    assert.equal(early.status, 403); assert.equal(early.body.code, 'INTERVIEW_NOT_OPEN'); assert.match(early.body.message, /18 October 2026/);
+    assert.equal(M.TeacherInterview.docs.length, 0, 'nothing was created');
+    const row = (await api('GET', '/mine', { token: S1.token })).body.byExam[String(s.exam._id)];
+    assert.equal(row.interviewOpen, false); assert.equal(row.interviewOpensOn, '18 October 2026');
+    // a student who has NOT submitted is refused for the exam reason on both sides of the date
+    const exam2 = await mkExam(10); await pay(ns.user, exam2);
+    const r0 = await api('POST', '/request', { token: NS.token, body: { examId: String(exam2._id) } });
+    assert.equal(r0.status, 403); assert.equal(r0.body.code, 'NOT_SUBMITTED');
+  });
+  // an old request created while the gate was open cannot be accepted or entered early either
+  let leftover;
+  await withInterviewClock(t, '2026-10-18T00:00:00.000+05:30', async () => { leftover = await requestFor(fresh(s)); });
+  await withInterviewClock(t, '2026-10-17T12:00:00+05:30', async () => {
+    const T1 = fresh(teacher), S2 = fresh(s);
+    const acc = await api('POST', `/${leftover._id}/accept`, { token: T1.token });
+    assert.equal(acc.status, 409); assert.equal(acc.body.code, 'INTERVIEW_NOT_OPEN');
+    const room = await api('POST', `/${leftover._id}/room-access`, { token: S2.token });
+    assert.equal(room.status === 200, false);
+  });
+  // 18 Oct: open
+  await withInterviewClock(t, '2026-10-18T00:00:00.000+05:30', async () => {
+    const T2 = fresh(teacher), S3 = fresh(s);
+    const row = (await api('GET', '/mine', { token: S3.token })).body.byExam[String(s.exam._id)]; assert.equal(row.interviewOpen, true);
+    assert.equal(ivDoc(leftover._id).status, 'REQUESTED', 'waiting for a teacher: nobody started it for the student');
+    const acc = await api('POST', `/${leftover._id}/accept`, { token: T2.token }); assert.equal(acc.status, 200, acc.text);
+    assert.equal(ivDoc(leftover._id).status, 'APPROVED');
+    assert.equal((await api('POST', `/${leftover._id}/room-access`, { token: S3.token })).status, 200);
+  });
+  assert.equal(JSON.stringify(mine()), payments, 'the ₹20 payment covered both: no new payment record, no re-charge');
 });

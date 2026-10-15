@@ -1,3 +1,4 @@
+process.env.OLYMPIAD_INTERVIEW_OPENS_AT = '2000-01-01T00:00:00+05:30'; // interview-date gate is covered in schedule.test.js
 /**
  * Admin-only "Grant Exceptional Test Access" and "Reset Test Attempt".   node --test src/tests/examAccess.test.js
  * Real routes (olympiad + interviews + admin), controllers, services; the collections are the in-memory fakes
