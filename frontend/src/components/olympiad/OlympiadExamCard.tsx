@@ -21,6 +21,8 @@ interface Props {
 const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, interviewBusy, onStartInterview }) => {
   const { state } = exam;
   const approval = exam.accessMode === 'approval';   // BE Engineering mock test: free, admin-approved
+  // "This examination opens on 17 October 2026." -> "17 October 2026" (the server wording is the single source of the date)
+  const upcomingOn = exam.message?.match(/opens on (\d{1,2} \w+ \d{4})/)?.[1];
   const disabled = state === 'upcoming' || state === 'closed' || state === 'disabled';
 
   const badge = (() => {
@@ -78,7 +80,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
       case 'upcoming':
         return (
           <span className="badge-warning text-[10px] py-0.5 px-2 flex items-center gap-1">
-            <Clock className="w-3 h-3" /> Upcoming
+            <Clock className="w-3 h-3" /> Upcoming{upcomingOn ? ` — ${upcomingOn}` : ''}
           </span>
         );
       case 'closed':
@@ -158,7 +160,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           </div>
         )}
 
-        {exam.message && (state === 'upcoming' || state === 'closed' || state === 'disabled' || state === 'rejected') && (
+        {exam.message && (state === 'upcoming' || (state === 'pay' && exam.window === 'upcoming') || state === 'closed' || state === 'disabled' || state === 'rejected') && (
           <p className="text-[11px] text-text-secondary mb-3">{exam.message}</p>
         )}
       </div>
@@ -257,6 +259,21 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
                 </button>
                 <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message || 'Submit your Olympiad exam to unlock the interview.'}</p>
               </>
+            ) : interview.eligible && interview.interviewOpen === false ? (
+              <>
+                <p className="mb-2 p-3 rounded-xl bg-[#4ADE9A]/10 border border-[#4ADE9A]/30 text-[11px] text-text-secondary" data-testid="interview-scheduled-note">
+                  Congratulations! You have successfully completed your test. Your teacher interview is scheduled for {interview.interviewOpensOn || '18 October 2026'}. Please check your WhatsApp group for your assigned interview time and join on time.
+                </p>
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
+                  data-testid="interview-scheduled"
+                >
+                  <Clock className="w-3.5 h-3.5" /> Scheduled — {interview.interviewOpensOn || '18 October 2026'}
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -270,6 +287,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
                     ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Requesting…</>
                     : <><Video className="w-3.5 h-3.5" /> Start Interview <ChevronRight className="w-3.5 h-3.5" /></>}
                 </button>
+                {interview.eligible && interview.interviewOpen === true && <p className="text-[11px] text-text-muted mt-1.5 text-center" data-testid="interview-open-hint">Check your WhatsApp group for your assigned interview time, then request when it is your turn.</p>}
                 {!interview.eligible && interview.message && <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message}</p>}
               </>
             )}

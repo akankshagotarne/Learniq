@@ -748,15 +748,30 @@ test('sweeper auto-submits attempts abandoned past their deadline (browser close
   assert.equal(doc.score, 0);
 });
 
+/** a controllable server clock: the exam day, 17 Oct 2026 10:00 IST (only Date is faked) */
+const onExamDay = (t, iso = '2026-10-17T10:00:00+05:30') => t.mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
+
 // ── 7. availability window ────────────────────────────────────────────
-test('before the window opens: "upcoming", cannot pay or start', async () => {
+test('before the window opens: an unpaid student may pay in advance; payment alone never lets anyone start; the exam shows as upcoming', async () => {
   await setExamDates({ startDate: new Date(Date.now() + 3600e3), endDate: new Date(Date.now() + 2 * 86400e3) });
   const U = await mkUser({ name: 'Upcoming U' });
   const list = await api('GET', '/exams', { token: U.token });
-  assert.equal(list.body.exams[0].state, 'upcoming');
+  assert.equal(list.body.exams[0].state, 'pay', 'paying in advance is offered');
   assert.equal(list.body.exams[0].window, 'upcoming');
+  assert.match(list.body.exams[0].message, /opens on \d+ \w+ \d{4}/);
   const o = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: U.token });
-  assert.equal(o.status, 403); assert.equal(o.body.code, 'NOT_STARTED');
+  assert.notEqual(o.body.code, 'NOT_STARTED', 'the order is not blocked by the exam date'); assert.notEqual(o.body.code, 'CLOSED');
+  // paid in advance: scheduled/upcoming, entitlement kept, but the exam cannot be started yet
+  await payDirect(U.user);
+  const paid = (await api('GET', '/exams', { token: U.token })).body.exams[0];
+  assert.equal(paid.state, 'upcoming'); assert.equal(paid.paymentStatus, 'SUCCESS'); assert.match(paid.message, /^This examination opens on /);
+  const s = await api('POST', `/exams/${S.exam._id}/start`, { token: U.token });
+  assert.equal(s.status, 403); assert.equal(s.body.code, 'NOT_STARTED'); assert.match(s.body.message, /^This examination opens on /);
+  assert.equal(await M.OlympiadAttempt.countDocuments({ student: U.user._id, exam: S.exam._id }), 0, 'no attempt was created');
+  assert.equal(await M.OlympiadPayment.countDocuments({ student: U.user._id, exam: S.exam._id, status: 'SUCCESS' }), 1, 'the payment record is untouched');
+  await openWindow();
+  const now = await api('POST', `/exams/${S.exam._id}/start`, { token: U.token });
+  assert.equal(now.status, 200, 'the same paid student starts once the exam day has come - no second payment');
   await openWindow();
 });
 
@@ -834,8 +849,74 @@ test('seed script is idempotent and imports all 60 questions (real MongoDB only)
   assert.equal(String(a._id), String(b._id));
   assert.equal(await M.OlympiadQuestion.countDocuments({ exam: a._id }), 60);
   assert.equal(a.fee, 20);
-  assert.equal(a.startDate.toISOString(), '2026-09-28T18:30:00.000Z');
-  assert.equal(a.endDate.toISOString(), '2026-10-15T18:29:59.999Z');
+  assert.equal(a.startDate.toISOString(), '2026-10-16T18:30:00.000Z'); // 17 Oct 2026 00:00 IST
+  assert.equal(a.endDate.toISOString(), '2026-10-17T18:29:59.999Z'); // 17 Oct 2026 23:59:59.999 IST
+});
+
+// ── 11. the exam day: 17 Oct 2026, 00:00:00.000 - 23:59:59.999 IST (server clock, controllable in tests) ──
+test('EXAM DAY: a paid student cannot start before 00:00 IST on 17 Oct, can from 00:00:00.000 to 23:59:59.999, never after; unpaid and unauthorised are denied; payments untouched', async (t) => {
+  const sched = require('../config/schedule');
+  assert.equal(sched.EXAM_OPENS_AT.toISOString(), '2026-10-16T18:30:00.000Z');
+  assert.equal(sched.EXAM_CLOSES_AT.toISOString(), '2026-10-17T18:29:59.999Z');
+  await setExamDates({ startDate: sched.EXAM_OPENS_AT, endDate: sched.EXAM_CLOSES_AT });
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-16T23:59:59.999+05:30') }); // one millisecond before the exam day
+  const early = await mkUser({ name: 'Early' }); const first = await mkUser({ name: 'First' }); const unpaid = await mkUser({ name: 'Unpaid' });
+  for (const u of [early, first]) await payDirect(u.user);
+  const startAs = (u) => api('POST', `/exams/${S.exam._id}/start`, { token: u.token });
+
+  // 16 Oct 23:59:59.999 IST: paid, but the exam day has not come
+  let r = await startAs(early); assert.equal(r.status, 403); assert.equal(r.body.code, 'NOT_STARTED'); assert.match(r.body.message, /^This examination opens on 17 October 2026\.$/);
+  let card = (await api('GET', '/exams', { token: early.token })).body.exams[0];
+  assert.equal(card.state, 'upcoming'); assert.equal(card.paymentStatus, 'SUCCESS'); assert.equal(card.window, 'upcoming');
+  assert.equal(await M.OlympiadAttempt.countDocuments({ student: early.user._id }), 0);
+
+  // 17 Oct 00:00:00.000 IST: open
+  t.mock.timers.setTime(Date.parse('2026-10-17T00:00:00.000+05:30'));
+  card = (await api('GET', '/exams', { token: first.token })).body.exams[0]; assert.equal(card.state, 'ready'); assert.equal(card.window, 'open');
+  r = await startAs(first); assert.equal(r.status, 200, r.text);
+  // an unpaid / unauthorised student is still denied on the exam day, and a wrong-standard student too
+  r = await startAs(unpaid); assert.equal(r.status === 200, false); assert.equal(r.body.code, 'PAYMENT_REQUIRED');
+
+  // 17 Oct 23:59:59.999 IST: still the exam day
+  t.mock.timers.setTime(Date.parse('2026-10-17T23:59:00.000+05:30')); // (sessions idle out, so these two sign in just before)
+  const last = await mkUser({ name: 'Last' }); const late = await mkUser({ name: 'Late' }); const unpaid2 = await mkUser({ name: 'Unpaid2' }); await payDirect(last.user); await payDirect(late.user);
+  const paymentsBefore = JSON.stringify((await M.OlympiadPayment.find({})).map((p) => [String(p._id), p.status, p.amount]));
+  t.mock.timers.setTime(Date.parse('2026-10-17T23:59:59.999+05:30'));
+  r = await startAs(last); assert.equal(r.status, 200, r.text);
+
+  // 18 Oct 00:00:00.000 IST: closed - no new attempts, no new registration; history and payments stay
+  t.mock.timers.setTime(Date.parse('2026-10-18T00:00:00.000+05:30'));
+  r = await startAs(late); assert.equal(r.status, 403); assert.equal(r.body.code, 'CLOSED');
+  card = (await api('GET', '/exams', { token: late.token })).body.exams[0]; assert.equal(card.state, 'closed'); assert.equal(card.window, 'closed');
+  r = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: unpaid2.token }); assert.equal(r.status, 403); assert.equal(r.body.code, 'CLOSED');
+  assert.equal(await M.OlympiadAttempt.countDocuments({ student: late.user._id }), 0);
+  assert.equal(JSON.stringify((await M.OlympiadPayment.find({})).map((p) => [String(p._id), p.status, p.amount])), paymentsBefore, 'successful payments are unchanged');
+  assert.equal((await api('GET', `/exams/${S.exam._id}/attempt`, { token: last.token })).status, 200, 'the attempt started on the exam day stays usable until its own deadline');
+  await openWindow();
+});
+
+test('window sync: only startDate/endDate of Olympiad exams are set to the exam day; payments, attempts, other exam types untouched; idempotent; can be switched off', async () => {
+  const sched = require('../config/schedule');
+  const { syncOlympiadWindow } = require('../services/olympiadSchedule');
+  const old = { startDate: new Date('2026-09-29T00:00:00+05:30'), endDate: new Date('2026-10-15T23:59:59.999+05:30') };
+  await M.OlympiadExam.updateOne({ _id: S.exam._id }, { $set: old });
+  const eng = await M.OlympiadExam.create({ title: 'Eng mock', slug: 'eng-sync-test', standard: 99, examType: 'engineering', accessMode: 'approval', ...old, durationMinutes: 30, fee: 0, currency: 'INR' });
+  const counts = async () => [await M.OlympiadPayment.countDocuments({}), await M.OlympiadAttempt.countDocuments({}), await M.OlympiadQuestion.countDocuments({})];
+  const before = await counts();
+  process.env.OLYMPIAD_WINDOW_SYNC = 'off';
+  assert.equal((await syncOlympiadWindow({ models: M, log: () => {} })).skipped, true);
+  assert.equal((await M.OlympiadExam.findById(S.exam._id)).endDate.toISOString(), old.endDate.toISOString(), 'switched off: nothing written');
+  delete process.env.OLYMPIAD_WINDOW_SYNC;
+  const res = await syncOlympiadWindow({ models: M, log: () => {} });
+  assert.ok(res.changed >= 1);
+  const e = await M.OlympiadExam.findById(S.exam._id);
+  assert.equal(e.startDate.toISOString(), sched.EXAM_OPENS_AT.toISOString()); assert.equal(e.endDate.toISOString(), sched.EXAM_CLOSES_AT.toISOString());
+  assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026'); assert.equal(e.fee, FEE);
+  const e2 = await M.OlympiadExam.findById(eng._id); assert.equal(e2.endDate.toISOString(), old.endDate.toISOString(), 'the engineering mock test keeps its own dates');
+  assert.deepEqual(await counts(), before);
+  assert.equal((await syncOlympiadWindow({ models: M, log: () => {} })).changed, 0, 'idempotent');
+  await M.OlympiadExam.deleteMany({ _id: eng._id });
+  await openWindow();
 });
 
 // ── 10. auto-seed on server start (fresh / production database) ─────────
@@ -871,8 +952,8 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     assert.equal(e.totalMarks, QUESTIONS_IN(std));
     assert.equal(e.durationMinutes, 60);
     assert.equal(e.state, 'pay');
-    assert.equal(e.startDate, '2026-09-28T18:30:00.000Z');
-    assert.equal(e.endDate, '2026-10-15T18:29:59.999Z');
+    assert.equal(e.startDate, '2026-10-16T18:30:00.000Z'); // 17 Oct 2026 00:00 IST
+    assert.equal(e.endDate, '2026-10-17T18:29:59.999Z');   // 17 Oct 2026 23:59:59.999 IST
     assertNoAnswerKeyLeak(r, `listing std ${std}`);
   }
   assert.deepEqual((await api('GET', '/exams', { token: students[11].token })).body.exams, []); // a standard with no exam sees none
@@ -886,7 +967,8 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
   }
 });
 
-test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a full attempt scores correctly', { skip: USE_REAL }, async () => {
+test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
+  onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
   for (const std of [4, 5, 6, 7, 8]) {
     const paper = require(`../data/olympiad${std}Questions`);
     assert.equal(paper.questions.length, 60, `std ${std}`);
@@ -927,7 +1009,8 @@ test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a ful
   assert.equal(sub.body.result.unansweredCount, 20);
 });
 
-test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full attempt scores correctly', { skip: USE_REAL }, async () => {
+test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
+  onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
   for (const std of [1, 2, 3]) {
     const paper = require(`../data/olympiad${std}Questions`);
     assert.equal(paper.questions.length, 40, `std ${std}`);
@@ -977,7 +1060,8 @@ test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full a
   assert.ok(withExpl, 'the paper\'s explanation is shown in the review');
 });
 
-test('Std 9 paper: 60 questions, key intact, a full attempt scores correctly', { skip: USE_REAL }, async () => {
+test('Std 9 paper: 60 questions, key intact, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
+  onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
   const paper9 = require('../data/olympiad9Questions');
   assert.equal(paper9.questions.length, 60);
   assert.equal(paper9.questions.reduce((s, q) => s + q.marks, 0), 60);
@@ -1029,3 +1113,4 @@ test('admin seed endpoint: admin can create/refresh the exams, students cannot',
   assert.deepEqual(ok.body.skipped.sort(), ['Standard 2', 'Standard 7', 'Standard 9']);
   assert.equal(await M.OlympiadQuestion.countDocuments({}), 540);
 });
+

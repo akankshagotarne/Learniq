@@ -14,6 +14,7 @@ const {
   TeacherInterview, InterviewSetting, InterviewEvaluation, ACTIVE, OPEN, ROOM_STATUSES, EVALUATING, flagsFor,
 } = require('../models/TeacherInterview');
 const { CRITERIA, MAX_TOTAL, KEYS } = require('../config/interviewCriteria');
+const { INTERVIEW_OPENS_AT, istDate } = require('../config/schedule');
 
 class InterviewError extends Error {
   constructor(status, message, code, extra) {
@@ -38,6 +39,11 @@ const STALE_MS = () => num(process.env.INTERVIEW_STALE_MINUTES, 10) * 60 * 1000;
 const note = (by, role, action, text) => ({ at: new Date(), by: by || undefined, role, action, ...(text ? { note: String(text).slice(0, 300) } : {}) });
 
 const emitChanged = (iv) => { try { events.emit('changed', { interview: plain(iv) }); } catch (_) { /* listeners must never break a request */ } };
+
+// ── interview date (server clock, IST): nothing about an interview can start before the interview day ──────────
+const interviewOpen = (now = new Date()) => now.getTime() >= INTERVIEW_OPENS_AT.getTime();
+const interviewOpensOn = () => istDate(INTERVIEW_OPENS_AT);
+const notOpenError = (status = 403) => new InterviewError(status, `The interview opens on ${interviewOpensOn()}. You can request it then.`, 'INTERVIEW_NOT_OPEN', { opensAt: INTERVIEW_OPENS_AT.toISOString() });
 
 // ── settings ─────────────────────────────────────────────────────────────────────────────────
 const getSettings = async () => {
@@ -162,7 +168,8 @@ const transition = (filter, set, auditEntry, extraUnset) => TeacherInterview.fin
 
 // ── student ──────────────────────────────────────────────────────────────────────────────────
 const requestInterview = async (student, examId) => {
-  const eligibility = await requireEligible(student._id, examId);
+  const eligibility = await requireEligible(student._id, examId); // paid / authorised AND submitted first ...
+  if (!interviewOpen()) throw notOpenError(); // ... then the interview day (a submitted student still cannot request early)
   const { interview, created } = await findOrCreateOpen({ studentId: student._id, examId: eligibility.exam._id, eligibility, requestedBy: 'student', actor: student });
   return { interview, created };
 };
@@ -268,6 +275,7 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
 const teacherAccept = async (teacher, id) => {
   const iv = await load(id);
   if (!isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR(); // a record the student never requested can not be accepted
+  if (!interviewOpen()) throw notOpenError(409);
   if (same(iv.teacher, teacher._id)) { // my own interview: accepting again is harmless
     if (iv.status === 'WAITING_FOR_APPROVAL') return teacherApprove(teacher, id);
     if (ACTIVE.includes(iv.status)) return iv;
@@ -570,6 +578,7 @@ const authorizeRoom = (iv, user) => {
   const role = roleIn(iv, user);
   if (!role) return { ok: false, code: 'FORBIDDEN', message: 'You are not a participant of this interview.' };
   if (!isGenuineRequest(iv)) return { ok: false, code: 'NO_STUDENT_REQUEST', message: 'The student has not requested this interview.' };
+  if (!interviewOpen()) return { ok: false, code: 'INTERVIEW_NOT_OPEN', message: `The interview room opens on ${interviewOpensOn()}.` };
   // the room opens only AFTER the request was accepted/approved (APPROVED and later) - for the teacher exactly as for the student
   if (role === 'teacher' && !ROOM_STATUSES.includes(iv.status)) return { ok: false, code: 'NOT_APPROVED', message: 'Accept the student\'s request before entering the room.' };
   if (role === 'student' && !ROOM_STATUSES.includes(iv.status)) {
@@ -873,6 +882,7 @@ const studentOverview = async (student) => {
       code: e.eligible ? null : e.code,
       message: e.eligible ? null : e.message,
       interview: iv ? view(iv) : null,
+      interviewOpen: interviewOpen(now), interviewOpensOn: interviewOpensOn(), interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(),
       schedule: { summary: sum, ...sched.messageFor(sum, now) },
       ...workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null),
     };
@@ -1019,7 +1029,7 @@ module.exports = {
   InterviewError, events, isValidId, oid, same,
   getSettings, setRequestsEnabled, checkEligibility,
   requestInterview, studentJoinRequest, cancel,
-  cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
+  interviewOpen, INTERVIEW_OPENS_AT, cancelTeacherInitiated, isGenuineRequest, teacherStart, teacherAccept, teacherApprove, teacherRejectJoin, teacherRelease, teacherEnd, teacherCloseWaiting, CLOSED_BEFORE_START,
   getEvaluation, saveEvaluationDraft, submitEvaluation, adminCorrectEvaluation, studentResults, parseScores, totals,
   adminAssign, authorizeRoom, roomAccess, iceServers, setPresence, markConnected, touch,
   findStale, recoverStale, startInterviewSweeper,

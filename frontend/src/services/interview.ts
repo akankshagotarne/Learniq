@@ -48,6 +48,10 @@ export interface StudentExamInterview {
   evaluation: EvaluationSummary | null;
   eligible: boolean;
   locked: boolean;
+  /** server clock: the interview day has begun (18 Oct 2026, 00:00 IST). Absent on older servers = treat as open. */
+  interviewOpen?: boolean;
+  interviewOpensOn?: string;
+  interviewOpensAt?: string;
   code: string | null;
   message: string | null;
   interview: InterviewView | null;
