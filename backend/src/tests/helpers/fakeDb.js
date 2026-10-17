@@ -381,8 +381,8 @@ const createFakeDb = () => {
   // certificates (models/Certificate.js) — same unique indexes as the real schema
   const Certificate = new FakeModel('Certificate', {
     registry, refs: { student: 'User', exam: 'OlympiadExam' },
-    unique: [{ fields: ['certificateNumber'] }, { fields: ['student', 'exam'] }, { fields: ['attempt'] }, { fields: ['verificationToken'] }],
-    defaults: () => ({ status: 'VALID', result: 'PASS' }),
+    unique: [{ fields: ['certificateNumber'] }, { fields: ['student', 'exam', 'type'] }, { fields: ['attempt', 'type'] }, { fields: ['verificationToken'] }],
+    defaults: () => ({ status: 'VALID', result: 'PASS', type: 'RESULT', generationStatus: 'PENDING', generationAttempts: 0 }),
   });
   const Counter = new FakeModel('Counter', { registry, defaults: () => ({ seq: 0 }) });
 

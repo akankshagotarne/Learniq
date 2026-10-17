@@ -27,6 +27,8 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
   const [standard, setStandard] = useState('all');
   const [exam, setExam] = useState('all');
   const [grade, setGrade] = useState('all');
+  const [type, setType] = useState('all');
+  const [generation, setGeneration] = useState('all');
   const [status, setStatus] = useState('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -45,20 +47,20 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
   }, [search]);
 
   // any filter change starts again from page 1
-  useEffect(() => { setPage(1); }, [debouncedSearch, standard, exam, grade, status, from, to, examId]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, standard, exam, grade, type, generation, status, from, to, examId]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
     certificatesApi.adminList({
-      search: debouncedSearch, standard, exam: examId || exam, grade, status, from, to, page, limit: 20,
+      search: debouncedSearch, standard, exam: examId || exam, grade, type, generation, status, from, to, page, limit: 20,
     })
       .then(res => { if (!cancelled) setData(res); })
       .catch(err => { if (!cancelled) { setFailed(true); toast.error(olympiadErrorMessage(err, 'Could not load certificates.')); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [debouncedSearch, standard, exam, grade, status, from, to, page, examId, reload]);
+  }, [debouncedSearch, standard, exam, grade, type, generation, status, from, to, page, examId, reload]);
 
   const run = useCallback(async (key: string, job: () => Promise<unknown>, success?: string) => {
     setBusy(key);
@@ -81,13 +83,27 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
     }, 'Certificate revoked.');
   };
 
-  const clearFilters = () => { setSearch(''); setStandard('all'); setExam('all'); setGrade('all'); setStatus('all'); setFrom(''); setTo(''); };
+  const clearFilters = () => { setSearch(''); setStandard('all'); setExam('all'); setGrade('all'); setType('all'); setGeneration('all'); setStatus('all'); setFrom(''); setTo(''); };
   const rows = data?.certificates || [];
 
   return (
     <div data-testid="admin-certificates">
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs text-text-secondary">
         <span className="inline-flex items-center gap-1 font-semibold text-text-primary"><Award className="w-4 h-4 text-[#FFC24B]" /> Certificates</span>
+        {(examId || exam !== 'all') && (
+          <button
+            disabled={busy !== null}
+            onClick={() => void run('process', async () => {
+              const r = await certificatesApi.adminProcessExam((examId || exam) as string);
+              setReload(k => k + 1);
+              if (!r.ok) throw Object.assign(new Error('some failed'), { response: { data: { message: `${r.failed ?? 'Some'} certificate(s) could not be generated yet. They will be retried automatically.` } } });
+            }, 'Certificates are up to date.')}
+            className="ml-auto inline-flex items-center gap-1 text-xs font-semibold py-1.5 px-3 rounded-xl border border-border-subtle bg-surface-alt text-text-primary disabled:opacity-50"
+            title="Generate any missing or failed certificates for this exam. Refused before the official release; safe to repeat."
+          >
+            {busy === 'process' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Retry generation
+          </button>
+        )}
         {data && (
           <span>
             <b className="text-text-primary">{data.summary.valid}</b> valid · <b className="text-text-primary">{data.summary.revoked}</b> revoked · <b className="text-text-primary">{data.summary.total}</b> total issued
@@ -122,6 +138,17 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
             <option value="all">All grades</option>
             {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
           </select>
+          <select value={type} onChange={e => setType(e.target.value)} aria-label="Filter by type" className={selectCls}>
+            <option value="all">All types</option>
+            <option value="RESULT">Result</option>
+            <option value="PARTICIPATION">Participation</option>
+          </select>
+          <select value={generation} onChange={e => setGeneration(e.target.value)} aria-label="Filter by generation status" className={selectCls}>
+            <option value="all">Any generation status</option>
+            <option value="GENERATED">Generated</option>
+            <option value="PENDING">Pending</option>
+            <option value="FAILED">Failed</option>
+          </select>
           <select value={status} onChange={e => setStatus(e.target.value)} aria-label="Filter by status" className={selectCls}>
             <option value="all">All statuses</option>
             <option value="VALID">Valid</option>
@@ -141,10 +168,11 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
 
       <div className="card-soft rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs min-w-[980px]">
+          <table className="w-full text-xs min-w-[1120px]">
             <thead className="bg-surface-alt text-text-muted">
               <tr className="text-left">
                 <th className="p-3 font-semibold">Certificate No.</th>
+                <th className="p-3 font-semibold">Type</th>
                 <th className="p-3 font-semibold">Student</th>
                 <th className="p-3 font-semibold">Std</th>
                 <th className="p-3 font-semibold">Exam</th>
@@ -152,27 +180,34 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
                 <th className="p-3 font-semibold">Grade</th>
                 <th className="p-3 font-semibold">Result</th>
                 <th className="p-3 font-semibold">Issued</th>
+                <th className="p-3 font-semibold">Generation</th>
                 <th className="p-3 font-semibold">Status</th>
                 <th className="p-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && !data ? (
-                <tr><td colSpan={10} className="p-6 text-center text-text-muted">Loading…</td></tr>
+                <tr><td colSpan={12} className="p-6 text-center text-text-muted">Loading…</td></tr>
               ) : failed ? (
-                <tr><td colSpan={10} className="p-6 text-center text-[#E1447A]">Could not load certificates. <button className="underline font-semibold" onClick={() => setReload(k => k + 1)}>Try again</button></td></tr>
+                <tr><td colSpan={12} className="p-6 text-center text-[#E1447A]">Could not load certificates. <button className="underline font-semibold" onClick={() => setReload(k => k + 1)}>Try again</button></td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={10} className="p-6 text-center text-text-muted">No certificates match.</td></tr>
+                <tr><td colSpan={12} className="p-6 text-center text-text-muted">No certificates match.</td></tr>
               ) : rows.map(c => (
                 <tr key={c.certificateNumber} className="border-t border-border-subtle" data-testid="admin-certificate-row">
                   <td className="p-3 font-mono text-text-primary whitespace-nowrap">{c.certificateNumber}</td>
+                  <td className="p-3 whitespace-nowrap text-text-secondary">{c.type === 'PARTICIPATION' ? 'Participation' : 'Result'}</td>
                   <td className="p-3 font-semibold text-text-primary">{c.studentName}</td>
                   <td className="p-3 text-text-secondary whitespace-nowrap">{c.standardLabel}</td>
                   <td className="p-3 text-text-secondary max-w-[180px] truncate" title={c.examName}>{c.examName}</td>
-                  <td className="p-3 text-text-primary font-semibold">{c.percentage}%</td>
-                  <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${gradeStyle[c.grade] || ''}`}>{c.grade}</span></td>
-                  <td className="p-3 text-[#16A34A] font-semibold">{c.result}</td>
+                  <td className="p-3 text-text-primary font-semibold">{c.type === 'PARTICIPATION' ? '—' : `${c.percentage}%`}</td>
+                  <td className="p-3">{c.grade ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${gradeStyle[c.grade] || ''}`}>{c.grade}</span> : '—'}</td>
+                  <td className={`p-3 font-semibold ${c.result === 'PASS' ? 'text-[#16A34A]' : 'text-text-secondary'}`}>{c.result === 'PASS' ? 'Pass' : c.result === 'BELOW_PASS' ? 'Below pass mark' : 'Participated'}</td>
                   <td className="p-3 text-text-secondary whitespace-nowrap">{c.issueDateLabel}</td>
+                  <td className="p-3 whitespace-nowrap" data-testid="generation-status">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.generationStatus === 'FAILED' ? 'bg-[#FFE4EC] text-[#E1447A]' : c.generationStatus === 'PENDING' ? 'bg-[#FEF3C7] text-[#B45309]' : 'bg-[#DCFCE7] text-[#16A34A]'}`}>
+                      {c.generationStatus === 'FAILED' ? 'Failed' : c.generationStatus === 'PENDING' ? 'Pending' : 'Generated'}
+                    </span>
+                  </td>
                   <td className="p-3">
                     <span
                       title={c.status === 'REVOKED' ? (c.revokeReason || 'Revoked by an admin') : undefined}

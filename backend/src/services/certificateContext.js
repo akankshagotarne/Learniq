@@ -1,6 +1,7 @@
 const { OlympiadExam, OlympiadAttempt } = require('../models/Olympiad');
 const { TeacherInterview, InterviewEvaluation } = require('../models/TeacherInterview');
 const svc = require('./certificateService');
+const { releaseInstant } = require('./resultsRelease');
 const { formatScore } = require('./certificateCompletionPdf');
 
 /**
@@ -25,7 +26,8 @@ const sameId = (a, b) => String(a && a._id ? a._id : a) === String(b && b._id ? 
  */
 const effectiveIssueDate = (cert, exam) => {
   const created = new Date(cert.issueDate);
-  const published = exam && exam.resultsPublishedAt ? new Date(exam.resultsPublishedAt) : null;
+  const at = releaseInstant(exam);
+  const published = at ? new Date(at) : null;
   return published && published > created ? published : created;
 };
 
@@ -47,7 +49,38 @@ const frozenFigures = (cert) => {
   return f && Number.isFinite(Number(f.score)) && Number(f.totalMarks) > 0 && f.score !== null && f.totalMarks !== null ? f : null;
 };
 
+/** Interview wording for the participation certificate, from the real interview records (never assumed). */
+const participationInterview = async (studentId, examId) => {
+  const rows = await TeacherInterview.find({ student: studentId, exam: examId });
+  if (rows.some((iv) => iv.status === 'COMPLETED')) return { status: 'Participated', completed: true };
+  if (rows.some((iv) => !['CANCELLED', 'FAILED', 'COMPLETED'].includes(iv.status))) return { status: 'Pending', completed: false };
+  return { status: 'Not Participated', completed: false };
+};
+
+/** Participation certificate: facts only (test taken, interview status) - no marks, grade or pass/fail anywhere. */
+const buildParticipationContext = async (cert) => {
+  const exam = await OlympiadExam.findById(cert.exam);
+  if (!exam) throw new CertificateDataError('The records behind this certificate could not be found.', 'CERTIFICATE_RECORDS_MISSING');
+  const attempt = await OlympiadAttempt.findById(cert.attempt);
+  // the attempt may be gone after an admin cleared the student's records (the certificate stays valid); if it is there it must match
+  if (attempt && (!sameId(attempt.student, cert.student) || !sameId(attempt.exam, cert.exam))) {
+    throw new CertificateDataError('This certificate does not match its examination record.', 'CERTIFICATE_DATA_MISMATCH');
+  }
+  const iv = await participationInterview(cert.student, cert.exam);
+  const issueDate = effectiveIssueDate(cert, exam);
+  return {
+    kind: 'PARTICIPATION',
+    certificateNumber: cert.certificateNumber, studentName: cert.studentName, examName: cert.examName,
+    standard: cert.standard, standardLabel: svc.ordinal(cert.standard),
+    testStatus: 'Participated', interview: { completed: iv.completed }, interviewStatus: iv.status, overallRemarks: 'Active Participant',
+    issueDate, issueDateLabel: svc.formatIssueDate(issueDate),
+    published: require('./resultsRelease').isReleased(exam),
+    verifyUrl: svc.verificationUrl(cert),
+  };
+};
+
 const buildContext = async (cert) => {
+  if (svc.typeOf(cert) === svc.TYPES.PARTICIPATION) return buildParticipationContext(cert);
   const frozen = frozenFigures(cert);
   if (frozen) {
     const exam = await OlympiadExam.findById(cert.exam);
@@ -71,8 +104,8 @@ const buildContext = async (cert) => {
   if (Math.abs((score / totalMarks) * 100 - Number(cert.percentage)) > 0.51) {
     throw new CertificateDataError('This certificate does not match its score record.', 'CERTIFICATE_DATA_MISMATCH');
   }
-  const grade0 = svc.gradeFor(cert.percentage);
-  if (!grade0 || grade0 !== cert.grade) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
+  const grade0 = svc.gradeFor(cert.percentage); // null below the pass mark: the certificate then carries no grade either
+  if (grade0 !== (cert.grade || null)) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
 
   const interview = await interviewFor(cert.student, cert.exam);
   return contextFrom(cert, exam, score, totalMarks, interview, true);
@@ -84,7 +117,7 @@ const contextFrom = (cert, exam, score, totalMarks, interview, checked = false) 
       throw new CertificateDataError('This certificate does not match its score record.', 'CERTIFICATE_DATA_MISMATCH');
     }
     const g = svc.gradeFor(cert.percentage);
-    if (!g || g !== cert.grade) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
+    if (g !== (cert.grade || null)) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
   }
   const grade = svc.gradeFor(cert.percentage);
   const issueDate = effectiveIssueDate(cert, exam);
@@ -98,13 +131,14 @@ const contextFrom = (cert, exam, score, totalMarks, interview, checked = false) 
     scoreLabel: `${formatScore(score)}/${formatScore(totalMarks)}`,
     percentage: cert.percentage,
     grade,
-    result: 'PASS',
-    resultLabel: 'Pass',
+    result: grade ? 'PASS' : 'BELOW_PASS',
+    resultLabel: grade ? 'Pass' : 'Below pass mark',
     interview,
     interviewStatus: interview.completed ? 'Completed' : 'Not completed',
     issueDate,
     issueDateLabel: svc.formatIssueDate(issueDate),
-    published: Boolean(exam.resultsPublishedAt) || exam.examType === 'engineering',
+    kind: 'RESULT',
+    published: require('./resultsRelease').isReleased(exam),
     verifyUrl: svc.verificationUrl(cert),
   };
 };
@@ -116,4 +150,4 @@ const maskName = (name) => {
   return [parts[0], ...parts.slice(1).map((p) => `${[...p][0].toUpperCase()}.`)].join(' ');
 };
 
-module.exports = { buildContext, effectiveIssueDate, interviewFor, maskName, CertificateDataError };
+module.exports = { buildContext, participationInterview, effectiveIssueDate, interviewFor, maskName, CertificateDataError };

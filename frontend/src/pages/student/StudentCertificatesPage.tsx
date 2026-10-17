@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Award, CheckCircle2, ChevronRight, Loader2, XCircle } from 'lucide-react';
+import CertificatePair from '../../components/olympiad/CertificatePair';
 import toast from 'react-hot-toast';
 import Sidebar from '../../components/layout/Sidebar';
-import CertificateActions from '../../components/olympiad/CertificateActions';
 import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 
@@ -19,7 +19,6 @@ const StudentCertificatesPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const withCertificate = (exams || []).filter(e => e.certificate);
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -30,7 +29,7 @@ const StudentCertificatesPage: React.FC = () => {
           <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary flex items-center gap-2">
             <Award className="w-6 h-6 text-[#FFC24B]" /> Results &amp; Certificates
           </h1>
-          <p className="text-text-secondary text-sm mt-1 mb-6">Score 60% or more in an Olympiad to earn a certificate automatically.</p>
+          <p className="text-text-secondary text-sm mt-1 mb-6">Every student who completes an Olympiad receives a Result Certificate and a Participation Certificate once the official results are published.</p>
 
           {exams === null ? (
             <div className="flex items-center justify-center gap-3 py-24 text-sm text-text-secondary">
@@ -42,25 +41,25 @@ const StudentCertificatesPage: React.FC = () => {
             </div>
           ) : (
             <>
-              <h2 className="font-heading font-bold text-lg text-text-primary mb-3">Certificates ({withCertificate.length})</h2>
-              {withCertificate.length === 0 ? (
-                <div className="card-soft p-6 text-sm text-text-secondary mb-8">No certificate yet — a certificate is issued for a score of 60% or more.</div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                  {withCertificate.map(e => (
-                    <div key={e._id} className="card-soft rounded-2xl p-5 border border-[#FFC24B]/40" data-testid="certificate-card">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EDE9FE] text-[#6C63F2]">Standard {e.standard}</span>
-                        <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#B45309]">Grade {e.certificate!.grade}</span>
-                      </div>
+              <h2 className="font-heading font-bold text-lg text-text-primary mb-3">Certificates</h2>
+              <div className="space-y-6 mb-8">
+                {exams.map(e => (
+                  <section key={e._id} data-testid="certificate-exam">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EDE9FE] text-[#6C63F2]">Standard {e.standard}</span>
                       <h3 className="font-heading font-bold text-sm text-text-primary">{e.title}</h3>
-                      <p className="text-xs text-text-secondary mt-1">{e.certificate!.percentage}% · Issued {e.certificate!.issueDateLabel}</p>
-                      <p className="text-[11px] text-text-muted mt-1">Certificate No. <span className="font-mono font-semibold text-text-secondary">{e.certificate!.certificateNumber}</span></p>
-                      <div className="mt-4"><CertificateActions certificate={e.certificate!} compact /></div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <CertificatePair
+                      examId={e._id}
+                      released={isResultReleased(e.result)}
+                      releaseAt={e.resultsReleaseAt}
+                      certificate={e.certificate ?? null}
+                      participation={e.participationCertificate ?? null}
+                      onChange={c => setExams(list => (list || []).map(x => (x._id === e._id ? { ...x, certificate: c.certificate, participationCertificate: c.participation } : x)))}
+                    />
+                  </section>
+                ))}
+              </div>
 
               <h2 className="font-heading font-bold text-lg text-text-primary mb-3">My Results</h2>
               <div className="card-soft rounded-2xl overflow-hidden">
@@ -87,11 +86,11 @@ const StudentCertificatesPage: React.FC = () => {
                             <td className="p-3 text-text-secondary">{e.result?.grade ?? '—'}</td>
                             <td className="p-3">
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${passed ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#FFE4EC] text-[#E1447A]'}`}>
-                                {passed ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />} {passed ? 'PASS' : 'FAIL'}
+                                {passed ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />} {!e.result ? 'Awaiting results' : passed ? 'PASS' : 'Below pass mark'}
                               </span>
                             </td>
                             <td className="p-3 text-text-secondary">
-                              {e.certificate ? (e.certificate.status === 'REVOKED' ? 'Revoked' : e.certificate.certificateNumber) : 'Not Available'}
+                              {e.certificate ? (e.certificate.status === 'REVOKED' ? 'Revoked' : e.certificate.certificateNumber) : e.result ? 'Being prepared' : 'After results'}
                             </td>
                             <td className="p-3 text-right">
                               <Link to={`/student/olympiad/${e._id}/result`} className="inline-flex items-center gap-0.5 font-semibold text-brand-primary">

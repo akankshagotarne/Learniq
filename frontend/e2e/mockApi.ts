@@ -65,10 +65,16 @@ const certificate = {
   verifyUrl: 'https://learniq.study/verify-certificate/LIQ-OLY-2026-000123',
 };
 
+const participationCertificate = {
+  ...certificate, type: 'PARTICIPATION', typeLabel: 'Participation', certificateNumber: 'LQPAR2026-000045', percentage: undefined, grade: null, result: 'PARTICIPATED',
+  downloadPath: '/certificates/LQPAR2026-000045/download', verifyUrl: 'https://learniq.study/verify-certificate/LQPAR2026-000045',
+};
+export { participationCertificate, certificate as resultCertificate };
+
 export const olympiadExams = [
   { ...baseOlympiad, _id: 'oly-pay', title: LONG_EXAM_TITLE, state: 'pay', paymentStatus: 'NONE', attemptStatus: 'NOT_STARTED' },
   { ...baseOlympiad, _id: 'oly-ready', title: 'LearnIQ – All India Olympiad Examination (Std 9)', standard: 9, state: 'ready', paymentStatus: 'SUCCESS', attemptStatus: 'NOT_STARTED' },
-  { ...baseOlympiad, _id: 'oly-done', title: 'LearnIQ Olympiad Practice Round – September 2026', state: 'completed', paymentStatus: 'SUCCESS', attemptStatus: 'COMPLETED', result: resultSummary, certificate },
+  { ...baseOlympiad, _id: 'oly-done', title: 'LearnIQ Olympiad Practice Round – September 2026', state: 'completed', paymentStatus: 'SUCCESS', attemptStatus: 'COMPLETED', result: resultSummary, certificate, participationCertificate, resultsReleased: true, resultsReleaseAt: iso(NOW - day) },
   { ...baseOlympiad, _id: 'oly-soon', title: 'LearnIQ Physics Olympiad – Winter Edition', startDate: iso(NOW + 20 * day), endDate: iso(NOW + 25 * day), window: 'upcoming', state: 'upcoming', paymentStatus: 'NONE', attemptStatus: 'NOT_STARTED', message: 'The examination opens on 30 October 2026.' },
 ];
 
@@ -253,7 +259,7 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   if (m(/^\/olympiad\/exams\/[^/]+\/payment\/verify$/)) return { success: true, unlocked: true, paymentStatus: 'SUCCESS' };
   if (m(/^\/olympiad\/exams\/[^/]+\/(start|attempt)$/)) return { success: true, ...attemptPayload() };
   if (m(/^\/olympiad\/exams\/[^/]+\/attempt\/answers$/)) return { success: true, remainingSeconds: 3400, savedAt: iso(Date.now()) };
-  if (m(/^\/olympiad\/exams\/[^/]+\/submit$/)) return { success: true, result: resultSummary, certificate };
+  if (m(/^\/olympiad\/exams\/[^/]+\/submit$/)) return { success: true, result: resultSummary, certificate, participationCertificate };
   if (m(/^\/olympiad\/exams\/[^/]+\/result$/)) return { success: true, exam: olympiadExams[2], result: resultSummary, certificate };
   if (m(/^\/olympiad\/exams\/[^/]+\/review$/)) return { success: true, review };
   if (path === '/olympiad/admin/analytics') return analyticsPayload();
@@ -265,7 +271,7 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   }
 
   // ── Certificates
-  if (path === '/certificates/mine') return { success: true, certificates: [certificate] };
+  if (path === '/certificates/mine') return { success: true, certificates: [certificate, participationCertificate] };
   if (m(/^\/certificates\/verify\//)) return { success: true, ...certificate, valid: true, status: 'VALID' };
   if (path === '/certificates/admin/list') return { success: true, certificates: [{ ...certificate, examId: 'oly-done' }], page: 1, pages: 1, total: 1, summary: { total: 1, valid: 1, revoked: 0 } };
 

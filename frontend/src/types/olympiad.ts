@@ -79,16 +79,22 @@ export interface OlympiadResultSummary {
 // ── Certificates (mirror the backend serialisers; the server decides everything, the browser only displays it) ──
 export type CertificateGrade = 'A+' | 'A' | 'B+' | 'B';
 export type CertificateStatus = 'VALID' | 'REVOKED';
+/** RESULT = percentage/grade certificate (every submitted exam, any score); PARTICIPATION = certificate of participation. */
+export type CertificateType = 'RESULT' | 'PARTICIPATION';
+export type CertificateGeneration = 'PENDING' | 'GENERATED' | 'FAILED';
 
 export interface OlympiadCertificate {
+  type?: CertificateType;      // absent on very old records = RESULT
+  typeLabel?: string;
+  generationStatus?: CertificateGeneration;
   certificateNumber: string;
   studentName: string;
   standard: string;
   standardLabel: string;   // "10th"
   examName: string;
-  percentage: number;
-  grade: CertificateGrade;
-  result: 'PASS';
+  percentage?: number;          // RESULT certificates only
+  grade?: CertificateGrade | null; // null below the pass mark (no grade is invented)
+  result?: 'PASS' | 'BELOW_PASS' | 'PARTICIPATED';
   issueDate: string;
   issueDateLabel: string;  // "30 September 2026"
   status: CertificateStatus;
@@ -98,6 +104,8 @@ export interface OlympiadCertificate {
   // admin list only
   examId?: string;
   revokeReason?: string | null;
+  generationAttempts?: number;
+  generatedAt?: string | null;
 }
 
 /** What the public verification page receives. Only a VALID certificate carries details; every other status carries just the number. */
@@ -115,10 +123,11 @@ export interface CertificateVerification {
   examName?: string;
   percentage?: number;
   scoreLabel?: string;    // "85/120"
-  grade?: CertificateGrade;
-  result?: 'PASS';
+  type?: CertificateType;
+  grade?: CertificateGrade | null;
+  result?: 'PASS' | 'BELOW_PASS';
   resultLabel?: string;
-  interviewStatus?: 'Completed' | 'Not completed';
+  interviewStatus?: 'Completed' | 'Not completed' | 'Participated' | 'Not Participated' | 'Pending';
   issueDateLabel?: string;
 }
 
@@ -127,6 +136,8 @@ export interface AdminCertificateQuery {
   standard?: string;
   exam?: string;
   grade?: string;
+  type?: string;
+  generation?: string;
   status?: string;
   from?: string;
   to?: string;
@@ -178,8 +189,13 @@ export interface OlympiadExam {
   result: OlympiadResultView | null;
   completion?: OlympiadCompletion | null;
   remainingSeconds: number | null;
-  /** completed exams only: the certificate issued for a PASS (null for a FAIL) */
+  /** completed exams only: the result certificate (every submitted exam, any score) - null until the results are released and it is generated */
   certificate?: OlympiadCertificate | null;
+  /** completed exams only: the separate participation certificate (same availability rules) */
+  participationCertificate?: OlympiadCertificate | null;
+  /** when the official results (and certificates) are released; null if not scheduled */
+  resultsReleaseAt?: string | null;
+  resultsReleased?: boolean;
   /** online proctoring rules ({ enabled: false } when the exam is not proctored) */
   proctoring?: Partial<import('../proctoring/types').ProctoringPolicy> & { enabled: boolean };
 }

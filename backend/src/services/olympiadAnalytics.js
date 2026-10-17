@@ -105,7 +105,7 @@ const minDate = (dates) => {
   return v.length ? new Date(Math.min(...v.map((d) => d.getTime()))) : null;
 };
 
-const resultsPublished = (exam) => Boolean(exam && exam.resultsPublishedAt);
+const resultsPublished = (exam) => require('./resultsRelease').isReleased(exam); // published by an admin or past its scheduled release instant
 const isSubmitted = (a) => Boolean(a && a.status === 'COMPLETED');
 
 /**
