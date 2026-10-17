@@ -202,29 +202,26 @@ const adminOlympiadStats = { totalRegistrations: 31, successfulPayments: 28, fai
 /** Olympiad Student Analytics: a small, internally consistent snapshot (also used by e2e/olympiadAnalytics.spec.ts). */
 export const analyticsRow = (over: Record<string, unknown> = {}) => ({
   key: 'stu1:oly-done', studentId: 'stu1', examId: 'oly-done', name: 'Aarav Sharma With A Very Long Surname Kulkarni-Deshpande', email: 'aarav@example.com', phone: '+919000000001', standard: 10,
-  examTitle: 'LearnIQ – All India Olympiad Examination 2026 (Std 10)', registeredAt: iso(NOW - 6 * day), accessType: 'PAID', eligible: true, paymentStatus: 'SUCCESS', paymentCount: 1, amount: 20,
-  currency: 'INR', orderId: 'order_ABCDEFGHIJKLMNOP', paymentId: 'pay_ABCDEFGHIJKLMNOP', paidAt: iso(NOW - 6 * day), examStatus: 'SUBMITTED', attemptId: 'att1', startedAt: iso(NOW - 3 * day),
-  submittedAt: iso(NOW - 3 * day + 2875e3), score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE', flags: [], ...over,
+  examTitle: 'LearnIQ – All India Olympiad Examination 2026 (Std 10)', registered: true, registeredAt: iso(NOW - 6 * day), examStatus: 'SUBMITTED',
+  submittedAt: iso(NOW - 3 * day + 2875e3), flags: [] as string[], ...over,
 });
-export const analyticsPayload = (rows = [analyticsRow(), analyticsRow({ key: 'stu2:oly-done', studentId: 'stu2', name: 'Diya Patil', paymentStatus: 'PENDING', eligible: false, examStatus: 'NOT_ELIGIBLE', paidAt: null, startedAt: null, submittedAt: null, score: null, resultStatus: 'NOT_APPLICABLE', flags: ['ATTEMPT_WITHOUT_ENTITLEMENT'] })]) => ({
+const notSubmitted = { key: 'stu2:oly-done', studentId: 'stu2', name: 'Diya Patil', examStatus: 'NOT_SUBMITTED', submittedAt: null, flags: [] as string[] };
+export const analyticsPayload = (rows = [analyticsRow(), analyticsRow(notSubmitted)]) => ({
   success: true,
   scope: { label: 'All Olympiad exams', defaultScope: 'All Olympiad exams (Std 1–10); the free engineering mock test is not included.', examCount: 1 },
-  events: [{ _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day), resultsPublishedAt: iso(NOW - day) }],
-  cards: { registered: 2, paid: 1, adminAccess: 0, eligible: 1, notPaid: { total: 1, pending: 1, failed: 0, refunded: 0, noPayment: 0 }, submitted: 1, notStarted: 0, inProgress: 0, submittedAttempts: 1, resultsAvailable: 1, resultsPending: 0, participationRate: 100, revenue: 20, registrations: 2, needsReview: 1 },
-  counts: { all: 2, registered: 2, paid: 1, payment_pending: 1, payment_failed: 0, not_started: 0, in_progress: 0, submitted: 1, results_pending: 0, results_available: 1, review: 1 },
-  rows, pagination: { page: 1, limit: 25, total: rows.length, pages: 1 }, meta: { hiddenPayments: 0, truncated: false, generatedAt: iso(NOW) },
+  events: [{ _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day) }],
+  cards: { registered: 2, submitted: 1, notSubmitted: 1, submissionRate: 50, registrations: 2, needsReview: 0 },
+  counts: { all: 2, registered: 2, submitted: 1, not_submitted: 1 },
+  rows, pagination: { page: 1, limit: 25, total: rows.length, pages: 1 }, meta: { truncated: false, generatedAt: iso(NOW) },
 });
 export const analyticsDetail = {
   success: true,
   student: { _id: 'stu1', name: 'Aarav Sharma', email: 'aarav@example.com', phone: '+919000000001', standard: 10, school: null, accountCreatedAt: iso(NOW - 30 * day), accountStatus: 'Active' },
   registrations: [{
-    exam: { _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day), durationMinutes: 60, totalQuestions: 60, totalMarks: 60, resultsPublishedAt: iso(NOW - day) },
-    registeredAt: iso(NOW - 6 * day), registeredStandard: 10, accessType: 'PAID', eligible: true, paymentStatus: 'SUCCESS',
-    payments: [{ _id: 'p1', status: 'SUCCESS', amount: 20, currency: 'INR', createdAt: iso(NOW - 6 * day), verifiedAt: iso(NOW - 6 * day + 60e3), verifiedVia: 'checkout', razorpayOrderId: 'order_ABCDEFGHIJKLMNOP', razorpayPaymentId: 'pay_ABCDEFGHIJKLMNOP', failureReason: null, archived: false }],
-    grant: null,
-    attempt: { _id: 'att1', status: 'COMPLETED', startedAt: iso(NOW - 3 * day), submittedAt: iso(NOW - 3 * day + 2875e3), timeTakenSeconds: 2875, totalQuestions: 60, answered: 56, unanswered: 4, correct: 47, incorrect: 9, score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE' },
-    attemptHistory: [], certificate: { certificateNumber: 'LQOLY2026-000123', status: 'VALID', grade: 'A', issueDate: iso(NOW - day) },
-    timeline: [{ at: iso(NOW - 6 * day), type: 'payment_initiated', label: 'Payment initiated' }, { at: iso(NOW - 3 * day), type: 'exam_started', label: 'Exam started' }, { at: iso(NOW - 3 * day + 2875e3), type: 'exam_submitted', label: 'Exam submitted' }],
+    exam: { _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day), totalQuestions: 60, totalMarks: 60, resultsPublishedAt: iso(NOW - day) },
+    registered: true, registeredAt: iso(NOW - 6 * day), registeredStandard: 10, eligible: true, basis: 'REGISTERED',
+    examStatus: 'SUBMITTED', submittedAt: iso(NOW - 3 * day + 2875e3), score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE',
+    attemptHistory: [], certificate: { certificateNumber: 'LQOLY2026-000123', status: 'VALID', grade: 'A', issueDate: iso(NOW - day) }, needsReview: false,
   }],
 };
 
