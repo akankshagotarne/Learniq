@@ -238,3 +238,132 @@ for (const [name, size] of [['phone 360', { width: 360, height: 780 }], ['tablet
   });
 }
 void analyticsDetail;
+
+// ───────────────────────── clear Olympiad records (admin) ─────────────────────────
+const clearInfo = (examId: string, title: string, standard: number, over: Record<string, unknown> = {}) => ({
+  examId, title, standard, counts: { attempts: 1, submitted: 1, earlierAttempts: 0, proctoringSessions: 0, interviews: 0, evaluations: 0 }, blocked: false, blockerCode: null, blockerMessage: null, ...over,
+});
+const reg = (examId: string, title: string, standard: number, over: Record<string, unknown> = {}) => ({
+  ...analyticsDetail.registrations[0], exam: { ...analyticsDetail.registrations[0].exam, _id: examId, title, standard }, certificate: null,
+  clear: clearInfo(examId, title, standard), ...over,
+});
+
+/** A tiny stateful server: DELETE removes the registration(s) from the detail the next GET returns. */
+const clearingServer = (initial: ReturnType<typeof reg>[], opts: { failWith?: number } = {}) => {
+  const state = { regs: [...initial], deletes: [] as string[], listCalls: 0 };
+  const extra: Override = (method, path) => {
+    if (method === 'GET' && path === '/olympiad/admin/analytics') state.listCalls += 1;
+    if (method === 'GET' && /^\/olympiad\/admin\/analytics\/students\/[^/]+$/.test(path)) return { body: { ...analyticsDetail, registrations: state.regs } };
+    if (method === 'DELETE' && path.includes('/records')) {
+      state.deletes.push(path);
+      if (opts.failWith) return { status: opts.failWith, body: { success: false, message: 'The records could not be cleared. Nothing was reported as cleared; please refresh and check before retrying.' } };
+      const one = path.match(/\/exams\/([^/]+)\/records$/);
+      state.regs = one ? state.regs.filter(r => r.exam._id !== one[1]) : state.regs.filter(r => r.clear?.blocked);
+      return { body: { success: true, message: 'Olympiad records cleared successfully. The analytics have been updated.' } };
+    }
+    return undefined;
+  };
+  return { state, extra };
+};
+const twoExams = () => [reg('ex10', 'Olympiad Std 10', 10), reg('ex9', 'Olympiad Std 9', 9)];
+
+async function openProfile(page: Page, extra: Override) {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(page, extra);
+  await page.getByTestId('student-row').first().getByTestId('student-link').click();
+  await expect(page.getByTestId('student-drawer')).toBeVisible();
+}
+
+test('profile lists every registration separately with exam status and offers Clear this exam / Clear Olympiad Records; the table stays uncluttered', async ({ page }) => {
+  const { extra } = clearingServer(twoExams());
+  await openProfile(page, extra);
+  await expect(page.getByTestId('records-row')).toHaveCount(2);
+  await expect(page.getByTestId('records-table').locator('thead th')).toHaveText(['Standard', 'Exam', 'Registered', 'Exam status', 'Submitted', 'Action']);
+  await expect(page.getByTestId('clear-all-btn')).toContainText('Clear Olympiad Records');
+  await expect(page.getByTestId('clear-exam-btn')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('students-table').locator('thead th')).toHaveCount(7); // the analytics table did not grow a delete column
+});
+
+test('clear one exam: confirmation names student, standard and exam; Cancel deletes nothing; confirm removes only that exam and refreshes the analytics', async ({ page }) => {
+  const { state, extra } = clearingServer(twoExams());
+  await openProfile(page, extra);
+  await page.getByTestId('clear-exam-btn').first().click();
+  const modal = page.getByTestId('clear-modal');
+  await expect(modal).toContainText('Clear Olympiad Exam Records?');
+  await expect(modal).toContainText('Aarav Sharma'); await expect(modal).toContainText('Std 10'); await expect(modal).toContainText('Olympiad Std 10');
+  await modal.getByRole('button', { name: 'Cancel' }).click();
+  await expect(modal).toBeHidden(); expect(state.deletes).toHaveLength(0);
+  await page.getByTestId('clear-exam-btn').first().click();
+  const listBefore = state.listCalls;
+  await page.getByTestId('clear-confirm').click();
+  await expect(page.getByTestId('clear-success')).toContainText('Olympiad records cleared successfully. The analytics have been updated.');
+  expect(state.deletes).toEqual(['/olympiad/admin/analytics/students/stu1/exams/ex10/records']);
+  await expect(page.getByTestId('records-row')).toHaveCount(1);
+  await expect(page.getByTestId('records-row')).toContainText('Olympiad Std 9');
+  await expect.poll(() => state.listCalls).toBeGreaterThan(listBefore); // list + cards refetched, no logout / reload
+});
+
+test('clear all: warning modal shows registrations and attempts affected; success leaves an empty-state profile', async ({ page }) => {
+  const { state, extra } = clearingServer(twoExams());
+  await openProfile(page, extra);
+  await page.getByTestId('clear-all-btn').click();
+  const modal = page.getByTestId('clear-modal');
+  await expect(modal).toContainText('Clear All Olympiad Records?');
+  await expect(modal.getByTestId('clear-count-regs')).toHaveText('2');
+  await expect(modal.getByTestId('clear-count-attempts')).toHaveText('2');
+  await expect(modal).toContainText('cannot be undone');
+  await modal.getByRole('button', { name: 'Clear All Olympiad Records' }).click();
+  await expect(page.getByTestId('clear-success')).toBeVisible();
+  expect(state.deletes).toEqual(['/olympiad/admin/analytics/students/stu1/records']);
+  await expect(page.getByTestId('no-records')).toBeVisible();
+  await expect(page.getByTestId('clear-all-btn')).toBeHidden();
+});
+
+test('confirm button is disabled while the request runs (no double submit)', async ({ page }) => {
+  const { state, extra } = clearingServer(twoExams());
+  const slow: Override = (m, p, b) => m === 'DELETE' ? undefined : extra(m, p, b);
+  await openProfile(page, slow);
+  await page.route('**/api/olympiad/admin/analytics/students/stu1/exams/ex10/records', async route => {
+    state.deletes.push('hit'); await new Promise(r => setTimeout(r, 600));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, message: 'Olympiad records cleared successfully. The analytics have been updated.' }) });
+  });
+  await page.getByTestId('clear-exam-btn').first().click();
+  await page.getByTestId('clear-confirm').click();
+  await expect(page.getByTestId('clear-confirm')).toBeDisabled();
+  await expect(page.getByTestId('clear-modal').getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  await expect(page.getByTestId('clear-success')).toBeVisible();
+  expect(state.deletes.filter(d => d === 'hit')).toHaveLength(1);
+});
+
+test('a failed clearing shows the server error, keeps the record on screen and never claims success', async ({ page }) => {
+  const { extra } = clearingServer(twoExams(), { failWith: 500 });
+  await openProfile(page, extra);
+  await page.getByTestId('clear-exam-btn').first().click();
+  await page.getByTestId('clear-confirm').click();
+  await expect(page.getByTestId('clear-error')).toContainText('could not be cleared');
+  await expect(page.getByTestId('clear-success')).toHaveCount(0);
+  await expect(page.getByTestId('clear-confirm')).toBeEnabled(); // can retry
+  await page.getByTestId('clear-modal').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('records-row')).toHaveCount(2);
+});
+
+test('a protected exam (issued certificate) cannot be cleared from the profile and says why', async ({ page }) => {
+  const msg = 'A certificate has been issued for this exam. Clearing its attempt would break the certificate, so these records were kept.';
+  const { extra } = clearingServer([reg('ex10', 'Olympiad Std 10', 10, { clear: clearInfo('ex10', 'Olympiad Std 10', 10, { blocked: true, blockerCode: 'CERTIFICATE_ISSUED', blockerMessage: msg }) })]);
+  await openProfile(page, extra);
+  await expect(page.getByTestId('records-blocked')).toContainText('certificate has been issued');
+  await expect(page.getByTestId('clear-exam-btn')).toHaveCount(0);
+  await expect(page.getByTestId('clear-all-btn')).toHaveCount(0);
+});
+
+test('clear records works on a phone without horizontal overflow', async ({ page }) => {
+  const { extra } = clearingServer(twoExams());
+  await page.setViewportSize({ width: 375, height: 700 });
+  await open(page, extra);
+  await page.getByRole('button', { name: 'View Profile' }).first().click();
+  await expect(page.getByTestId('records-table')).toBeVisible();
+  await page.getByTestId('clear-all-btn').click();
+  await expect(page.getByTestId('clear-modal')).toBeVisible();
+  expect((await findOverflow(page)).offenders).toEqual([]);
+});

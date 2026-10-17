@@ -1,5 +1,6 @@
 const { OlympiadExam, OlympiadPayment, OlympiadAttempt } = require('../models/Olympiad');
-const { OlympiadAccessGrant, OlympiadAttemptHistory } = require('../models/ExamAccess');
+const { OlympiadAccessGrant, OlympiadAttemptHistory, OlympiadClearance } = require('../models/ExamAccess');
+const { isCleared, stateForStudent, describe: describeClear } = require('./olympiadClearance');
 const User = require('../models/User');
 const { Certificate } = require('../models/Certificate');
 
@@ -133,10 +134,11 @@ const loadRegistrations = async (filters) => {
 
   if (!examIds.length) return { events: allEvents, exams, examById, rows: [], truncated: false };
 
-  const [payments, grants, attempts] = await Promise.all([
+  const [payments, grants, attempts, clearances] = await Promise.all([
     OlympiadPayment.find({ exam: { $in: examIds }, ...ACTIVE_PAYMENTS }).select('student exam status verifiedAt createdAt deletedStudent'),
     OlympiadAccessGrant.find({ exam: { $in: examIds }, status: 'ACTIVE' }).select('student exam createdAt'),
-    OlympiadAttempt.find({ exam: { $in: examIds } }).select('student exam payment status submittedAt evaluatedAt score totalMarks percentage'),
+    OlympiadAttempt.find({ exam: { $in: examIds } }).select('student exam payment status startedAt createdAt submittedAt evaluatedAt score totalMarks percentage'),
+    OlympiadClearance.find({ exam: { $in: examIds } }).select('student exam clearedAt'),
   ]);
 
   const key = (s, e) => `${id(s)}:${id(e)}`;
@@ -152,7 +154,12 @@ const loadRegistrations = async (filters) => {
 
   const paymentIds = new Map(payments.map((p) => [String(p._id), p]));
   // keep only valid registrations and attempts (a pending / failed payment with no attempt is not a registration)
-  let list = [...groups.values()].filter((g) => g.grant || g.payments.some((p) => p.status === 'SUCCESS') || g.attempt);
+  // an admin-cleared registration is excluded HERE (the query level), so cards, tabs, search, paging and CSV all agree
+  const lastClear = new Map();
+  clearances.forEach((c) => { const k = key(c.student, c.exam); const o = lastClear.get(k); if (!o || new Date(c.clearedAt) > new Date(o.clearedAt)) lastClear.set(k, c); });
+  let list = [...groups.values()]
+    .filter((g) => g.grant || g.payments.some((p) => p.status === 'SUCCESS') || g.attempt)
+    .filter((g) => !isCleared(lastClear.get(g.key), g));
   let truncated = false;
   if (list.length > MAX_ROWS) { list = list.slice(0, MAX_ROWS); truncated = true; }
   const users = await loadUsers(list.map((g) => g.studentId));
@@ -320,12 +327,14 @@ const studentDetail = async (studentId, query = {}) => {
     const trace = await OlympiadPayment.find({ student: studentId }).select('deletedStudent');
     if (!trace.length) throw new AnalyticsError(404, 'Student not found.', 'NOT_FOUND');
   }
-  const [payments, grants, attempts, history, certificates] = await Promise.all([
+  const [payments, grants, attempts, history, certificates, clearances, clearState] = await Promise.all([
     OlympiadPayment.find({ student: studentId, ...ACTIVE_PAYMENTS }).select('exam status verifiedAt createdAt deletedStudent').sort({ createdAt: 1 }),
     OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' }),
     OlympiadAttempt.find({ student: studentId }),
     OlympiadAttemptHistory.find({ student: studentId }).sort({ resetAt: 1 }),
     Certificate.find({ student: studentId }),
+    OlympiadClearance.find({ student: studentId }).select('exam clearedAt'),
+    stateForStudent(studentId),
   ]);
   const examIds = [...new Set([...payments, ...grants, ...attempts, ...history].map((x) => id(x.exam)))];
   const exams = examIds.length ? await OlympiadExam.find({ _id: { $in: examIds }, examType: { $ne: 'engineering' } }).select('title standard startDate endDate totalMarks totalQuestions resultsPublishedAt') : [];
@@ -342,6 +351,10 @@ const studentDetail = async (studentId, query = {}) => {
       const viaPayment = pays.some((p) => p.status === 'SUCCESS');
       const registered = Boolean(viaPayment || grant);
       if (!registered && !attempt) return null; // not a valid registration and nothing submitted: not part of this report
+      const mineClears = clearances.filter((c) => id(c.exam) === eid);
+      const lastCl = mineClears.reduce((m, c) => (!m || new Date(c.clearedAt) > new Date(m.clearedAt) ? c : m), null);
+      if (isCleared(lastCl, { payments: pays, grant, attempt })) return null; // cleared by an admin: no longer part of the analytics
+      const st = clearState.get(eid);
       const submitted = isSubmitted(attempt);
       const released = resultsPublished(e);
       return {
@@ -365,6 +378,7 @@ const studentDetail = async (studentId, query = {}) => {
         })),
         certificate: cert ? { certificateNumber: cert.certificateNumber, status: cert.status, grade: cert.grade, issueDate: cert.issueDate } : null,
         needsReview: !registered,
+        clear: st ? describeClear(st) : null, // what "Clear this exam" would remove, or why it is blocked
       };
     })
     .filter(Boolean)

@@ -20,7 +20,7 @@ const M = {
   TeacherInterview: f.TeacherInterview, InterviewEvaluation: f.InterviewEvaluation, InterviewSlot: f.InterviewSlot, InterviewReminder: f.InterviewReminder,
   AIInterview: f.AIInterview, Certificate: f.Certificate, User: f.User,
 };
-const NOW = new Date('2026-10-17T07:00:00.000Z');
+const NOW = new Date(Math.max(Date.parse('2026-10-17T07:00:00.000Z'), Date.now() + 60000)); // never earlier than the real clock: the execute guard compares updatedAt with the plan time
 const OLD = new Date('2026-10-16T10:00:00.000Z');          // 16 Oct 15:30 IST
 const JUST_BEFORE = new Date('2026-10-16T18:29:59.999Z');   // 16 Oct 23:59:59.999 IST  -> old
 const CUT = new Date('2026-10-16T18:30:00.000Z');           // 17 Oct 00:00:00.000 IST  -> kept (not strictly earlier)
