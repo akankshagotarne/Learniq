@@ -275,4 +275,35 @@ const deleteStudentAdmin = async (req, res) => {
   }
 };
 
-module.exports = { getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin, deleteStudentAdmin };
+// DELETE /api/admin/teachers/:id — permanently delete a TEACHER account that owns no shared records (see services/teacherDeletion.js).
+// Refused with 409 when the teacher still owns courses / content / interviews: use Deactivate for those. Audited either way.
+const deleteTeacherAdmin = async (req, res) => {
+  const audit = async (action, status, teacher, detail) => {
+    try {
+      const { AdminAuditLog } = require('../models/AdminAuditLog');
+      await AdminAuditLog.create({ action, admin: req.user._id, adminName: req.user.name, targetType: 'teacher', target: teacher?.id || req.params.id, targetLabel: teacher?.name, detail, status, at: new Date() });
+    } catch (e) { console.error('teacher delete audit failed:', e.message); }
+  };
+  try {
+    const { deleteTeacherAccount } = require('../services/teacherDeletion');
+    const outcome = await deleteTeacherAccount(req.params.id);
+    if (!outcome) {
+      return res.status(404).json({ success: false, code: 'TEACHER_NOT_FOUND', message: 'Teacher not found. It may already have been deleted. Only teacher accounts can be deleted here.' });
+    }
+    if (outcome.blocked) {
+      await audit('TEACHER_DELETE_BLOCKED', 'FAILED', outcome.teacher, { owned: outcome.owned });
+      return res.status(409).json({
+        success: false, code: 'TEACHER_HAS_RECORDS', owned: outcome.owned,
+        message: `${outcome.teacher.name} still has courses, content or interview records that students depend on, so the account was not deleted. Use Deactivate to remove their access and keep everything.`,
+      });
+    }
+    await audit('TEACHER_DELETED', 'SUCCESS', outcome.teacher, { removed: outcome.removed });
+    console.info(`Admin ${req.user._id} deleted teacher ${req.params.id}`); // ids only
+    return res.json({ success: true, message: 'Teacher account deleted successfully.', removed: outcome.removed });
+  } catch (error) {
+    console.error('DELETE /admin/teachers/:id failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Server error. The teacher was not deleted — please try again.' });
+  }
+};
+
+module.exports = { getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin, deleteStudentAdmin, deleteTeacherAdmin };
