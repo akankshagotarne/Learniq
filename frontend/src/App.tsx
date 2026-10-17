@@ -65,6 +65,7 @@ const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
+const AdminOlympiadAnalytics = lazy(() => import('./pages/admin/AdminOlympiadAnalytics'));
 const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
 const AdminInterviewSchedule = lazy(() => import('./pages/admin/AdminInterviewSchedule'));
 const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
@@ -360,6 +361,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiad />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/olympiad/analytics" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminOlympiadAnalytics />
         </ProtectedRoute>
       } />
       <Route path="/admin/interviews" element={

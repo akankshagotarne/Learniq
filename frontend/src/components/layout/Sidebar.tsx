@@ -19,6 +19,10 @@ interface NavItem {
   badge?: string;
   /** course screens — hidden while COURSES_ENABLED is false */
   courses?: boolean;
+  /** shown indented under the item above it (a sub-menu entry) */
+  sub?: boolean;
+  /** active only on this exact path (its sub-menu entries have longer paths) */
+  exact?: boolean;
 }
 
 const studentNav: NavItem[] = [
@@ -52,7 +56,8 @@ const adminNav: NavItem[] = [
   { label: 'Courses', href: '/admin/courses', icon: BookOpen, courses: true },
   { label: 'Live Sessions', href: '/admin/live', icon: Radio },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
-  { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy },
+  { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy, exact: true },
+  { label: 'Olympiad Student Analytics', href: '/admin/olympiad/analytics', icon: BarChart2, sub: true },
   { label: 'Engineering', href: '/admin/engineering', icon: GraduationCap },
   { label: 'Interviews', href: '/admin/interviews', icon: Video },
   { label: 'Help & Support', href: '/admin/support', icon: HelpCircle },
@@ -182,7 +187,7 @@ const Sidebar: React.FC = () => {
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {navItems.map(item => {
             const isActive = location.pathname === item.href ||
-              (item.href !== '/student' && item.href !== '/teacher' && item.href !== '/admin' && location.pathname.startsWith(item.href));
+              (!item.exact && item.href !== '/student' && item.href !== '/teacher' && item.href !== '/admin' && location.pathname.startsWith(item.href));
 
             return (
               <Link
@@ -190,9 +195,9 @@ const Sidebar: React.FC = () => {
                 to={item.href}
                 title={collapsed ? item.label : undefined}
                 onClick={closeMobile}
-                className={`sidebar-item ${isActive ? 'active' : ''} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}
+                className={`sidebar-item ${isActive ? 'active' : ''} ${collapsed ? 'lg:justify-center lg:px-2' : ''} ${item.sub && !collapsed ? 'lg:ml-4 text-[13px]' : ''}`}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <item.icon className={`${item.sub ? 'w-4 h-4' : 'w-5 h-5'} flex-shrink-0`} />
                 <span className={collapsed ? 'lg:hidden' : ''}>{item.label}</span>
               </Link>
             );

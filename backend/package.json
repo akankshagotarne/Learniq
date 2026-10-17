@@ -21,6 +21,7 @@
     "test:fee": "node --test src/tests/olympiadFee.test.js",
     "test:interviews": "node --test src/tests/interviews.test.js",
     "test:aiinterview": "node --test src/tests/aiInterview.test.js src/tests/aiInterviewLocalStt.test.js src/tests/aiInterviewOpenAiStt.test.js",
+    "test:analytics": "node --test src/tests/olympiadAnalytics.test.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateCompletionRender.test.js src/tests/certificateUi.test.js",
     "test:teachervisibility": "node --test src/tests/teacherOlympiadVisibility.test.js",
     "backfill:teacher": "node src/scripts/backfillOlympiadTeacher.js"

@@ -198,6 +198,36 @@ const adminTeacherProfile = {
 
 const adminOlympiadStats = { totalRegistrations: 31, successfulPayments: 28, failedPayments: 2, pendingPayments: 1, refundedPayments: 0, revenue: 28, totalAttempts: 25, completedAttempts: 24, inProgressAttempts: 1, averageScore: 41.2, highestScore: 58, lowestScore: 12 };
 
+
+/** Olympiad Student Analytics: a small, internally consistent snapshot (also used by e2e/olympiadAnalytics.spec.ts). */
+export const analyticsRow = (over: Record<string, unknown> = {}) => ({
+  key: 'stu1:oly-done', studentId: 'stu1', examId: 'oly-done', name: 'Aarav Sharma With A Very Long Surname Kulkarni-Deshpande', email: 'aarav@example.com', phone: '+919000000001', standard: 10,
+  examTitle: 'LearnIQ – All India Olympiad Examination 2026 (Std 10)', registeredAt: iso(NOW - 6 * day), accessType: 'PAID', eligible: true, paymentStatus: 'SUCCESS', paymentCount: 1, amount: 20,
+  currency: 'INR', orderId: 'order_ABCDEFGHIJKLMNOP', paymentId: 'pay_ABCDEFGHIJKLMNOP', paidAt: iso(NOW - 6 * day), examStatus: 'SUBMITTED', attemptId: 'att1', startedAt: iso(NOW - 3 * day),
+  submittedAt: iso(NOW - 3 * day + 2875e3), score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE', flags: [], ...over,
+});
+export const analyticsPayload = (rows = [analyticsRow(), analyticsRow({ key: 'stu2:oly-done', studentId: 'stu2', name: 'Diya Patil', paymentStatus: 'PENDING', eligible: false, examStatus: 'NOT_ELIGIBLE', paidAt: null, startedAt: null, submittedAt: null, score: null, resultStatus: 'NOT_APPLICABLE', flags: ['ATTEMPT_WITHOUT_ENTITLEMENT'] })]) => ({
+  success: true,
+  scope: { label: 'All Olympiad exams', defaultScope: 'All Olympiad exams (Std 1–10); the free engineering mock test is not included.', examCount: 1 },
+  events: [{ _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day), resultsPublishedAt: iso(NOW - day) }],
+  cards: { registered: 2, paid: 1, adminAccess: 0, eligible: 1, notPaid: { total: 1, pending: 1, failed: 0, refunded: 0, noPayment: 0 }, submitted: 1, notStarted: 0, inProgress: 0, submittedAttempts: 1, resultsAvailable: 1, resultsPending: 0, participationRate: 100, revenue: 20, registrations: 2, needsReview: 1 },
+  counts: { all: 2, registered: 2, paid: 1, payment_pending: 1, payment_failed: 0, not_started: 0, in_progress: 0, submitted: 1, results_pending: 0, results_available: 1, review: 1 },
+  rows, pagination: { page: 1, limit: 25, total: rows.length, pages: 1 }, meta: { hiddenPayments: 0, truncated: false, generatedAt: iso(NOW) },
+});
+export const analyticsDetail = {
+  success: true,
+  student: { _id: 'stu1', name: 'Aarav Sharma', email: 'aarav@example.com', phone: '+919000000001', standard: 10, school: null, accountCreatedAt: iso(NOW - 30 * day), accountStatus: 'Active' },
+  registrations: [{
+    exam: { _id: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, startDate: iso(NOW - 5 * day), endDate: iso(NOW - 2 * day), durationMinutes: 60, totalQuestions: 60, totalMarks: 60, resultsPublishedAt: iso(NOW - day) },
+    registeredAt: iso(NOW - 6 * day), registeredStandard: 10, accessType: 'PAID', eligible: true, paymentStatus: 'SUCCESS',
+    payments: [{ _id: 'p1', status: 'SUCCESS', amount: 20, currency: 'INR', createdAt: iso(NOW - 6 * day), verifiedAt: iso(NOW - 6 * day + 60e3), verifiedVia: 'checkout', razorpayOrderId: 'order_ABCDEFGHIJKLMNOP', razorpayPaymentId: 'pay_ABCDEFGHIJKLMNOP', failureReason: null, archived: false }],
+    grant: null,
+    attempt: { _id: 'att1', status: 'COMPLETED', startedAt: iso(NOW - 3 * day), submittedAt: iso(NOW - 3 * day + 2875e3), timeTakenSeconds: 2875, totalQuestions: 60, answered: 56, unanswered: 4, correct: 47, incorrect: 9, score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE' },
+    attemptHistory: [], certificate: { certificateNumber: 'LQOLY2026-000123', status: 'VALID', grade: 'A', issueDate: iso(NOW - day) },
+    timeline: [{ at: iso(NOW - 6 * day), type: 'payment_initiated', label: 'Payment initiated' }, { at: iso(NOW - 3 * day), type: 'exam_started', label: 'Exam started' }, { at: iso(NOW - 3 * day + 2875e3), type: 'exam_submitted', label: 'Exam submitted' }],
+  }],
+};
+
 const tickets = [
   { _id: 't1', subject: 'Payment deducted but exam still shows Pay ₹1 & Start Exam', category: 'payment', status: 'open', priority: 'high', user: { _id: users.student._id, name: users.student.name, email: users.student.email, role: 'student' }, messages: [{ _id: 'm1', sender: users.student._id, senderRole: 'student', senderName: users.student.name, message: 'I paid ₹1 using UPI at 10:42 AM but the exam card still asks me to pay. Transaction id: pay_ABCDEFGHIJKLMNOPQRSTUV1234567890', createdAt: iso(NOW - 3600e3) }], createdAt: iso(NOW - 3600e3), updatedAt: iso(NOW - 3600e3), lastMessageAt: iso(NOW - 3600e3), lastSenderRole: 'student' },
 ];
@@ -228,6 +258,8 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   if (m(/^\/olympiad\/exams\/[^/]+\/submit$/)) return { success: true, result: resultSummary, certificate };
   if (m(/^\/olympiad\/exams\/[^/]+\/result$/)) return { success: true, exam: olympiadExams[2], result: resultSummary, certificate };
   if (m(/^\/olympiad\/exams\/[^/]+\/review$/)) return { success: true, review };
+  if (path === '/olympiad/admin/analytics') return analyticsPayload();
+  if (m(/^\/olympiad\/admin\/analytics\/students\/[^/]+$/)) return analyticsDetail;
   if (path === '/olympiad/admin/exams') return { success: true, exams: olympiadExams.map(o => ({ ...o, stats: adminOlympiadStats })) };
   if (m(/^\/olympiad\/admin\/exams\/[^/]+\/attempts$/)) return { success: true, attempts: [{ _id: 'aa1', student: { name: users.student.name, email: 'a***@example.com', standard: 10 }, status: 'COMPLETED', submissionType: 'MANUAL', startedAt: iso(NOW - 3 * day), submittedAt: iso(NOW - 3 * day + 2875e3), score: 47, totalMarks: 60, percentage: 78.33, correctCount: 47, wrongCount: 9, unansweredCount: 4, timeTakenSeconds: 2875 }] };
   if (m(/^\/olympiad\/admin\/exams\/[^/]+\/payments$/) || path === '/olympiad/admin/payments') {

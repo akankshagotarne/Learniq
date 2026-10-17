@@ -49,6 +49,7 @@ export const ROUTES: Array<{ path: string; role: Role; name: string }> = [
   { name: 'admin-live', path: '/admin/live', role: 'admin' },
   { name: 'admin-payments', path: '/admin/payments', role: 'admin' },
   { name: 'admin-olympiad', path: '/admin/olympiad', role: 'admin' },
+  { name: 'admin-olympiad-analytics', path: '/admin/olympiad/analytics', role: 'admin' },
 ];
 
 export const WIDTHS = [320, 360, 375, 390, 393, 414, 430, 480, 600, 768, 820, 1024, 1280, 1440, 1920];
