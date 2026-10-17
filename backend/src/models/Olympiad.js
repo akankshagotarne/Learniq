@@ -144,6 +144,7 @@ const olympiadPaymentSchema = new mongoose.Schema({
 
 // The reconciler scans "stale PENDING" / "recently system-FAILED" records
 olympiadPaymentSchema.index({ status: 1, createdAt: 1 });
+olympiadPaymentSchema.index({ exam: 1, status: 1 }); // admin analytics: payments of an exam by status
 
 // One order id → one payment record
 olympiadPaymentSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });
@@ -209,6 +210,7 @@ const olympiadAttemptSchema = new mongoose.Schema({
 // ONE attempt per student per exam — this is the hard guarantee behind "one payment = one attempt"
 olympiadAttemptSchema.index({ student: 1, exam: 1 }, { unique: true });
 olympiadAttemptSchema.index({ status: 1, deadline: 1 });
+olympiadAttemptSchema.index({ exam: 1, status: 1 }); // admin analytics: attempts of an exam by status
 
 const OlympiadExam = mongoose.model('OlympiadExam', olympiadExamSchema);
 const OlympiadQuestion = mongoose.model('OlympiadQuestion', olympiadQuestionSchema);
