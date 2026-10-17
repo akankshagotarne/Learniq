@@ -49,14 +49,15 @@ const ConfirmClear: React.FC<{ pending: NonNullable<Pending>; studentName: strin
       <div className="absolute inset-0 bg-black/60" />
       <div className={`relative w-full max-w-md rounded-2xl bg-page p-5 shadow-2xl border-2 ${isAll ? 'border-[#BE123C]' : 'border-border-subtle'}`}>
         <h2 id="clear-title" className={`font-heading font-bold text-lg flex items-center gap-2 ${isAll ? 'text-[#BE123C]' : 'text-text-primary'}`}>
-          <AlertTriangle className="w-5 h-5" aria-hidden /> {isAll ? 'Clear All Olympiad Records?' : 'Clear Olympiad Exam Records?'}
+          <AlertTriangle className="w-5 h-5" aria-hidden /> {isAll ? 'Clear All Olympiad Records?' : 'Clear This Olympiad Exam?'}
         </h2>
         <dl className="mt-3 text-sm space-y-1">
           <div className="flex justify-between gap-3"><dt className="text-text-muted">Student</dt><dd className="font-semibold text-right">{studentName}</dd></div>
           {pending.kind === 'exam' ? (
             <>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Standard</dt><dd className="font-semibold">Std {pending.reg.exam.standard}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-text-muted">Exam</dt><dd className="font-semibold text-right">{pending.reg.exam.title}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-text-muted">Examination</dt><dd className="font-semibold text-right" data-testid="clear-modal-exam">{pending.reg.exam.title}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-text-muted">Status</dt><dd className="font-semibold">{pending.reg.examStatus === 'SUBMITTED' ? 'Submitted' : 'Not Submitted'}</dd></div>
             </>
           ) : (
             <>
@@ -68,14 +69,14 @@ const ConfirmClear: React.FC<{ pending: NonNullable<Pending>; studentName: strin
         <p className={`mt-3 text-sm rounded-lg px-3 py-2 ${isAll ? 'bg-[#FFE4EC] text-[#9D174D] font-semibold' : 'bg-surface-alt text-text-secondary'}`}>
           {isAll
             ? 'This permanently removes this student’s Olympiad attempts, submissions and results for every exam listed above. This cannot be undone.'
-            : 'This permanently removes this student’s attempt, submission and result for this exam. Their other exams are not affected. This cannot be undone.'}
+            : 'This will clear the selected examination registration and its associated exam-attempt data. The student’s other examinations and account will remain unchanged.'}
         </p>
         <p className="mt-2 text-xs text-text-muted">Student account, payments, certificates and other students are never changed.{isAll && regs.some(r => r.clear?.blocked) ? ' Exams that are protected (see the list) will be skipped.' : ''}</p>
         {error && <p className="mt-3 text-sm rounded-lg bg-[#FFE4EC] text-[#9D174D] px-3 py-2" role="alert" data-testid="clear-error">{error}</p>}
         <div className="mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <button ref={cancelRef} onClick={onCancel} disabled={busy} className="px-4 py-2 rounded-xl border border-border-subtle bg-surface text-sm font-semibold text-text-primary disabled:opacity-50">Cancel</button>
           <button onClick={onConfirm} disabled={busy} data-testid="clear-confirm" className="px-4 py-2 rounded-xl bg-[#BE123C] text-white text-sm font-semibold disabled:opacity-60 inline-flex items-center justify-center gap-2">
-            {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {isAll ? 'Clear All Olympiad Records' : 'Clear Exam Records'}
+            {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {isAll ? 'Clear All Olympiad Records' : 'Clear This Exam'}
           </button>
         </div>
       </div>
@@ -83,34 +84,39 @@ const ConfirmClear: React.FC<{ pending: NonNullable<Pending>; studentName: strin
   );
 };
 
-const RecordsTable: React.FC<{ regs: DetailRegistration[]; onClearExam: (r: DetailRegistration) => void; disabled: boolean }> = ({ regs, onClearExam, disabled }) => (
-  <div className="rounded-xl border border-border-subtle overflow-x-auto mb-4" data-testid="records-table">
-    <table className="w-full text-xs">
-      <thead className="bg-surface-alt text-text-muted text-left">
-        <tr>{['Standard', 'Exam', 'Registered', 'Exam status', 'Submitted', 'Action'].map(h => <th key={h} className="px-2.5 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr>
-      </thead>
-      <tbody>
-        {regs.map(r => (
-          <tr key={r.exam._id} className="border-t border-border-subtle align-top" data-testid="records-row">
-            <td className="px-2.5 py-2 whitespace-nowrap">Std {r.exam.standard}</td>
-            <td className="px-2.5 py-2 font-medium">{r.exam.title}</td>
-            <td className="px-2.5 py-2 whitespace-nowrap">{when(r.registeredAt)}</td>
-            <td className="px-2.5 py-2"><ExamBadge status={r.examStatus} /></td>
-            <td className="px-2.5 py-2 whitespace-nowrap">{r.examStatus === 'SUBMITTED' ? when(r.submittedAt) : '—'}</td>
-            <td className="px-2.5 py-2">
-              {r.clear?.blocked ? (
-                <span className="text-[#C2410C]" title={r.clear.blockerMessage || ''} data-testid="records-blocked">Protected: {r.clear.blockerMessage}</span>
-              ) : (
-                <button onClick={() => onClearExam(r)} disabled={disabled || !r.clear} className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-[#BE123C] hover:underline disabled:opacity-50" data-testid="clear-exam-btn">
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden /> Clear this exam
-                </button>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
+/** One block per examination record (stacked, so the action is never off-screen). Each has its OWN Clear Exam Data button. */
+const RecordsTable: React.FC<{ regs: DetailRegistration[]; selectedExamId?: string; onClearExam: (r: DetailRegistration) => void; disabled: boolean }> = ({ regs, selectedExamId, onClearExam, disabled }) => (
+  <ul className="space-y-2 mb-4" data-testid="records-table">
+    {regs.map(r => {
+      const selected = r.exam._id === selectedExamId;
+      return (
+        <li key={r.exam._id} data-testid="records-row" data-exam-id={r.exam._id} data-selected={selected ? 'true' : 'false'}
+          className={`rounded-xl border p-3 text-xs ${selected ? 'border-brand-primary ring-1 ring-brand-primary bg-brand-primary/5' : 'border-border-subtle bg-surface'}`}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-text-primary break-words">{r.exam.title}</p>
+              <p className="text-text-muted">Std {r.exam.standard}{selected && <span className="ml-2 font-semibold text-brand-primary" data-testid="records-selected">● Selected record</span>}</p>
+            </div>
+            <ExamBadge status={r.examStatus} />
+          </div>
+          <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+            <div className="flex gap-1.5"><dt className="text-text-muted">Registered:</dt><dd className="font-medium">{when(r.registeredAt)}</dd></div>
+            <div className="flex gap-1.5"><dt className="text-text-muted">Submitted:</dt><dd className="font-medium">{r.examStatus === 'SUBMITTED' ? when(r.submittedAt) : '—'}</dd></div>
+          </dl>
+          <div className="mt-2.5">
+            {r.clear?.blocked ? (
+              <p className="rounded-lg bg-[#FFEDD5] text-[#C2410C] px-2.5 py-1.5" data-testid="records-blocked">Cannot be cleared yet: {r.clear.blockerMessage}</p>
+            ) : (
+              <button onClick={() => onClearExam(r)} disabled={disabled || !r.clear} data-testid="clear-exam-btn"
+                className="inline-flex items-center gap-1.5 font-semibold px-3 py-1.5 rounded-lg border border-[#BE123C] text-[#BE123C] hover:bg-[#FFE4EC] disabled:opacity-50">
+                <Trash2 className="w-3.5 h-3.5" aria-hidden /> Clear Exam Data
+              </button>
+            )}
+          </div>
+        </li>
+      );
+    })}
+  </ul>
 );
 
 const RegistrationView: React.FC<{ reg: DetailRegistration }> = ({ reg }) => (
@@ -184,6 +190,8 @@ const StudentDrawer: React.FC<Props> = ({ studentId, examId, onClose, onChanged 
       onChanged?.();           // the analytics list and cards refetch from the server
       await load(true);        // this profile reflects what the server now holds
     } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404 || status === 409) { onChanged?.(); void load(true); } // already cleared / state changed: show what the server holds now
       setClearError(olympiadErrorMessage(err, 'The records could not be cleared. Please try again.'));
     } finally { setBusy(false); }
   };
@@ -235,7 +243,7 @@ const StudentDrawer: React.FC<Props> = ({ studentId, examId, onClose, onChanged 
               )}
             </div>
             {regs.length === 0 && <p className="text-sm text-text-secondary mb-4" data-testid="no-records">This student has no Olympiad records.</p>}
-            {regs.length > 0 && <RecordsTable regs={regs} disabled={busy} onClearExam={r => { setClearError(null); setPending({ kind: 'exam', reg: r }); }} />}
+            {regs.length > 0 && <RecordsTable regs={regs} selectedExamId={examId} disabled={busy} onClearExam={r => { setClearError(null); setPending({ kind: 'exam', reg: r }); }} />}
             {regs.map(r => <RegistrationView key={r.exam._id} reg={r} />)}
             <div className="flex flex-wrap gap-2 pt-2">
               <Link to="/admin/olympiad" className="text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface-alt text-text-primary">Olympiad exams (attempt reset / access)</Link>

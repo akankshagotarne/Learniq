@@ -64,14 +64,14 @@ const attempt = (s, e, status, extra = {}) => fake.OlympiadAttempt.create({
   student: s.user._id, exam: e._id, status, startedAt: day(17), deadline: status === 'IN_PROGRESS' ? new Date(Date.now() + 3600e3) : day(17),
   ...(status === 'COMPLETED' ? { submittedAt: day(17), evaluatedAt: day(17), score: 70, totalMarks: 100, percentage: 70, correctCount: 70, wrongCount: 20, unansweredCount: 10, attemptedCount: 90, timeTakenSeconds: 1800 } : {}), ...extra,
 });
-const mkExam = (title, standard, over = {}) => fake.OlympiadExam.create({ title, slug: `cl-${title.replace(/\W/g, '').toLowerCase()}`, standard, startDate: day(17), endDate: day(18), durationMinutes: 60, totalQuestions: 100, totalMarks: 100, fee: 20, ...over });
+const mkExam = (title, standard, over = {}) => fake.OlympiadExam.create({ resultsPublishedAt: day(18), title, slug: `cl-${title.replace(/\W/g, '').toLowerCase()}`, standard, startDate: day(17), endDate: day(18), durationMinutes: 60, totalQuestions: 100, totalMarks: 100, fee: 20, ...over });
 const count = (model, q) => model.find(q).then((r) => r.length);
 
 test.before(async () => {
-  const app = express(); app.use(express.json()); app.use('/api/olympiad', olympiadRouter);
+  const app = express(); app.use(express.json()); app.use('/api/olympiad', olympiadRouter); app.use('/api/certificates', require('../routes/certificates'));
   server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   BASE = `http://127.0.0.1:${server.address().port}`;
-  S.E10 = await mkExam('Cl Std 10', 10); S.E9 = await mkExam('Cl Std 9', 9); S.ENG = await mkExam('Cl BE', 99, { examType: 'engineering' });
+  S.E10 = await mkExam('Cl Std 10', 10); S.E9 = await mkExam('Cl Std 9', 9); S.E5 = await mkExam('Cl Std 5', 5); S.E2 = await mkExam('Cl Std 2', 2); S.ENG = await mkExam('Cl BE', 99, { examType: 'engineering' });
   S.admin = await mkUser('Admin', { role: 'admin' });
   S.teacher = await mkUser('Teacher', { role: 'teacher' });
   S.stranger = await mkUser('Stranger Student');
@@ -155,24 +155,25 @@ test('a student who is not registered for the exam cannot be cleared through ano
 });
 
 // 5 ─ payments, certificates protected
-test('exam with an issued certificate is refused (certificate, QR data and attempt intact); payments are never touched', async () => {
+const verifyQr = async (number) => (await fetch(`${BASE}/api/certificates/verify/${number}`)).json();
+test('an exam WITH a certificate can be cleared: the certificate, its QR verification and the payment all survive', async () => {
   const s = await mkUser('Certified'); await pay(s, S.E10); await pay(s, S.E9);
   const at = await attempt(s, S.E10, 'COMPLETED'); await attempt(s, S.E9, 'COMPLETED');
-  const cert = await fake.Certificate.create({ student: s.user._id, exam: S.E10._id, attempt: at._id, certificateNumber: 'LIQ-CL-1', verificationToken: 'tok-cl-1' });
+  const cert = await fake.Certificate.create({ student: s.user._id, exam: S.E10._id, attempt: at._id, certificateNumber: 'LQOLY2026-000901', verificationToken: 'a'.repeat(32), examName: 'Cl Std 10', studentName: 'Certified', standard: '10', percentage: 70, grade: 'B+', issueDate: day(18) });
+  const before = await verifyQr('LQOLY2026-000901');
+  assert.equal(before.valid, true); assert.equal(before.scoreLabel, '70/100');
   const one = await clearOne(s, S.E10);
-  assert.equal(one.status, 409); assert.equal(one.body.code, 'CERTIFICATE_ISSUED');
-  assert.ok(await fake.Certificate.findById(cert._id)); assert.ok(await fake.OlympiadAttempt.findById(at._id));
-  const all = await clearEvery(s);
-  assert.equal(all.status, 200);
-  assert.deepEqual(all.body.clearedExams.map((x) => x.examId), [String(S.E9._id)]);
-  assert.equal(all.body.skipped.length, 1); assert.equal(all.body.skipped[0].blockerCode, 'CERTIFICATE_ISSUED');
-  assert.ok(await fake.Certificate.findById(cert._id)); assert.ok(await fake.OlympiadAttempt.findById(at._id));
+  assert.equal(one.status, 200, JSON.stringify(one.body)); assert.equal(one.body.cleared.attempts, 1);
+  assert.equal(await fake.OlympiadAttempt.findById(at._id), null, 'the attempt is gone');
+  const kept = await fake.Certificate.findById(cert._id);
+  assert.ok(kept && kept.status === 'VALID', 'certificate row kept');
+  const after = await verifyQr('LQOLY2026-000901');
+  assert.equal(after.valid, true, 'QR verification still works'); assert.equal(after.scoreLabel, '70/100');
   assert.equal(await count(fake.OlympiadPayment, { student: s.user._id }), 2);
-  assert.equal(await hasRow(s, S.E10), true, 'the protected exam stays visible');
-  const only = await mkUser('OnlyCertified'); await pay(only, S.E10); const a2 = await attempt(only, S.E10, 'COMPLETED');
-  await fake.Certificate.create({ student: only.user._id, exam: S.E10._id, attempt: a2._id, certificateNumber: 'LIQ-CL-2', verificationToken: 'tok-cl-2' });
-  const none = await clearEvery(only);
-  assert.equal(none.status, 409); assert.equal(await count(fake.OlympiadAttempt, { student: only.user._id }), 1);
+  assert.equal(await hasRow(s, S.E10), false); assert.equal(await hasRow(s, S.E9), true, 'the other exam is untouched and still listed');
+  const d = await http('GET', `/admin/analytics/students/${s.user._id}`, S.admin.token);
+  assert.equal(d.body.registrations.length, 1); assert.equal(d.body.registrations[0].clear.blocked, false, 'the remaining exam is still clearable');
+  assert.equal((await clearEvery(s)).status, 200);
 });
 
 test('an open teacher interview and a live in-progress attempt block clearing', async () => {
@@ -256,4 +257,61 @@ test('rules: isCleared only hides a registration until newer activity appears', 
   assert.equal(clearing.isCleared(c, { payments: [{ status: 'SUCCESS', verifiedAt: day(15) }] }), true);
   assert.equal(clearing.isCleared(c, { payments: [{ status: 'SUCCESS', verifiedAt: day(19) }] }), false);
   assert.equal(clearing.isCleared(null, {}), false);
+});
+
+// ───────────────────────── multiple-standard regression (the reported bug) ─────────────────────────
+test('Std 2, Std 5 and Std 9 of one student are cleared independently, in any order, each one still clearable after the others', async () => {
+  const s = await mkUser('Nikhil Multi'); const other = await mkUser('Other Multi');
+  const exams = [S.E2, S.E5, S.E9];
+  for (const e of exams) { await pay(s, e); await attempt(s, e, 'COMPLETED'); await pay(other, e); await attempt(other, e, 'COMPLETED'); }
+  const cert = await fake.Certificate.create({ student: s.user._id, exam: S.E5._id, attempt: (await fake.OlympiadAttempt.findOne({ student: s.user._id, exam: S.E5._id }))._id, certificateNumber: 'LQOLY2026-000902', verificationToken: 'b'.repeat(32), examName: 'Cl Std 5', studentName: 'Nikhil Multi', standard: '5', percentage: 70, grade: 'B+', issueDate: day(18) });
+  const profile = async () => (await http('GET', `/admin/analytics/students/${s.user._id}`, S.admin.token)).body.registrations;
+  const clearable = (regs) => regs.map((r) => [r.exam.standard, r.clear.blocked]);
+
+  let regs = await profile();
+  assert.deepEqual(regs.map((r) => r.exam._id).sort(), exams.map((e) => String(e._id)).sort());
+  assert.ok(regs.every((r) => r.clear && r.clear.examId === r.exam._id && r.clear.blocked === false), 'every record has its own clearing info');
+  assert.equal((await rowsOf()).filter((r) => r.studentId === String(s.user._id)).length, 3);
+
+  assert.equal((await clearOne(s, S.E2)).status, 200);                                  // Std 2
+  regs = await profile();
+  assert.deepEqual(regs.map((r) => r.exam.standard).sort(), [5, 9]);
+  assert.ok(regs.every((r) => r.clear && !r.clear.blocked), 'Std 5 and Std 9 still have a working clear action');
+  assert.equal(await count(fake.OlympiadAttempt, { student: s.user._id }), 2);
+
+  assert.equal((await clearOne(s, S.E9)).status, 200);                                  // Std 9 (after Std 2)
+  regs = await profile();
+  assert.deepEqual(clearable(regs), [[5, false]]);
+  assert.equal((await rowsOf()).filter((r) => r.studentId === String(s.user._id)).length, 1);
+
+  assert.equal((await clearOne(s, S.E5)).status, 200);                                  // Std 5 (has a certificate)
+  assert.equal((await profile()).length, 0);
+  assert.equal((await rowsOf()).filter((r) => r.studentId === String(s.user._id)).length, 0);
+  assert.ok(await fake.User.findById(s.user._id), 'account kept');
+  assert.equal(await count(fake.OlympiadPayment, { student: s.user._id }), 3);
+  assert.equal((await verifyQr('LQOLY2026-000902')).valid, true);
+  assert.equal(await count(fake.OlympiadAttempt, { student: other.user._id }), 3, 'another student is untouched');
+  assert.equal((await rowsOf()).filter((r) => r.studentId === String(other.user._id)).length, 3);
+  assert.equal((await clearOne(s, S.E5)).status, 404, 'already cleared: safe, nothing else deleted');
+  assert.equal(await count(fake.OlympiadAttempt, { student: other.user._id }), 3);
+  assert.ok(cert);
+});
+
+test('several NOT SUBMITTED registrations are also cleared one by one', async () => {
+  const s = await mkUser('Unsubmitted Multi');
+  for (const e of [S.E2, S.E5, S.E9]) await pay(s, e);
+  assert.equal((await clearOne(s, S.E5)).status, 200);
+  const regs = (await http('GET', `/admin/analytics/students/${s.user._id}`, S.admin.token)).body.registrations;
+  assert.deepEqual(regs.map((r) => r.exam.standard).sort(), [2, 9]); assert.ok(regs.every((r) => !r.clear.blocked));
+  assert.equal((await clearOne(s, S.E2)).status, 200); assert.equal((await clearOne(s, S.E9)).status, 200);
+  assert.equal(await hasRow(s), false); assert.equal(await count(fake.OlympiadPayment, { student: s.user._id }), 3);
+});
+
+test('two clear requests for the same exam at once: one clears, the other is refused, nothing extra is deleted', async () => {
+  const s = await mkUser('Double Click'); await pay(s, S.E2); await pay(s, S.E5); await attempt(s, S.E5, 'COMPLETED');
+  const [a, b] = await Promise.all([clearOne(s, S.E2), clearOne(s, S.E2)]);
+  assert.ok([409, 404].includes([a, b].find((r) => r.status !== 200).status), 'the duplicate is refused');
+  assert.equal([a, b].filter((r) => r.status === 200).length, 1);
+  assert.equal(await count(fake.OlympiadClearance, { student: s.user._id }), 1);
+  assert.equal(await hasRow(s, S.E5), true);
 });
