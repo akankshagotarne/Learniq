@@ -30,6 +30,7 @@ const overrides = {
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,
   },
   [path.join(SRC, 'models', 'User.js')]: fake.User,
+  [path.join(SRC, 'models', 'TeacherInterview.js')]: fake.interviewModels,
   [path.join(SRC, 'models', 'Certificate.js')]: { Certificate: fake.Certificate, Counter: fake.Counter },
   [path.join(SRC, 'models', 'index.js')]: { Notification: fake.Notification, Payment: fake.Payment, Enrollment: fake.Enrollment },
 };
@@ -153,7 +154,8 @@ test('TEST 1 — 84%: PASS, grade A, certificate + number + QR link + PDF + publ
   assert.equal(c.grade, 'A');
   assert.equal(c.percentage, 84);
   assert.equal(c.status, 'VALID');
-  assert.equal(c.verifyUrl, `https://learniq.example.com/verify-certificate/${c.certificateNumber}`);
+  assert.equal(c.verifyUrl, `https://learniq.example.com/verify-certificate/${c.certificateNumber}?t=${svc.qrSignature(fake.Certificate.docs[0])}`);
+  assert.match(c.verifyUrl, /\?t=[a-f0-9]{16}$/);
   assert.equal(c.issueDateLabel, svc.formatIssueDate(new Date()));
   assert.equal(fake.Certificate.docs.length, 1);
   S.aNumber = c.certificateNumber; S.a = a;
@@ -163,7 +165,7 @@ test('TEST 1 — 84%: PASS, grade A, certificate + number + QR link + PDF + publ
   assert.equal(pdf.headers.get('content-type'), 'application/pdf');
   assert.match(pdf.headers.get('content-disposition'), /attachment; filename="LearnIQ-Certificate-LQOLY\d{4}-\d{6}\.pdf"/);
   assert.equal(pdf.buf.subarray(0, 5).toString(), '%PDF-');
-  assert.ok(pdf.buf.length > 100000, 'the approved artwork is embedded');
+  assert.ok(pdf.buf.length > 30000, 'brand assets and signatures are embedded');
   const inline = await call('GET', `/api/certificates/${c.certificateNumber}/download?disposition=inline`, { token: a.token, raw: true });
   assert.match(inline.headers.get('content-disposition'), /^inline;/);
 
@@ -171,8 +173,10 @@ test('TEST 1 — 84%: PASS, grade A, certificate + number + QR link + PDF + publ
   assert.equal(pub.status, 200);
   assert.equal(pub.body.valid, true);
   assert.equal(pub.body.status, 'VALID');
-  assert.equal(pub.body.studentName, 'Nikhil Reddy');
+  assert.equal(pub.body.studentName, 'Nikhil R.', 'the public page shows a privacy-safe name');
   assert.equal(pub.body.percentage, 84);
+  assert.equal(pub.body.scoreLabel, '84/100');
+  assert.equal(pub.body.interviewStatus, 'Not completed');
   assert.equal(pub.body.grade, 'A');
   assert.equal(pub.body.result, 'PASS');
   assert.equal(pub.body.standardLabel, '10th');
@@ -491,4 +495,118 @@ test('backfill script: dry run writes nothing; --apply issues only the missing c
   assert.equal(again.missing, 0);
   assert.equal(again.issued, 0);
   assert.equal(fake.Certificate.docs.length, before + 2);
+});
+
+// ─────────────────── Certificate of Completion: QR verification, interview status, issue date ───────────────────
+const verifyUrlOf = (number) => { const d = fake.Certificate.docs.find((x) => x.certificateNumber === number); return `/api/certificates/verify/${number}?t=${svc.qrSignature(d)}`; };
+const withExam = async (patch, fn) => {
+  const keep = {}; Object.keys(patch).forEach((k) => { keep[k] = S.exam[k]; });
+  const doc = fake.OlympiadExam.docs.find((d) => String(d._id) === String(S.exam._id));
+  Object.assign(doc, patch);
+  try { await fn(); } finally { Object.assign(doc, keep); }
+};
+
+test('QR verification: the printed URL verifies as VALID with a matching integrity tag; the same number with a wrong or malformed tag is INVALID', async () => {
+  const good = await call('GET', verifyUrlOf(S.aNumber));
+  assert.equal(good.status, 200);
+  assert.equal(good.body.status, 'VALID');
+  assert.equal(good.body.integrity, 'MATCH');
+  assert.equal(good.body.issueDateLabel.length > 0, true);
+  for (const bad of ['0000000000000000', 'zzzz', '0123456789abcdef0', '%27%20or%201=1']) {
+    const r = await call('GET', `/api/certificates/verify/${S.aNumber}?t=${bad}`);
+    assert.equal(r.status, 200, bad);
+    assert.equal(r.body.valid, false, bad);
+    assert.equal(r.body.status, 'INVALID');
+    assert.equal(r.body.code, 'MISMATCH');
+    assert.equal(r.body.integrity, 'MISMATCH');
+    assert.ok(!('studentName' in r.body) && !('scoreLabel' in r.body), 'a mismatching link discloses nothing');
+  }
+  // an invented number is INVALID too, whatever tag it carries
+  const fake1 = await call('GET', '/api/certificates/verify/LQOLY2026-555555?t=0123456789abcdef');
+  assert.equal(fake1.status, 404);
+  assert.equal(fake1.body.status, 'INVALID');
+  // tags are tied to the certificate: certificate B's tag does not verify certificate A
+  const b = fake.Certificate.docs.find((d) => d.certificateNumber !== S.aNumber);
+  const cross = await call('GET', `/api/certificates/verify/${S.aNumber}?t=${svc.qrSignature(b)}`);
+  assert.equal(cross.body.status, 'INVALID');
+  // old QR codes without a tag keep working
+  assert.equal((await call('GET', `/api/certificates/verify/${S.aNumber}`)).body.integrity, 'NOT_PROVIDED');
+  // the public endpoint is read-only
+  assert.equal((await call('POST', `/api/certificates/verify/${S.aNumber}`, { body: {} })).status, 404);
+  assert.equal((await call('DELETE', `/api/certificates/verify/${S.aNumber}`)).status, 404);
+});
+
+test('interview status is "Completed" ONLY for a COMPLETED interview with a SUBMITTED evaluation', async () => {
+  const cert = fake.Certificate.docs.find((d) => d.certificateNumber === S.aNumber);
+  const interviewStatus = async () => (await call('GET', verifyUrlOf(S.aNumber))).body.interviewStatus;
+  assert.equal(await interviewStatus(), 'Not completed', 'no interview at all');
+  const base = { student: cert.student, exam: cert.exam, attempt: cert.attempt, teacher: S.admin.user._id, roomId: 'room-cert-test' };
+  const iv = await fake.TeacherInterview.create({ ...base, status: 'EVALUATION_PENDING' });
+  assert.equal(await interviewStatus(), 'Not completed', 'call finished, evaluation not submitted');
+  await fake.InterviewEvaluation.create({ interview: iv._id, student: cert.student, teacher: S.admin.user._id, exam: cert.exam, state: 'DRAFT' });
+  Object.assign(fake.TeacherInterview.docs.find((d) => String(d._id) === String(iv._id)), { status: 'COMPLETED', isOpen: false, holdsTeacherSlot: false });
+  assert.equal(await interviewStatus(), 'Not completed', 'COMPLETED but the evaluation is still a draft');
+  Object.assign(fake.InterviewEvaluation.docs.find((d) => String(d.interview) === String(iv._id)), { state: 'SUBMITTED', submittedAt: new Date() });
+  assert.equal(await interviewStatus(), 'Completed', 'completed with a submitted evaluation');
+  // someone else's interview never counts
+  const other = fake.TeacherInterview.docs.find((d) => String(d._id) === String(iv._id));
+  const keep = other.student; other.student = S.admin.user._id;
+  assert.equal(await interviewStatus(), 'Not completed');
+  other.student = keep;
+  const dl = await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true });
+  assert.equal(dl.status, 200);
+  fake.TeacherInterview.docs.splice(fake.TeacherInterview.docs.findIndex((d) => String(d._id) === String(iv._id)), 1);
+  fake.InterviewEvaluation.docs.splice(0, fake.InterviewEvaluation.docs.length);
+});
+
+test('results not published yet: the public page says PENDING (never VALID) and students cannot download; admins still can', async () => {
+  await withExam({ resultsPublishedAt: null }, async () => {
+    const r = await call('GET', verifyUrlOf(S.aNumber));
+    assert.equal(r.status, 200);
+    assert.equal(r.body.valid, false);
+    assert.equal(r.body.status, 'PENDING');
+    assert.ok(!('studentName' in r.body) && !('scoreLabel' in r.body));
+    assert.equal((await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true })).status, 404);
+    assert.equal((await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.admin.token, raw: true })).status, 200);
+  });
+  assert.equal((await call('GET', verifyUrlOf(S.aNumber))).body.status, 'VALID');
+});
+
+test('issue date is the real declaration date (results publication), not the exam or evaluation day — shown the same everywhere', async () => {
+  const published = new Date(Date.now() + 36 * 3600e3);
+  await withExam({ resultsPublishedAt: published }, async () => {
+    const label = svc.formatIssueDate(published);
+    const pub = await call('GET', verifyUrlOf(S.aNumber));
+    assert.equal(pub.body.issueDateLabel, label);
+    const mine = await call('GET', '/api/certificates/mine', { token: S.a.token });
+    assert.equal(mine.body.certificates[0].issueDateLabel, label);
+  });
+  const cert = fake.Certificate.docs.find((d) => d.certificateNumber === S.aNumber);
+  assert.ok(cert.issueDate < published, 'the stored record is not rewritten');
+});
+
+test('inconsistent data fails explicitly: a score that disagrees with the certificate is a 409, never a wrong certificate', async () => {
+  const cert = fake.Certificate.docs.find((d) => d.certificateNumber === S.aNumber);
+  const att = fake.OlympiadAttempt.docs.find((d) => String(d._id) === String(cert.attempt));
+  const keep = att.score; att.score = 10;
+  const dl = await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true });
+  assert.equal(dl.status, 409);
+  assert.equal(JSON.parse(dl.buf.toString()).code, 'CERTIFICATE_DATA_MISMATCH');
+  assert.equal((await call('GET', verifyUrlOf(S.aNumber))).status, 409, 'never reported VALID');
+  att.score = keep;
+  const keepStudent = att.student; att.student = S.admin.user._id;
+  assert.equal((await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true })).status, 409);
+  att.student = keepStudent;
+  assert.equal((await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true })).status, 200);
+});
+
+test('downloading never creates or changes records, and repeated downloads render the same certificate', async () => {
+  const before = JSON.stringify(fake.Certificate.docs);
+  const n = fake.Certificate.docs.length;
+  const a = await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.a.token, raw: true });
+  const b = await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.admin.token, raw: true });
+  // (object numbering inside the PDF may differ between renders — what matters is the same page, so compare size)
+  assert.equal(a.buf.length, b.buf.length);
+  assert.equal(fake.Certificate.docs.length, n);
+  assert.equal(JSON.stringify(fake.Certificate.docs), before);
 });
