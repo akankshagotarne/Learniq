@@ -1,3 +1,4 @@
+import { avatarSrc } from '../../utils/avatar';
 import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
@@ -109,8 +110,10 @@ export const ConfirmDialog: React.FC<{
   open: boolean; title: string; message: React.ReactNode; confirmLabel: string; tone?: 'danger' | 'primary'; busy?: boolean;
   /** Optional secondary line under the message (e.g. a security note). */
   note?: React.ReactNode;
+  /** Optional form content shown under the message (e.g. a reason field) and a way to keep Confirm disabled until it is valid. */
+  extra?: React.ReactNode; confirmDisabled?: boolean;
   onConfirm: () => void; onCancel: () => void;
-}> = ({ open, title, message, confirmLabel, tone = 'primary', busy = false, note, onConfirm, onCancel }) => {
+}> = ({ open, title, message, confirmLabel, tone = 'primary', busy = false, note, extra, confirmDisabled = false, onConfirm, onCancel }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const busyRef = useRef(busy);
@@ -176,6 +179,7 @@ export const ConfirmDialog: React.FC<{
             <div id={descId} className="mt-2 text-sm leading-relaxed text-text-secondary break-words">{message}</div>
           </div>
         </div>
+        {extra && <div className="mt-4">{extra}</div>}
         {note && (
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-border-subtle bg-surface-alt px-3 py-2.5 text-xs leading-relaxed text-text-secondary">
             <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-primary" aria-hidden="true" />
@@ -190,7 +194,7 @@ export const ConfirmDialog: React.FC<{
             Cancel
           </button>
           <button
-            type="button" onClick={onConfirm} disabled={busy} aria-busy={busy}
+            type="button" onClick={onConfirm} disabled={busy || confirmDisabled} aria-busy={busy}
             className={`inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 ${
               danger ? 'bg-[#E1447A] hover:bg-[#C93A6C] focus-visible:ring-[#E1447A]/60' : 'bg-brand-primary hover:bg-brand-primary-hover focus-visible:ring-[var(--brand-primary)]'
             }`}
@@ -205,5 +209,4 @@ export const ConfirmDialog: React.FC<{
   );
 };
 
-export const avatarFor = (name: string, avatar: string | null | undefined, size = 96) =>
-  avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=6C63F2&color=fff&size=${size}`;
+export const avatarFor = (name: string, avatar: string | null | undefined, size = 96) => avatarSrc(name, avatar, size);

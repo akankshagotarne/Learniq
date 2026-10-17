@@ -1,3 +1,4 @@
+import { avatarSrc } from '../../utils/avatar';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Award, UserCheck, UserX, Clock, BookOpen } from 'lucide-react';
@@ -142,7 +143,7 @@ const AdminTeachers: React.FC = () => {
                 >
                   <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
                     <img
-                      src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name || 'T')}&background=6C63F2&color=fff&size=48`}
+                      src={avatarSrc(teacher.name || 'T', teacher.avatar, 48)}
                       alt={teacher.name}
                       className="w-11 h-11 rounded-full object-cover flex-shrink-0"
                     />

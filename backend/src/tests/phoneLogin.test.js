@@ -39,7 +39,7 @@ fake.User.create = async (data) => {
   const doc = await rawCreate({ ...data, ...(data.phoneNormalized === undefined && n.valid ? { phoneNormalized: n.e164 } : {}) });
   return decorate(doc);
 };
-fake.User.findByIdAndUpdate = (id, data, opts) => fake.User.findOneAndUpdate({ _id: id }, { $set: data }, opts);
+fake.User.findByIdAndUpdate = (id, data, opts) => fake.User.findOneAndUpdate({ _id: id }, Object.keys(data).some((k) => k.startsWith('$')) ? data : { $set: data }, opts);
 
 const overrides = {
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels,
@@ -272,7 +272,7 @@ test('16. profile update: the phone is normalised and unique; nobody can take an
   const a = await makeUser({ phone: undefined });
   const b = await makeUser({ phone: '+91 90000 44444' });
   const ta = (await login(a.email)).json.token;
-  const set = (token, body) => call('PUT', '/auth/profile', { token, body });
+  const set = (token, body) => call('PUT', '/auth/profile', { token, body: { currentPassword: PASSWORD, ...body } }); // a phone number is a login id: the password is re-checked
   assert.equal((await set(ta, { phone: '+91 90000 44444' })).status, 409, "cannot claim B's number");
   assert.equal((await set(ta, { phone: 'not a number' })).status, 400);
   const ok = await set(ta, { phone: '98765 55555' });
@@ -282,7 +282,8 @@ test('16. profile update: the phone is normalised and unique; nobody can take an
   assert.equal((await login('9876555555')).status, 200, 'the new number now logs in');
   // a profile request can only ever change the signed-in account (client-supplied ids/e-mails are ignored)
   const tb = (await login(b.email)).json.token;
-  await set(tb, { _id: String(a._id), email: 'hijack@example.com', phone: '+91 90000 66666', name: 'B renamed' });
+  assert.equal((await set(tb, { _id: String(a._id), email: 'hijack@example.com', phone: '+91 90000 66666' })).status, 400, 'ids / e-mail in the body are refused outright');
+  await set(tb, { phone: '+91 90000 66666', name: 'B renamed' });
   const aDoc = fake.User.docs.find((d) => String(d._id) === String(a._id));
   const bDoc = fake.User.docs.find((d) => String(d._id) === String(b._id));
   assert.equal(aDoc.email, a.email); assert.equal(aDoc.phoneNormalized, '+919876555555');

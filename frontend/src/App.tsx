@@ -23,6 +23,9 @@ const PaymentPage = lazy(() => import('./pages/PaymentPage'));
 const LecturePlayerPage = lazy(() => import('./pages/LecturePlayerPage'));
 const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
 const PublicVerifyCertificatePage = lazy(() => import('./pages/PublicVerifyCertificatePage'));
+const VerifyEmailChangePage = lazy(() => import('./pages/VerifyEmailChangePage'));
+const ProfilePage = lazy(() => import('./pages/shared/AccountPages').then(m => ({ default: m.ProfilePage })));
+const SettingsPage = lazy(() => import('./pages/shared/AccountPages').then(m => ({ default: m.SettingsPage })));
 
 // Student pages
 const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelectionPage'));
@@ -134,6 +137,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+      <Route path="/verify-email-change/:token" element={<VerifyEmailChangePage />} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
 
       {/* Public certificate verification — opened by the QR code on a certificate; no login */}
@@ -157,6 +161,27 @@ const AppRoutes: React.FC = () => (
       <Route path="/live/:code" element={
         <ProtectedRoute>
           <LiveSessionPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/student/profile" element={
+        <ProtectedRoute roles={['student']}>
+          <ProfilePage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/settings" element={
+        <ProtectedRoute roles={['student']}>
+          <SettingsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/profile" element={
+        <ProtectedRoute roles={['teacher']}>
+          <ProfilePage />
+        </ProtectedRoute>
+      } />
+      <Route path="/teacher/settings" element={
+        <ProtectedRoute roles={['teacher']}>
+          <SettingsPage />
         </ProtectedRoute>
       } />
 

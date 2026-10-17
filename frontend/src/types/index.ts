@@ -224,6 +224,14 @@ export interface Payment {
   archiveReason?: string;
   /** why the system closed a pending payment as failed (e.g. NOT_PAID) */
   failureReason?: string;
+  /** set when an admin used "Remove from History" (soft removal: the record is kept and can be restored) */
+  removedAt?: string;
+  removalReason?: string | null;
+  provider?: string;
+  /** masked Razorpay ids (order_••••1234) - enough to find the payment in the Razorpay dashboard */
+  orderId?: string | null;
+  paymentId?: string | null;
+  paidAt?: string | null;
   createdAt: string;
 }
 
@@ -238,6 +246,8 @@ export interface PaymentStats {
   unconfirmedCount?: number;
   /** records hidden from the ACTIVE list (not confirmed / archived) — shown in "Payment History" */
   historyCount?: number;
+  /** records an admin removed from the history (Removed view) */
+  removedCount?: number;
   totalCount: number;
   currency: string;
 }

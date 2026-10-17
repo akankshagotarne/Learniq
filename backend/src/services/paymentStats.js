@@ -45,10 +45,12 @@ const SOURCES = [
  * A completed/SUCCESS payment is never hidden, so revenue is identical in both views.
  */
 const activeFilter = (source) => ({
+  removedAt: null, // an admin-removed record ("Remove from History") is in the Removed view only
   status: { $ne: source.status.unconfirmed },
   $or: [{ archivedAt: null }, { status: source.status.completed }],
 });
 const hiddenFilter = (source) => ({
+  removedAt: null,
   $or: [{ status: source.status.unconfirmed }, { archivedAt: { $ne: null }, status: { $ne: source.status.completed } }],
 });
 
@@ -67,7 +69,8 @@ const roundRupees = (n) => Math.round((Number(n) || 0) * 100) / 100;
  */
 async function getPaymentStats({ view = 'all' } = {}) {
   const perSource = await Promise.all(SOURCES.map(async (source) => {
-    const pipeline = view === 'active' ? [{ $match: activeFilter(source) }] : [];
+    // 'active' = the Payments page; 'all' = dashboard. Both leave out admin-removed records so every screen shows the same totals.
+    const pipeline = [{ $match: view === 'active' ? activeFilter(source) : { removedAt: null } }];
     const rows = await source.model().aggregate([
       ...pipeline,
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
@@ -84,8 +87,12 @@ async function getPaymentStats({ view = 'all' } = {}) {
     }
     out.revenue = roundRupees(out.revenue);
     // records that are not in the active list (never revenue) — counted separately so the admin can find them in Payment History
-    out.unconfirmedCount = await source.model().countDocuments({ status: source.status.unconfirmed });
+    out.unconfirmedCount = await source.model().countDocuments({ removedAt: null, status: source.status.unconfirmed });
     out.historyCount = await source.model().countDocuments(hiddenFilter(source));
+    // admin-removed records: informational only (never part of the figures above)
+    const removed = await source.model().aggregate([{ $match: { removedAt: { $ne: null } } }, { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } }]);
+    out.removedCount = removed.reduce((n, r) => n + r.count, 0);
+    out.removedVerifiedAmount = roundRupees(removed.filter((r) => normaliseStatus(source, r._id) === 'completed').reduce((n, r) => n + (r.amount || 0), 0));
     return [source.key, out];
   }));
 
@@ -99,6 +106,8 @@ async function getPaymentStats({ view = 'all' } = {}) {
     refundedCount: sum('refundedCount'),
     unconfirmedCount: sum('unconfirmedCount'),
     historyCount: sum('historyCount'),
+    removedCount: sum('removedCount'),
+    removedVerifiedAmount: roundRupees(sum('removedVerifiedAmount')),
     view,
     totalCount: sum('totalCount'),
     currency: 'INR',
@@ -131,7 +140,7 @@ async function getRevenueTrend({ months = 6, now = new Date() } = {}) {
   const since = new Date(Date.UTC(firstY, firstM - 1, 1) - 24 * 3600 * 1000);
 
   const rows = (await Promise.all(SOURCES.map((source) => source.model().aggregate([
-    { $match: { status: source.status.completed, $or: source.dateFields.map((f) => ({ [f]: { $gte: since } })) } },
+    { $match: { removedAt: null, status: source.status.completed, $or: source.dateFields.map((f) => ({ [f]: { $gte: since } })) } },
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m', date: source.dateExpr, timezone: REPORT_TIMEZONE } },
@@ -160,17 +169,25 @@ const payerOf = (p) => {
   return null;
 };
 
+/** 'order_Abc123XYZ789' -> 'order_••••Z789': enough to find it in the Razorpay dashboard, useless for anything else. */
+const maskId = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const m = /^([a-z]+_)/i.exec(value);
+  const prefix = m ? m[1] : '';
+  return value.length - prefix.length <= 6 ? `${prefix}••••` : `${prefix}••••${value.slice(-4)}`;
+};
+
 async function listPayments({ view = 'active' } = {}) {
-  const scope = (key) => (view === 'history' ? {} : activeFilter(SOURCES.find((s) => s.key === key)));
+  const scope = (key) => (view === 'removed' ? { removedAt: { $ne: null } } : view === 'history' ? { removedAt: null } : activeFilter(SOURCES.find((s) => s.key === key)));
   const [coursePayments, olympiadPayments] = await Promise.all([
     Payment.find(scope('course'))
-      .populate('student', 'name email')
+      .populate('student', 'name email phone')
       .populate('course', 'title')
       .populate('lecture', 'title')
       .sort({ createdAt: -1 })
       .lean(),
     OlympiadPayment.find(scope('olympiad'))
-      .populate('student', 'name email')
+      .populate('student', 'name email phone')
       .populate('exam', 'title standard')
       .sort({ createdAt: -1 })
       .lean(),
@@ -184,14 +201,20 @@ async function listPayments({ view = 'active' } = {}) {
     exam: p.exam ? { _id: p.exam._id, title: p.exam.title, standard: p.exam.standard } : null,
     amount: p.amount,
     currency: p.currency || 'INR',
+    provider: 'Razorpay', orderId: maskId(p.razorpayOrderId), paymentId: maskId(p.razorpayPaymentId), verifiedVia: p.verifiedVia || null,
     status: normaliseStatus(olySource, p.status),
     createdAt: p.createdAt,
     paidAt: p.verifiedAt || null,
     ...(p.reviewNote ? { statusBeforeReview: p.statusBeforeReview, reviewNote: p.reviewNote } : {}),
     ...(p.archivedAt ? { archivedAt: p.archivedAt, archiveReason: p.archiveReason } : {}),
+    ...(p.removedAt ? { removedAt: p.removedAt, removalReason: p.removalReason || null } : {}),
     ...(p.failureReason ? { failureReason: p.failureReason } : {}),
   }));
-  const courseRows = coursePayments.map((p) => ({ ...p, student: payerOf(p), _id: String(p._id), source: 'course' }));
+  const courseRows = coursePayments.map((p) => ({
+    ...p, student: payerOf(p), _id: String(p._id), source: 'course',
+    provider: 'Razorpay', orderId: maskId(p.razorpayOrderId), paymentId: maskId(p.razorpayPaymentId),
+    ...(p.removedAt ? { removedAt: p.removedAt, removalReason: p.removalReason || null } : {}),
+  }));
   return [...courseRows, ...olympiadRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 

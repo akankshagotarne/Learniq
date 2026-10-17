@@ -31,6 +31,13 @@ router.get('/students/:id/exam-access', ...adminAuth, profileCtrl.requireObjectI
 router.post('/students/:id/exam-access/grant', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.grant);
 router.post('/students/:id/exam-access/reset', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.reset);
 router.get('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getTeacherProfile);
+// Edit a student's / teacher's profile (explicit allow-lists in services/profileUpdates.js; role, approval and status are NOT editable here)
+const editCtrl = require('../controllers/profileController');
+const { uploadProfilePhoto, handleMulterError } = require('../middleware/upload');
+router.patch('/students/:id', ...adminAuth, profileCtrl.requireObjectId, editCtrl.adminEditStudent);
+router.patch('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, editCtrl.adminEditTeacher);
+router.post('/users/:id/photo', ...adminAuth, profileCtrl.requireObjectId, uploadProfilePhoto.single('photo'), handleMulterError, editCtrl.adminUploadPhoto);
+router.delete('/users/:id/photo', ...adminAuth, profileCtrl.requireObjectId, editCtrl.adminRemovePhoto);
 router.post('/users/:id/send-password-reset', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.sendPasswordReset);
 
 // Courses
@@ -48,7 +55,7 @@ router.get('/courses', ...adminAuth, async (req, res) => {
 router.get('/payments', ...adminAuth, async (req, res) => {
   try {
     // ACTIVE view by default (no UNCONFIRMED / archived records); ?view=history shows the full audit history
-    const view = req.query.view === 'history' ? 'history' : 'active';
+    const view = req.query.view === 'history' ? 'history' : req.query.view === 'removed' ? 'removed' : 'active';
     const [payments, stats] = await Promise.all([listPayments({ view }), getPaymentStats({ view })]);
     res.set('Cache-Control', 'no-store'); // live financial figures — never serve a stale copy
     res.json({ success: true, view, payments, stats });
@@ -56,6 +63,28 @@ router.get('/payments', ...adminAuth, async (req, res) => {
     console.error('GET /admin/payments failed:', e);
     res.status(500).json({ success: false, message: 'Server error.' });
   }
+});
+
+// Remove a payment from the normal history (soft, reversible, audited) / restore it. Never deletes, never changes status or access.
+const paymentRemoval = require('../services/paymentRemoval');
+const removalFail = (res, e) => {
+  if (e instanceof paymentRemoval.PaymentRemovalError) return res.status(e.status).json({ success: false, code: e.code, message: e.message });
+  console.error('payment removal failed:', e && e.message);
+  return res.status(500).json({ success: false, message: 'The payment could not be updated. Nothing was changed; please try again.' });
+};
+router.delete('/payments/:source/:id', ...adminAuth, async (req, res) => {
+  try {
+    const out = await paymentRemoval.removePayment({ source: req.params.source, id: req.params.id, reason: req.body && req.body.reason }, req.user);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, message: 'Payment removed from the history. The transaction record is preserved and can be restored from the Removed view.', ...out });
+  } catch (e) { removalFail(res, e); }
+});
+router.post('/payments/:source/:id/restore', ...adminAuth, async (req, res) => {
+  try {
+    const out = await paymentRemoval.restorePayment({ source: req.params.source, id: req.params.id }, req.user);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, message: 'Payment restored to the history.', ...out });
+  } catch (e) { removalFail(res, e); }
 });
 
 // Company

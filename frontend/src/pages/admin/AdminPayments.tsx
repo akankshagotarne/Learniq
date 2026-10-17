@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, CreditCard, IndianRupee, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Search, CreditCard, IndianRupee, CheckCircle2, XCircle, Clock, Eye, Trash2, Undo2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { Payment, PaymentStats } from '../../types';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from '../../components/admin/ProfileParts';
+import { apiError, removePayment, restorePayment } from '../../services/profileService';
 
 type StatusFilter = 'all' | 'completed' | 'pending' | 'failed' | 'unconfirmed';
 
@@ -28,7 +31,12 @@ const AdminPayments: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   // 'active' = normal list; 'history' = every record incl. Not confirmed / archived (kept for audit, never revenue)
-  const [view, setView] = useState<'active' | 'history'>('active');
+  const [view, setView] = useState<'active' | 'history' | 'removed'>('active');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [removing, setRemoving] = useState<Payment | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [details, setDetails] = useState<Payment | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +50,27 @@ const AdminPayments: React.FC = () => {
       .catch(() => { if (!cancelled) { setPayments([]); setStats(null); toast.error('Failed to load payments.'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [view]);
+  }, [view, reloadKey]);
+
+  const sourceOf = (p: Payment) => p.source || (p.type === 'olympiad' ? 'olympiad' : 'course');
+  const isVerified = (p: Payment) => p.status === 'completed';
+  const reasonOk = !removing || !isVerified(removing) || reason.trim().length >= 5;
+  const doRemove = async () => {
+    if (!removing || busy) return;
+    setBusy(true);
+    try {
+      await removePayment(sourceOf(removing), removing._id, reason.trim());
+      toast.success('Payment removed from the history. It can be restored from the Removed view.');
+      setRemoving(null); setReason(''); setReloadKey(k => k + 1);
+    } catch (e) { toast.error(apiError(e, 'The payment could not be removed. Nothing was changed.').message); }
+    finally { setBusy(false); }
+  };
+  const doRestore = async (p: Payment) => {
+    setBusy(true);
+    try { await restorePayment(sourceOf(p), p._id); toast.success('Payment restored to the history.'); setReloadKey(k => k + 1); }
+    catch (e) { toast.error(apiError(e, 'The payment could not be restored.').message); }
+    finally { setBusy(false); }
+  };
 
   // a filter chip that does not exist in the other view must not stay selected
   useEffect(() => { if (view === 'active' && statusFilter === 'unconfirmed') setStatusFilter('all'); }, [view, statusFilter]);
@@ -63,6 +91,7 @@ const AdminPayments: React.FC = () => {
   const pendingCount = stats?.pendingCount ?? 0;
   const failedCount = stats?.failedCount ?? 0;
   const historyCount = stats?.historyCount ?? 0;
+  const removedCount = stats?.removedCount ?? 0;
 
   return (
     <div className="flex min-h-screen bg-page">
@@ -105,6 +134,14 @@ const AdminPayments: React.FC = () => {
               <button onClick={() => setView('history')} className="underline font-semibold text-brand-primary">View Payment History</button>
             </p>
           ))}
+
+          <div className="mb-5 flex gap-2" role="tablist" aria-label="Payment views">
+            {([['active', 'Payments'], ['history', 'Payment History'], ['removed', `Removed${removedCount ? ` (${removedCount})` : ''}`]] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${view === id ? 'border-brand-primary bg-brand-primary text-white' : 'border-border-subtle bg-surface text-text-secondary hover:bg-surface-alt'}`}>{label}</button>
+            ))}
+          </div>
+          {view === 'removed' && <p className="text-text-secondary text-xs mb-4">Records an admin removed from the history. They are kept (never deleted), are not counted anywhere, and can be restored.</p>}
 
           {/* Filters */}
           <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -165,12 +202,67 @@ const AdminPayments: React.FC = () => {
                   {payment.archivedAt && <span className="text-[10px] text-text-muted" title={payment.archiveReason || 'Archived — kept for audit'}>Archived</span>}
                   <p className="text-text-primary text-sm font-bold ml-auto sm:ml-0 sm:w-24 text-right">₹{payment.amount?.toLocaleString('en-IN')}</p>
                   <p className="text-text-muted text-xs sm:w-28 text-right">{new Date(payment.createdAt).toLocaleDateString('en-IN')}</p>
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <button type="button" onClick={() => setDetails(payment)} aria-label={`View details of ${(payment.student as any)?.name || 'payment'}`} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-alt"><Eye className="w-3.5 h-3.5" aria-hidden="true" /> View</button>
+                    {view === 'removed' ? (
+                      <button type="button" disabled={busy} onClick={() => doRestore(payment)} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-primary hover:bg-surface-alt disabled:opacity-60"><Undo2 className="w-3.5 h-3.5" aria-hidden="true" /> Restore</button>
+                    ) : (
+                      <button type="button" onClick={() => { setReason(''); setRemoving(payment); }} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-[#E1447A] hover:bg-surface-alt"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Remove from History</button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </main>
+
+      <ConfirmDialog
+        open={!!removing} tone="danger" busy={busy}
+        title="Remove Payment from History?"
+        message={removing && (
+          <>
+            <p>This removes the record from the normal history and from revenue totals. The transaction itself is kept and can be restored. Nothing is refunded and nobody loses exam access or certificates.</p>
+            <dl className="mt-3 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="font-semibold text-text-muted">Student</dt><dd className="text-text-primary break-words">{(removing.student as any)?.name || 'Unknown student'}</dd>
+              <dt className="font-semibold text-text-muted">Amount</dt><dd className="text-text-primary">₹{removing.amount?.toLocaleString('en-IN')}</dd>
+              <dt className="font-semibold text-text-muted">Status</dt><dd className="text-text-primary capitalize">{statusLabel(removing.status)}</dd>
+              <dt className="font-semibold text-text-muted">Transaction</dt><dd className="text-text-primary break-all">{removing.paymentId || removing.orderId || removing._id}</dd>
+            </dl>
+          </>
+        )}
+        extra={removing && (
+          <div>
+            <label htmlFor="rm-reason" className="mb-1 block text-xs font-semibold text-text-secondary">Reason{isVerified(removing) ? ' (required for a verified payment)' : ' (optional)'}</label>
+            <textarea id="rm-reason" rows={2} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} className="input-field" placeholder="e.g. Duplicate test entry" />
+          </div>
+        )}
+        confirmLabel={busy ? 'Removing…' : 'Remove Record'} confirmDisabled={!reasonOk}
+        onConfirm={doRemove} onCancel={() => { if (!busy) setRemoving(null); }}
+      />
+
+      {details && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/70 p-4" role="presentation" onClick={() => setDetails(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Payment details" onClick={e => e.stopPropagation()} className="relative w-full max-w-md rounded-2xl border border-border-subtle bg-surface p-5 sm:p-6 shadow-2xl">
+            <button type="button" onClick={() => setDetails(null)} aria-label="Close" className="absolute right-3 top-3 rounded-lg p-1.5 text-text-muted hover:bg-surface-alt"><X className="h-4 w-4" /></button>
+            <h3 className="font-heading font-bold text-lg text-text-primary mb-3">Payment details</h3>
+            <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
+              {([
+                ['Student', (details.student as any)?.name || 'Unknown student'],
+                ['Contact', (details.student as any)?.email || (details.student as any)?.phone || '—'],
+                ['For', itemTitle(details)],
+                ['Amount', `₹${details.amount?.toLocaleString('en-IN')} ${details.currency || ''}`],
+                ['Status', statusLabel(details.status)],
+                ['Provider', details.provider || 'Razorpay'],
+                ['Order', details.orderId || '—'],
+                ['Payment', details.paymentId || '—'],
+                ['Created', new Date(details.createdAt).toLocaleString('en-IN')],
+                ['Paid', details.paidAt ? new Date(details.paidAt).toLocaleString('en-IN') : '—'],
+                ...(details.removedAt ? [['Removed', new Date(details.removedAt).toLocaleString('en-IN')], ['Removal reason', details.removalReason || '—']] : []),
+              ] as [string, string][]).map(([k, v]) => (<React.Fragment key={k}><dt className="text-xs font-semibold text-text-muted">{k}</dt><dd className="text-text-primary break-words">{v}</dd></React.Fragment>))}
+            </dl>
+          </div>
+        </div>, document.body)}
     </div>
   );
 };

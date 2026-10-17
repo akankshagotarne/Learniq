@@ -39,6 +39,10 @@ const paymentSchema = new mongoose.Schema({
 
   // ── Archive (audit history): hidden from the ACTIVE admin list, never deleted. A completed payment is never hidden. ──
   archivedAt: { type: Date },
+  // Admin "Remove from History": hides the record from the normal Payments views and totals. NOTHING else changes (status, access, Razorpay).
+  removedAt: { type: Date, default: undefined },
+  removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+  removalReason: { type: String, trim: true, maxlength: 300, default: undefined },
   archiveReason: { type: String, trim: true },
 
   // ── Automatic reconciliation (services/paymentReconciler.js) ──

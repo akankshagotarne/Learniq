@@ -40,6 +40,15 @@ const uploadAvatar = multer({
   fileFilter: fileFilter(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']),
 });
 
+// Profile photos are held in memory only long enough to validate them and write them to the ProfilePhoto collection
+// (see models/ProfilePhoto.js); nothing touches the server's disk. The browser shrinks photos before upload, so 512 KB is generous.
+const PROFILE_PHOTO_MAX_BYTES = 512 * 1024;
+const uploadProfilePhoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PROFILE_PHOTO_MAX_BYTES, files: 1 },
+  fileFilter: fileFilter(['image/jpeg', 'image/png', 'image/webp']),
+});
+
 const uploadAssignment = multer({
   storage: createStorage('assignments'),
   limits: { fileSize: 50 * 1024 * 1024 },
@@ -74,4 +83,4 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
-module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadAssignment, uploadSupportAttachment, uploadDoubtAttachment, handleMulterError };
+module.exports = { uploadVideo, uploadPDF, uploadAvatar, uploadProfilePhoto, PROFILE_PHOTO_MAX_BYTES, uploadAssignment, uploadSupportAttachment, uploadDoubtAttachment, handleMulterError };

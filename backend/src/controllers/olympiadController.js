@@ -981,7 +981,7 @@ const getReview = handler(async (req, res) => {
 const examStats = async (exam) => {
   const [paymentAgg, registered, attemptAgg] = await Promise.all([
     OlympiadPayment.aggregate([
-      { $match: { exam: exam._id } },
+      { $match: { exam: exam._id, removedAt: null } },
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
     ]),
     OlympiadPayment.distinct('student', { exam: exam._id, status: 'SUCCESS' }),
@@ -1375,9 +1375,9 @@ const summarisePayments = (rows) => {
 // ACTIVE view (default) = what the admin normally sees: everything except UNCONFIRMED and archived records.
 // A SUCCESS payment is never hidden. `?view=history` returns every record (audit history) — nothing is ever deleted.
 const paymentView = (req) => (req.query.view === 'history' ? 'history' : 'active');
-const ACTIVE_PAYMENTS = { status: { $ne: 'UNCONFIRMED' }, $or: [{ archivedAt: null }, { status: 'SUCCESS' }] };
-const HIDDEN_PAYMENTS = { $or: [{ status: 'UNCONFIRMED' }, { archivedAt: { $ne: null }, status: { $ne: 'SUCCESS' } }] };
-const paymentScope = (view) => (view === 'history' ? {} : ACTIVE_PAYMENTS);
+const ACTIVE_PAYMENTS = { removedAt: null, status: { $ne: 'UNCONFIRMED' }, $or: [{ archivedAt: null }, { status: 'SUCCESS' }] };
+const HIDDEN_PAYMENTS = { removedAt: null, $or: [{ status: 'UNCONFIRMED' }, { archivedAt: { $ne: null }, status: { $ne: 'SUCCESS' } }] };
+const paymentScope = (view) => (view === 'history' ? { removedAt: null } : ACTIVE_PAYMENTS); // admin-removed records are in the Payments page's "Removed" view only
 
 // GET /api/olympiad/admin/exams/:id/payments[?view=history]
 const adminPayments = handler(async (req, res) => {

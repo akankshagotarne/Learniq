@@ -15,6 +15,11 @@ const userSchema = new mongoose.Schema({
   // Unset (not empty) when the account has no phone, so accounts without one never collide.
   phoneNormalized: { type: String, default: undefined },
   avatar: { type: String, default: null },
+  // Self-service e-mail change: the new address only becomes the login e-mail after the owner clicks the link sent to it.
+  // Only the SHA-256 hash of the token is stored (never returned: see toJSON).
+  pendingEmail: { type: String, lowercase: true, trim: true, default: undefined },
+  pendingEmailTokenHash: { type: String, default: undefined },
+  pendingEmailExpire: { type: Date, default: undefined },
   isActive: { type: Boolean, default: true },
   isApproved: { type: Boolean, default: true }, // teachers need approval (the flag every guard checks)
   // Teacher approval workflow. `isApproved` stays the single source of truth for access; these fields add the audit trail.
@@ -82,6 +87,8 @@ userSchema.methods.toJSON = function() {
   delete obj.password;
   delete obj.resetPasswordToken;
   delete obj.resetPasswordExpire;
+  delete obj.pendingEmailTokenHash;
+  delete obj.pendingEmailExpire;
   return obj;
 };
 
