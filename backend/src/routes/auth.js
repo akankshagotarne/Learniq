@@ -29,7 +29,12 @@ router.post('/verify-email-change', perUser(20, 15 * 60 * 1000), profile.verifyE
 router.post('/change-password', protect, perUser(5, 15 * 60 * 1000), profile.changePassword);
 router.post('/profile/photo', protect, perUser(10), uploadProfilePhoto.single('photo'), handleMulterError, profile.uploadOwnPhoto);
 router.delete('/profile/photo', protect, perUser(10), profile.removeOwnPhoto);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password/:token', resetPassword);
+// Per-IP limits (this process). The per-ACCOUNT two-minute cooldown is stored in the database (authController.issueResetToken).
+const byIp = (max, windowMs = 15 * 60 * 1000) => rateLimit({
+  windowMs, max, standardHeaders: true, legacyHeaders: false,
+  message: { success: false, code: 'RATE_LIMITED', message: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+router.post('/forgot-password', byIp(5), forgotPassword);
+router.post('/reset-password/:token', byIp(10), resetPassword);
 
 module.exports = router;

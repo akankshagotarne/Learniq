@@ -1,38 +1,17 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
-const { Resend } = require('resend');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
 const { getPrimaryClientUrl } = require('../config/clientUrls');
 const identity = require('../services/identity');
 const { parseStudentStandard, standardLabel } = require('../constants/standards');
 const { passwordProblem } = require('../services/passwordPolicy');
-
-// Two ways to actually send the reset email, both optional so the server
-// still boots before either is configured (forgotPassword then sends nothing
-// and never returns the reset link - see forgotPassword below):
-//
-// 1) Gmail/SMTP via nodemailer - works out of the box for ANY recipient
-//    using a Google "App Password", no domain needed. Preferred when set.
-// 2) Resend - nicer for production, but without a verified domain it can
-//    only deliver to the email address the Resend account was created with.
-const smtpTransporter = (process.env.EMAIL_USER && process.env.EMAIL_PASS)
-  ? nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: Number(process.env.EMAIL_PORT) || 587,
-      secure: false,
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    })
-  : null;
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'LearnIQ <onboarding@resend.dev>';
+const { sendMail } = require('../services/mailer');
 
 const buildResetEmailHtml = (name, resetUrl) => `
   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
     <h2 style="color: #1a1a2e;">Reset your password</h2>
-    <p>Hi ${name || 'there'},</p>
+    <p>Hi ${String(name || 'there').replace(/[<>&"']/g, '')},</p>
     <p>We received a request to reset your LearnIQ password. Click the button below to choose a new one. This link expires in 15 minutes.</p>
     <p style="margin: 24px 0;">
       <a href="${resetUrl}" style="background: #8B03ED; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Reset Password</a>
@@ -42,29 +21,13 @@ const buildResetEmailHtml = (name, resetUrl) => `
   </div>
 `;
 
-// Sends the reset email through whichever provider is configured.
-// Returns true if an email was actually sent, false if neither is set up.
-const sendResetEmail = async (user, resetUrl) => {
-  if (smtpTransporter) {
-    await smtpTransporter.sendMail({
-      from: process.env.EMAIL_FROM || `LearnIQ <${process.env.EMAIL_USER}>`,
-      to: user.email,
-      subject: 'Reset your LearnIQ password',
-      html: buildResetEmailHtml(user.name, resetUrl),
-    });
-    return true;
-  }
-  if (resend) {
-    await resend.emails.send({
-      from: RESEND_FROM,
-      to: user.email,
-      subject: 'Reset your LearnIQ password',
-      html: buildResetEmailHtml(user.name, resetUrl),
-    });
-    return true;
-  }
-  return false;
-};
+// Sends the reset email through the shared mailer (services/mailer.js: Resend when RESEND_API_KEY is set, EMAIL_FROM as sender).
+// true = the provider accepted it; false = no usable provider/sender; throws when the provider refused it.
+const sendResetEmail = (user, resetUrl) => sendMail({
+  to: user.email,
+  subject: 'Reset your LearnIQ password',
+  html: buildResetEmailHtml(user.name, resetUrl),
+});
 
 // Every token is tied to a server-side session (services/authSessions.js): one active session per account.
 const sessions = require('../services/authSessions');
@@ -357,12 +320,17 @@ const GENERIC_RESET_RESPONSE = {
 // implementation of the secure flow. Only the SHA-256 hash of the token is stored; the raw token exists only inside the
 // emailed link. Nothing here ever returns, logs or prints the token or the link.
 const RESET_TTL_MS = 15 * 60 * 1000;
+// A second reset e-mail for the SAME account within this window is not sent. The check reads the token's stored expiry (the
+// database), so it holds across restarts and across several backend instances; a failed delivery discards the token, so a
+// failed attempt never blocks the retry.
+const RESET_COOLDOWN_MS = 2 * 60 * 1000;
 
 /**
  * Stores a fresh hashed token on the user and returns `{ deliver }`. The emailed link lives only inside that closure —
  * it is not a property of the user document, the return value or any log line.
  */
-const issueResetToken = async (user) => {
+const issueResetToken = async (user, { cooldown = false } = {}) => {
+  if (cooldown && user.resetPasswordToken && user.resetPasswordExpire && new Date(user.resetPasswordExpire).getTime() > Date.now() + RESET_TTL_MS - RESET_COOLDOWN_MS) return null;
   const resetToken = crypto.randomBytes(32).toString('hex');
   user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
   user.resetPasswordExpire = Date.now() + RESET_TTL_MS;
@@ -372,10 +340,12 @@ const issueResetToken = async (user) => {
 };
 
 const discardResetToken = async (user) => {
+  const hash = user.resetPasswordToken;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
   try {
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save({ validateBeforeSave: false });
+    // $unset in the database, only if the stored token is still the one we issued (never removes a newer token)
+    await User.updateOne({ _id: user._id, resetPasswordToken: hash }, { $unset: { resetPasswordToken: 1, resetPasswordExpire: 1 } });
   } catch (cleanupError) { /* nothing more to do */ }
 };
 
@@ -385,7 +355,7 @@ const deliverResetEmail = async (user, resetUrl) => {
     const emailSent = await sendResetEmail(user, resetUrl);
     if (!emailSent) {
       // The reset link/token is never printed or returned - configure an email provider to receive it.
-      console.warn('Password reset requested but no email provider is configured (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) - no email was sent.');
+      console.warn('Password reset requested but no usable email provider/sender is configured (RESEND_API_KEY + EMAIL_FROM, or EMAIL_USER/EMAIL_PASS) - no email was sent.');
       await discardResetToken(user);
       return 'not_configured';
     }
@@ -397,48 +367,57 @@ const deliverResetEmail = async (user, resetUrl) => {
   }
 };
 
-const forgotPassword = async (req, res) => {
+// Everything that depends on whether the account exists runs AFTER the response has been sent, so a registered and an unknown
+// address take the same time to answer. Nothing here can throw to the caller; failures are logged without tokens or links.
+const processForgotPassword = async (email) => {
   try {
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Please enter your email address.' });
-    }
-
     const user = await User.findOne({ email });
-    if (!user) return res.json(GENERIC_RESET_RESPONSE);
-
-    const reset = await issueResetToken(user);
-
-    // Sent in the background so the response time does not reveal whether the account exists.
-    // Failures are logged (without the token/link) and the unusable token is discarded.
-    reset.deliver().catch(() => { /* already handled inside */ });
-
-    return res.json(GENERIC_RESET_RESPONSE);
+    if (!user) return;
+    if (user.isActive === false) return; // deactivated accounts are never e-mailed (the public answer stays the same)
+    const reset = await issueResetToken(user, { cooldown: true });
+    if (!reset) return; // a link was already sent within the last two minutes
+    await reset.deliver();
   } catch (error) {
-    console.error('Forgot password error:', error.message);
-    res.status(500).json({ success: false, message: 'Server error.' });
+    console.error('Forgot password processing failed:', error && error.message);
   }
 };
 
-// @desc   Reset password
-// @route  POST /api/auth/reset-password/:token
+const forgotPassword = async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!email || email.length > 254) {
+    return res.status(400).json({ success: false, message: 'Please enter your email address.' });
+  }
+  res.json(GENERIC_RESET_RESPONSE);
+  await processForgotPassword(email);
+};
+
+const INVALID_RESET = { success: false, message: 'Invalid or expired reset token.' };
 const resetPassword = async (req, res) => {
   try {
-    const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const raw = String(req.params.token || '');
+    if (!raw || raw.length > 200 || !/^[A-Za-z0-9_-]+$/.test(raw)) return res.status(400).json(INVALID_RESET); // issued tokens are 64 hex characters
+    const hashedToken = crypto.createHash('sha256').update(raw).digest('hex');
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpire: { $gt: Date.now() },
     });
 
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired reset token.' });
+    if (!user || user.isActive === false) {
+      return res.status(400).json(INVALID_RESET);
     }
 
-    const { password } = req.body;
+    const { password } = req.body || {};
     const pwProblem = passwordProblem(password);
     if (pwProblem) return res.status(400).json({ success: false, code: 'INVALID_PASSWORD', field: 'password', message: pwProblem });
 
-    user.password = password;
+    // Single use, even for two simultaneous requests: only the request that atomically removes the token may continue.
+    const claimed = await User.findOneAndUpdate(
+      { _id: user._id, resetPasswordToken: hashedToken, resetPasswordExpire: { $gt: Date.now() } },
+      { $unset: { resetPasswordToken: 1, resetPasswordExpire: 1 } },
+    );
+    if (!claimed) return res.status(400).json(INVALID_RESET);
+
+    user.password = password; // hashed by the User model's pre-save hook (bcrypt, 12 rounds)
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     await user.save();
@@ -453,4 +432,4 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, takeoverSession, cancelSessionTakeover, logout, getSessionStatus, getMe, updateStandard, updateProfile, forgotPassword, resetPassword, issueResetToken, RESET_TTL_MS };
+module.exports = { register, login, takeoverSession, cancelSessionTakeover, logout, getSessionStatus, getMe, updateStandard, updateProfile, forgotPassword, resetPassword, issueResetToken, RESET_TTL_MS, RESET_COOLDOWN_MS };

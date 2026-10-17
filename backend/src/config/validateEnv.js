@@ -10,6 +10,27 @@ const problemWith = (name, value) => {
   return null;
 };
 
+/** Production e-mail configuration problems (names only - values are never printed). */
+const VERIFIED_SENDING_DOMAIN = 'send.learniq.study';
+const emailProblems = (env) => {
+  const out = [];
+  const { providerFor, domainOf } = require('../services/mailer');
+  const provider = providerFor(env);
+  if (!provider) return ['No email provider (RESEND_API_KEY + EMAIL_FROM, or EMAIL_USER/EMAIL_PASS) — password reset emails cannot be sent'];
+  const sender = String(env.EMAIL_FROM || (provider === 'resend' ? env.RESEND_FROM_EMAIL : '') || '').trim();
+  if (provider === 'resend') {
+    if (env.EMAIL_USER && env.EMAIL_PASS) out.push('Both RESEND_API_KEY and EMAIL_USER/EMAIL_PASS are set — Resend is used and the SMTP settings are ignored');
+    if (!sender) out.push(`RESEND_API_KEY is set but EMAIL_FROM is missing — no email will be sent in production (use an address on ${VERIFIED_SENDING_DOMAIN})`);
+    else {
+      const domain = domainOf(sender);
+      const allowed = String(env.EMAIL_SENDING_DOMAIN || VERIFIED_SENDING_DOMAIN).toLowerCase();
+      if (domain === 'resend.dev') out.push('EMAIL_FROM uses the Resend sandbox domain — it can only deliver to the Resend account owner and is refused in production');
+      else if (!domain || (domain !== allowed && !domain.endsWith(`.${allowed}`))) out.push(`EMAIL_FROM is not an address on the verified sending domain ${allowed} — Resend will reject it unless that domain is verified`);
+    }
+  }
+  return out;
+};
+
 const validateEnv = (env = process.env, log = console) => {
   const isProd = env.NODE_ENV === 'production';
   const fatal = [];
@@ -29,7 +50,7 @@ const validateEnv = (env = process.env, log = console) => {
 
   if (isProd) {
     if (!env.CLIENT_URL) warn.push('CLIENT_URL is not set — browser requests from your frontend will be blocked by CORS and reset links will point to localhost');
-    if (!env.EMAIL_USER && !env.RESEND_API_KEY) warn.push('No email provider (EMAIL_USER/EMAIL_PASS or RESEND_API_KEY) — password reset emails cannot be sent');
+    warn.push(...emailProblems(env));
   } else if (env.NODE_ENV === undefined) {
     warn.push('NODE_ENV is not set — set NODE_ENV=production on your live server');
   }
@@ -42,4 +63,4 @@ const validateEnv = (env = process.env, log = console) => {
   return { ok: true, fatal, warn };
 };
 
-module.exports = { validateEnv, problemWith };
+module.exports = { validateEnv, problemWith, emailProblems };

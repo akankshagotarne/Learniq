@@ -12,10 +12,11 @@ const ForgotPasswordPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email });
+      await api.post('/auth/forgot-password', { email: email.trim() });
       setSent(true);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Something went wrong. Please try again.');
@@ -62,7 +63,7 @@ const ForgotPasswordPage: React.FC = () => {
                 Enter the email linked to your account and we'll send you a link to reset your password.
               </p>
               <p className="text-text-muted text-xs -mt-4 mb-6" data-testid="no-email-help">
-                Registered with a phone number only? There is no email to send a link to - please contact LearnIQ support and we will help you set a new password.
+                Password reset links are sent by email only. If your account has no email address (you registered with a phone number only), we cannot send you a link - please contact LearnIQ support and we will help you set a new password.
               </p>
 
               {error && (

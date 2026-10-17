@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PASSWORD_HELP, passwordProblem } from '../constants/passwordPolicy';
 import { Link, useParams } from 'react-router-dom';
 import { Eye, EyeOff, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -16,8 +16,19 @@ const ResetPasswordPage: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // The reset token is part of this page's address: never send it to other sites in a Referer header (also set as an HTTP
+  // header for /reset-password/* in vercel.json). The meta tag is removed again when the user leaves the page.
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'referrer';
+    meta.content = 'no-referrer';
+    document.head.appendChild(meta);
+    return () => { meta.remove(); };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
 
     if (passwordProblem(password)) {
@@ -83,7 +94,10 @@ const ResetPasswordPage: React.FC = () => {
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-[#FFE4EC] dark:bg-[#3D1825] border border-[#FF8FA3]/50 rounded-xl mb-4 animate-slide-down">
                   <AlertCircle className="w-4 h-4 text-[#E1447A] flex-shrink-0" />
-                  <p className="text-[#E1447A] text-xs font-medium">{error}</p>
+                  <p className="text-[#E1447A] text-xs font-medium" role="alert">
+                    {error}{' '}
+                    {/invalid|expired/i.test(error) && <Link to="/forgot-password" className="underline font-semibold">Request a new link</Link>}
+                  </p>
                 </div>
               )}
 

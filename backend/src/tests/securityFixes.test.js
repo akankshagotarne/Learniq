@@ -440,7 +440,7 @@ test('validateEnv: production refuses missing / placeholder / short JWT secrets 
   assert.equal(run({ NODE_ENV: 'production', JWT_SECRET: 'secret' }).ok, false);
   assert.equal(run({ NODE_ENV: 'production', JWT_SECRET: 'Sh0rt!key' }).ok, false, 'too short');
   const strong = 'f3a9c1d27b8e4406a1b5c9d0e2f7a8b34c5d6e7f8091a2b3c4d5e6f708192a3b';
-  const good = run({ NODE_ENV: 'production', JWT_SECRET: strong, CLIENT_URL: 'https://x.example.app', RESEND_API_KEY: 're_x' });
+  const good = run({ NODE_ENV: 'production', JWT_SECRET: strong, CLIENT_URL: 'https://x.example.app', RESEND_API_KEY: 're_x', EMAIL_FROM: 'LearnIQ <no-reply@send.learniq.study>' });
   assert.equal(good.ok, true);
   assert.equal(good.warn.length, 0);
   const mid = run({ NODE_ENV: 'production', JWT_SECRET: 'Zq7Xk2Lm9Pw4Rt8Vb3Nc' });

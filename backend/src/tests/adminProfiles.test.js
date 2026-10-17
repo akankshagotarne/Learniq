@@ -378,7 +378,11 @@ test('send password reset: a second click within a minute is refused (no duplica
 
 test('send password reset: with no email provider configured the admin gets a clear message and NO token exists anywhere', async () => {
   const before = fake.User.docs.find((d) => String(d._id) === String(F.teacher._id));
-  const r = await call(unmailed.base, 'POST', `/api/admin/users/${F.teacher._id}/send-password-reset`, { token: F.adminToken });
+  // the shared mailer reads the provider settings when it sends, so "not configured" means the variables are absent for this call
+  const saved = { u: process.env.EMAIL_USER, p: process.env.EMAIL_PASS };
+  delete process.env.EMAIL_USER; delete process.env.EMAIL_PASS;
+  let r;
+  try { r = await call(unmailed.base, 'POST', `/api/admin/users/${F.teacher._id}/send-password-reset`, { token: F.adminToken }); } finally { process.env.EMAIL_USER = saved.u; process.env.EMAIL_PASS = saved.p; }
   assert.equal(r.status, 503); assert.equal(r.body.code, 'EMAIL_NOT_CONFIGURED');
   assert.match(r.body.message, /not configured/i);
   assert.ok(!/reset-password|[a-f0-9]{64}/.test(r.text), 'no token or link is shown instead');
