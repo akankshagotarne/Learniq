@@ -17,6 +17,7 @@ const isPlainObj = (v) => v && typeof v === 'object' && !isOid(v) && !(v instanc
 const clone = (v) => {
   if (v === null || typeof v !== 'object') return v;
   if (v instanceof Date) return new Date(v.getTime());
+  if (Buffer.isBuffer(v)) return Buffer.from(v);
   if (isOid(v)) return v;
   if (Array.isArray(v)) return v.map(clone);
   const o = {};

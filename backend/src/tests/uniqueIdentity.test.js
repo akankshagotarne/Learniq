@@ -28,7 +28,15 @@ if (!REAL_MONGO) {
     const doc = await rawCreate(data);
     return Object.assign(doc, { toJSON: () => { const { password, ...rest } = doc; return rest; } });
   };
-  fake.User.findByIdAndUpdate = (id, data, opts) => fake.User.findOneAndUpdate({ _id: id }, { $set: data }, opts);
+  // accepts both a plain field object and a full update document ($set / $unset), like Mongoose
+  fake.User.findByIdAndUpdate = (id, data, opts) => fake.User.findOneAndUpdate({ _id: id }, Object.keys(data).some((k) => k.startsWith('$')) ? data : { $set: data }, opts);
+  // the profile endpoint re-checks the current password before a phone number (a login id) changes
+  const rawFindById = fake.User.findById.bind(fake.User);
+  fake.User.findById = (id) => {
+    const q = rawFindById(id); const then = q.then.bind(q);
+    q.then = (res, rej) => then((d) => res(d && Object.defineProperty(d, 'comparePassword', { value: async (p) => p === fake.User.docs.find((x) => String(x._id) === String(d._id)).password, enumerable: false })), rej);
+    return q;
+  };
   const overrides = {
     [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
     [path.join(SRC, 'models', 'User.js')]: fake.User,
@@ -265,7 +273,7 @@ test('profile update: cannot take another account\'s phone, may keep its own', a
   const a = await register({ phone: '9777777777' });
   const b = await register({ phone: '9888888888' });
   const put = async (token, phone) => {
-    const res = await fetch(`${base}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ phone }) });
+    const res = await fetch(`${base}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ phone, currentPassword: PASSWORD }) });
     return { status: res.status, json: await res.json() };
   };
   expectPhoneConflict(await put(b.json.token, '+91 97777 77777'));

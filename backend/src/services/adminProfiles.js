@@ -70,10 +70,10 @@ const byId = (docs) => new Map(docs.map((d) => [String(d._id), d]));
 /** Payment history (courses + lectures + notes + Olympiad) and the totals, newest first. */
 async function paymentsFor(studentId) {
   const [coursePays, olyPays] = await Promise.all([
-    Payment.find({ student: studentId })
+    Payment.find({ student: studentId, removedAt: null })
       .select('type course lecture note itemTitle amount currency status razorpayOrderId razorpayPaymentId createdAt verifiedAt archivedAt') // never the signature
       .sort('-createdAt').limit(LIST_CAP),
-    OlympiadPayment.find({ student: studentId })
+    OlympiadPayment.find({ student: studentId, removedAt: null })
       .select('exam amount currency status razorpayOrderId razorpayPaymentId createdAt verifiedAt archivedAt')
       .sort('-createdAt').limit(LIST_CAP),
   ]);

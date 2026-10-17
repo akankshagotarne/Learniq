@@ -11,6 +11,7 @@ import { LogoLink } from '../ui/Logo';
 import ThemeToggle from '../ui/ThemeToggle';
 import { COURSES_ENABLED } from '../../constants/features';
 import { standardShortLabel } from '../../constants/standards';
+import { avatarSrc } from '../../utils/avatar';
 
 interface NavItem {
   label: string;
@@ -35,6 +36,8 @@ const studentNav: NavItem[] = [
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
   { label: 'Interview Results', href: '/student/interview-results', icon: Video },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
+  { label: 'My Profile', href: '/student/profile', icon: User },
+  { label: 'Settings', href: '/student/settings', icon: Settings },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];
 
@@ -46,6 +49,8 @@ const teacherNav: NavItem[] = [
   { label: 'Student Questions', href: '/teacher/doubts', icon: MessageCircle },
   { label: 'Exams', href: '/teacher/exams', icon: ClipboardList },
   { label: 'Interview', href: '/teacher/interview', icon: Video },
+  { label: 'My Profile', href: '/teacher/profile', icon: User },
+  { label: 'Settings', href: '/teacher/settings', icon: Settings },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];
 
@@ -167,7 +172,7 @@ const Sidebar: React.FC = () => {
           <div className="p-4 border-b border-[#E7E7F2] dark:border-[#2E2F4A]">
             <div className="flex items-center gap-3 p-3 bg-[#F8F8FC] dark:bg-[#242540]/60 border border-[#E7E7F2] dark:border-[#2E2F4A] rounded-2xl">
               <img
-                src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6C63F2&color=fff&size=48`}
+                src={avatarSrc(user.name, user.avatar, 48)}
                 alt={user.name}
                 className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-[#1B1C2E] shadow-sm flex-shrink-0"
               />

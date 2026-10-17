@@ -7,6 +7,7 @@ import ThemeToggle from '../ui/ThemeToggle';
 import { COURSES_ENABLED } from '../../constants/features';
 import api from '../../services/api';
 import { Notification } from '../../types';
+import { avatarSrc } from '../../utils/avatar';
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -158,7 +159,7 @@ const Navbar: React.FC = () => {
                     aria-expanded={isProfileOpen}
                   >
                     <img
-                      src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6C63F2&color=fff&size=40`}
+                      src={avatarSrc(user.name, user.avatar, 40)}
                       alt={user.name}
                       className="w-8 h-8 rounded-full object-cover border border-[#E7E7F2] dark:border-[#2E2F4A]"
                     />

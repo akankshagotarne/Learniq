@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Award, BookOpen, CheckCircle2, CreditCard, Flame, IndianRupee, KeyRound, Mail, Phone, Power, Trash2, Trophy, UserCheck, UserX, Users,
+  Pencil, Award, BookOpen, CheckCircle2, CreditCard, Flame, IndianRupee, KeyRound, Mail, Phone, Power, Trash2, Trophy, UserCheck, UserX, Users,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import EditProfileDialog from '../../components/admin/EditProfileDialog';
 import ExamAccessPanel from '../../components/admin/ExamAccessPanel';
 import {
   Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor, maskEmail,
@@ -32,6 +33,7 @@ const AdminStudentProfilePage: React.FC = () => {
   const [tab, setTab] = useState<TabId>('overview');
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const latest = useRef(0);
 
   const load = useCallback(async () => {
@@ -134,6 +136,9 @@ const AdminStudentProfilePage: React.FC = () => {
                       <UserCheck className="w-3.5 h-3.5" /> Activate
                     </button>
                   )}
+                  <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg text-xs font-medium border border-brand-primary bg-brand-primary text-white inline-flex items-center gap-1.5">
+                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Edit Profile
+                  </button>
                   <button onClick={() => setPending('reset')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" /> Send password reset
                   </button>
@@ -324,6 +329,7 @@ const AdminStudentProfilePage: React.FC = () => {
           )}
         </div>
       </main>
+      {editing && u && <EditProfileDialog role="student" user={u as any} onClose={() => setEditing(false)} onSaved={() => void load()} />}
 
       <ConfirmDialog
         open={pending === 'deactivate'} tone="danger" busy={busy} title="Deactivate this student?" confirmLabel="Deactivate"

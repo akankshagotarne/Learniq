@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  BookOpen, ClipboardList, FileText, GraduationCap, KeyRound, Mail, Phone, Radio, ShieldOff, Trophy, UserCheck, UserX, Users, Video,
+  Pencil, BookOpen, ClipboardList, FileText, GraduationCap, KeyRound, Mail, Phone, Radio, ShieldOff, Trophy, UserCheck, UserX, Users, Video,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import EditProfileDialog from '../../components/admin/EditProfileDialog';
 import { COURSES_ENABLED } from '../../constants/features';
 import {
   Badge, BackButton, ConfirmDialog, EmptyState, InfoRow, ProfileError, ProfileSkeleton, Section, Stat, Tabs, Tone, avatarFor, maskEmail,
@@ -28,6 +29,7 @@ const AdminTeacherProfilePage: React.FC = () => {
   const [tab, setTab] = useState<TabId>('overview');
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const latest = useRef(0);
 
   const load = useCallback(async () => {
@@ -105,6 +107,9 @@ const AdminTeacherProfilePage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-border-subtle">
+                  <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg text-xs font-medium border border-brand-primary bg-brand-primary text-white inline-flex items-center gap-1.5">
+                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Edit Profile
+                  </button>
                   {!u.isApproved ? (
                     <button onClick={() => void patch({ isApproved: true }, 'Teacher approved!')} disabled={busy} className="px-3 py-2 rounded-lg text-xs font-medium border bg-[#DCFCE7] text-[#16A34A] border-[#DCFCE7] inline-flex items-center gap-1.5 disabled:opacity-60">
                       <UserCheck className="w-3.5 h-3.5" /> Approve teacher
@@ -234,6 +239,7 @@ const AdminTeacherProfilePage: React.FC = () => {
           )}
         </div>
       </main>
+      {editing && u && <EditProfileDialog role="teacher" user={u as any} onClose={() => setEditing(false)} onSaved={() => void load()} />}
 
       <ConfirmDialog
         open={pending === 'deactivate'} tone="danger" busy={busy} title="Deactivate this teacher?" confirmLabel="Deactivate"

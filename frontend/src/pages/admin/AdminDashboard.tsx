@@ -1,3 +1,4 @@
+import { avatarSrc } from '../../utils/avatar';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, BookOpen, Radio, CreditCard, TrendingUp, Award, BarChart2, ChevronRight, UserCheck, UserX, Trophy } from 'lucide-react';
@@ -95,7 +96,7 @@ const AdminDashboard: React.FC = () => {
               <div className="space-y-2">
                 {pendingTeachers.map(teacher => (
                   <div key={teacher._id} className="flex flex-wrap items-center gap-3 p-3 bg-surface rounded-xl border border-border-subtle">
-                    <img src={teacher.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.name)}&background=6C63F2&color=fff&size=40`}
+                    <img src={avatarSrc(teacher.name, teacher.avatar, 40)}
                       alt={teacher.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                     {/* the name keeps at least 10rem; on a narrow phone the buttons move to their own line */}
                     <div className="flex-1 min-w-[10rem]">

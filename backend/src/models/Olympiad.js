@@ -128,6 +128,10 @@ const olympiadPaymentSchema = new mongoose.Schema({
 
   // ── Archive (audit history): hidden from the ACTIVE admin list, never deleted. A SUCCESS payment is never hidden. ──
   archivedAt: { type: Date },
+  // Admin "Remove from History" (see models/index.js Payment): hidden from the normal Payments views and totals, never deleted.
+  removedAt: { type: Date, default: undefined },
+  removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+  removalReason: { type: String, trim: true, maxlength: 300, default: undefined },
   archiveReason: { type: String, trim: true },
 
   // ── Automatic reconciliation (services/paymentReconciler.js) ──
