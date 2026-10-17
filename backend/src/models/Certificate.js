@@ -27,6 +27,14 @@ const certificateSchema = new mongoose.Schema({
   verificationToken: { type: String, required: true, unique: true }, // random, unguessable; also accepted by the public verify endpoint
   certificatePdfUrl: { type: String, trim: true },                    // API path of the PDF (rendered on demand from this record)
 
+  // Written ONLY when an admin clears this student's exam records (services/olympiadClearance.js). The attempt the certificate was
+  // issued from is deleted then, so the figures that were printed on it are frozen here and verification / PDF keep working.
+  recordSnapshot: {
+    score: { type: Number }, totalMarks: { type: Number },
+    interviewCompleted: { type: Boolean }, interviewCompletedAt: { type: Date },
+    capturedAt: { type: Date },
+  },
+
   status: { type: String, enum: ['VALID', 'REVOKED'], default: 'VALID' },
   revokedAt: { type: Date },
   revokedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

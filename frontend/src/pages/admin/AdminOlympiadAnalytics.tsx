@@ -326,7 +326,7 @@ const AdminOlympiadAnalytics: React.FC = () => {
           )}
         </div>
       </main>
-      {openStudent && <StudentDrawer studentId={openStudent.id} examId={openStudent.examId} onClose={() => setOpenStudent(null)} onChanged={() => setReloadKey(k => k + 1)} />}
+      {openStudent && <StudentDrawer key={`${openStudent.id}:${openStudent.examId}`} studentId={openStudent.id} examId={openStudent.examId} onClose={() => setOpenStudent(null)} onChanged={() => setReloadKey(k => k + 1)} />}
     </div>
   );
 };

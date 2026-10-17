@@ -41,7 +41,20 @@ const interviewFor = async (studentId, examId) => {
   return { completed: false, completedAt: null };
 };
 
+/** After an admin cleared the student's exam records the attempt is gone; the frozen figures on the certificate are used instead. */
+const frozenFigures = (cert) => {
+  const f = cert && cert.recordSnapshot;
+  return f && Number.isFinite(Number(f.score)) && Number(f.totalMarks) > 0 && f.score !== null && f.totalMarks !== null ? f : null;
+};
+
 const buildContext = async (cert) => {
+  const frozen = frozenFigures(cert);
+  if (frozen) {
+    const exam = await OlympiadExam.findById(cert.exam);
+    if (!exam) throw new CertificateDataError('The records behind this certificate could not be found.', 'CERTIFICATE_RECORDS_MISSING');
+    // the certificate shows what was issued, whether or not the attempt still exists
+    return contextFrom(cert, exam, Number(frozen.score), Number(frozen.totalMarks), { completed: Boolean(frozen.interviewCompleted), completedAt: frozen.interviewCompletedAt || null });
+  }
   const [attempt, exam] = await Promise.all([OlympiadAttempt.findById(cert.attempt), OlympiadExam.findById(cert.exam)]);
   if (!attempt || !exam) throw new CertificateDataError('The records behind this certificate could not be found.', 'CERTIFICATE_RECORDS_MISSING');
   if (!sameId(attempt.student, cert.student) || !sameId(attempt.exam, cert.exam)) {
@@ -58,10 +71,22 @@ const buildContext = async (cert) => {
   if (Math.abs((score / totalMarks) * 100 - Number(cert.percentage)) > 0.51) {
     throw new CertificateDataError('This certificate does not match its score record.', 'CERTIFICATE_DATA_MISMATCH');
   }
-  const grade = svc.gradeFor(cert.percentage);
-  if (!grade || grade !== cert.grade) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
+  const grade0 = svc.gradeFor(cert.percentage);
+  if (!grade0 || grade0 !== cert.grade) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
 
   const interview = await interviewFor(cert.student, cert.exam);
+  return contextFrom(cert, exam, score, totalMarks, interview, true);
+};
+
+const contextFrom = (cert, exam, score, totalMarks, interview, checked = false) => {
+  if (!checked) {
+    if (!Number.isFinite(score) || !(totalMarks > 0) || score < 0 || score > totalMarks || Math.abs((score / totalMarks) * 100 - Number(cert.percentage)) > 0.51) {
+      throw new CertificateDataError('This certificate does not match its score record.', 'CERTIFICATE_DATA_MISMATCH');
+    }
+    const g = svc.gradeFor(cert.percentage);
+    if (!g || g !== cert.grade) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
+  }
+  const grade = svc.gradeFor(cert.percentage);
   const issueDate = effectiveIssueDate(cert, exam);
   return {
     certificateNumber: cert.certificateNumber,

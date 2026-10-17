@@ -278,7 +278,8 @@ test('profile lists every registration separately with exam status and offers Cl
   const { extra } = clearingServer(twoExams());
   await openProfile(page, extra);
   await expect(page.getByTestId('records-row')).toHaveCount(2);
-  await expect(page.getByTestId('records-table').locator('thead th')).toHaveText(['Standard', 'Exam', 'Registered', 'Exam status', 'Submitted', 'Action']);
+  await expect(page.getByTestId('records-row').first()).toContainText('Registered:');
+  await expect(page.getByTestId('records-row').first()).toContainText('Submitted:');
   await expect(page.getByTestId('clear-all-btn')).toContainText('Clear Olympiad Records');
   await expect(page.getByTestId('clear-exam-btn')).toHaveCount(2);
   await page.keyboard.press('Escape');
@@ -290,7 +291,7 @@ test('clear one exam: confirmation names student, standard and exam; Cancel dele
   await openProfile(page, extra);
   await page.getByTestId('clear-exam-btn').first().click();
   const modal = page.getByTestId('clear-modal');
-  await expect(modal).toContainText('Clear Olympiad Exam Records?');
+  await expect(modal).toContainText('Clear This Olympiad Exam?');
   await expect(modal).toContainText('Aarav Sharma'); await expect(modal).toContainText('Std 10'); await expect(modal).toContainText('Olympiad Std 10');
   await modal.getByRole('button', { name: 'Cancel' }).click();
   await expect(modal).toBeHidden(); expect(state.deletes).toHaveLength(0);
@@ -348,11 +349,11 @@ test('a failed clearing shows the server error, keeps the record on screen and n
   await expect(page.getByTestId('records-row')).toHaveCount(2);
 });
 
-test('a protected exam (issued certificate) cannot be cleared from the profile and says why', async ({ page }) => {
-  const msg = 'A certificate has been issued for this exam. Clearing its attempt would break the certificate, so these records were kept.';
-  const { extra } = clearingServer([reg('ex10', 'Olympiad Std 10', 10, { clear: clearInfo('ex10', 'Olympiad Std 10', 10, { blocked: true, blockerCode: 'CERTIFICATE_ISSUED', blockerMessage: msg }) })]);
+test('a protected exam (open interview) cannot be cleared from the profile and says why, other exams stay clearable', async ({ page }) => {
+  const msg = 'A teacher interview for this exam is still open. Finish or cancel it first.';
+  const { extra } = clearingServer([reg('ex10', 'Olympiad Std 10', 10, { clear: clearInfo('ex10', 'Olympiad Std 10', 10, { blocked: true, blockerCode: 'ACTIVE_INTERVIEW', blockerMessage: msg }) })]);
   await openProfile(page, extra);
-  await expect(page.getByTestId('records-blocked')).toContainText('certificate has been issued');
+  await expect(page.getByTestId('records-blocked')).toContainText('Cannot be cleared yet');
   await expect(page.getByTestId('clear-exam-btn')).toHaveCount(0);
   await expect(page.getByTestId('clear-all-btn')).toHaveCount(0);
 });
@@ -366,4 +367,39 @@ test('clear records works on a phone without horizontal overflow', async ({ page
   await page.getByTestId('clear-all-btn').click();
   await expect(page.getByTestId('clear-modal')).toBeVisible();
   expect((await findOverflow(page)).offenders).toEqual([]);
+});
+
+test('View Profile on each row of the same student identifies THAT exam; every row keeps its own working Clear Exam Data button after others were cleared', async ({ page }) => {
+  const three = [reg('ex2', 'Practice Test – 2nd Standard', 2), reg('ex9', 'Practice Test – 9th Standard', 9), reg('ex5', 'Practice Test – 5th Standard', 5)];
+  const { state, extra } = clearingServer(three);
+  const rows = [analyticsRow({ key: 'stu1:ex2', examId: 'ex2', standard: 2 }), analyticsRow({ key: 'stu1:ex9', examId: 'ex9', standard: 9 }), analyticsRow({ key: 'stu1:ex5', examId: 'ex5', standard: 5 })];
+  const withRows: Override = (m, p, b) => (m === 'GET' && p === '/olympiad/admin/analytics'
+    ? { body: analyticsPayload(rows.filter(r => state.regs.some(x => x.exam._id === r.examId))) } : extra(m, p, b));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(page, withRows);
+  const selectedOf = async () => page.locator('[data-testid="records-row"][data-selected="true"]').getAttribute('data-exam-id');
+
+  await page.getByTestId('student-row').nth(0).getByRole('button', { name: 'View Profile' }).click();
+  expect(await selectedOf()).toBe('ex2');
+  await expect(page.getByTestId('clear-exam-btn')).toHaveCount(3);
+  await page.locator('[data-exam-id="ex2"]').getByTestId('clear-exam-btn').click();
+  await expect(page.getByTestId('clear-modal-exam')).toHaveText('Practice Test – 2nd Standard');
+  await page.getByTestId('clear-confirm').click();
+  await expect(page.getByTestId('clear-success')).toBeVisible();
+  expect(state.deletes).toEqual(['/olympiad/admin/analytics/students/stu1/exams/ex2/records']);
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await expect(page.getByTestId('student-row')).toHaveCount(2);
+  await page.getByTestId('student-row').nth(0).getByRole('button', { name: 'View Profile' }).click(); // Std 9 is now the first row
+  expect(await selectedOf()).toBe('ex9');
+  await expect(page.getByTestId('clear-exam-btn')).toHaveCount(2);
+  await page.locator('[data-exam-id="ex9"]').getByTestId('clear-exam-btn').click();
+  await expect(page.getByTestId('clear-modal-exam')).toHaveText('Practice Test – 9th Standard');
+  await page.getByTestId('clear-confirm').click();
+  await expect(page.getByTestId('clear-success')).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByTestId('student-row').nth(0).getByRole('button', { name: 'View Profile' }).click();
+  expect(await selectedOf()).toBe('ex5');
+  await expect(page.locator('[data-exam-id="ex5"]').getByTestId('clear-exam-btn')).toBeEnabled();
 });

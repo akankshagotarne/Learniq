@@ -23,12 +23,16 @@ only if something **new** happens after the clearing (new attempt, new verified 
 `OlympiadAttempt` (answers, submission, score) · `OlympiadAttemptHistory` · `ProctoringSession`/`ProctoringEvent` of those attempts ·
 `TeacherInterview` + `InterviewEvaluation` of that exam (they depend on the attempt).
 
+## Kept and frozen
+`Certificate`: never deleted. Before the attempt is removed, its score, total marks and interview status are copied to
+`Certificate.recordSnapshot`; `certificateContext.buildContext` uses them, so the PDF and the public QR verification keep working.
+
 ## Never touched
 Users, `OlympiadPayment` / Razorpay data (all statuses), `Payment`, `Certificate`, `OlympiadAccessGrant`, exams, questions, interview
 slots/reminders, AI interviews, engineering exams, other students, other exams.
 
 ## Refused (nothing deleted for that exam, 409)
-* `CERTIFICATE_ISSUED` – the certificate PDF/QR reads the attempt's score; deleting it would silently break verification.
+* `CERTIFICATE_SNAPSHOT_UNAVAILABLE` – a certificate exists but its score cannot be read safely, so it could not be frozen.
 * `ACTIVE_INTERVIEW` – a teacher interview for the exam is still open.
 * `EXAM_IN_PROGRESS` – the student is taking the exam right now.
 "Clear all" skips such exams, clears the rest and reports the skipped ones.
@@ -47,3 +51,8 @@ reappears in analytics as new participation). Revoking that is a payment decisio
 
 ## Tests
 `npm run test:clearance` (backend), `e2e/olympiadAnalytics.spec.ts` (UI).
+
+## Identity of a record
+A registration is identified by **(studentId, examId)** (there is no registration collection; one student has at most one
+registration per exam). Each analytics row carries both, the profile opens with that exam marked "Selected record", and the DELETE
+route takes both ids and verifies them on the server. A second request for the same exam while the first runs is refused (409).

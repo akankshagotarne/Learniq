@@ -4,6 +4,7 @@ const { OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, OlympiadCle
 const { ProctoringSession, ProctoringEvent } = require('../models/Proctoring');
 const { TeacherInterview, InterviewEvaluation } = require('../models/TeacherInterview');
 const { Certificate } = require('../models/Certificate');
+const { interviewFor } = require('./certificateContext');
 const User = require('../models/User');
 
 /**
@@ -17,10 +18,11 @@ const User = require('../models/User');
  * DELETED (always scoped by student + exam; never by a bare id):
  *   OlympiadAttempt (answers, submission, score, result) · OlympiadAttemptHistory (earlier attempts kept after admin resets)
  *   ProctoringSession + ProctoringEvent of those attempts · TeacherInterview + InterviewEvaluation of that exam (they hang off the attempt)
- * NEVER TOUCHED: the user, OlympiadPayment (and Razorpay data), Payment, Certificate, OlympiadAccessGrant, exams, questions, interview
+ * KEPT AND FROZEN: the Certificate (its score / interview figures are copied onto it first, so the PDF and QR verification still work).
+ * NEVER TOUCHED: the user, OlympiadPayment (and Razorpay data), Payment, OlympiadAccessGrant, exams, questions, interview
  *   schedule slots / reminders, AI interviews, engineering exams, other students, other exams.
- * REFUSED (409, nothing deleted for that exam): an issued certificate (it reads the attempt's score), a teacher interview that is still
- *   open, an exam attempt that is being taken right now.
+ * REFUSED (409, nothing deleted for that exam): a teacher interview that is still open, an exam attempt that is being taken right now,
+ *   a certificate whose score cannot be read (it could not be frozen).
  */
 class ClearError extends Error { constructor(status, message, code, extra) { super(message); this.status = status; this.code = code; Object.assign(this, extra || {}); } }
 
@@ -30,7 +32,6 @@ const when = (v) => { if (!v) return null; const d = new Date(v); return Number.
 const OPEN_INTERVIEW = ['REQUESTED', 'ASSIGNED', 'WAITING_FOR_APPROVAL', 'APPROVED', 'CONNECTING', 'IN_PROGRESS', 'EVALUATION_PENDING'];
 
 const BLOCKERS = {
-  CERTIFICATE_ISSUED: 'A certificate has been issued for this exam. Clearing its attempt would break the certificate, so these records were kept.',
   ACTIVE_INTERVIEW: 'A teacher interview for this exam is still open. Finish or cancel it first.',
   EXAM_IN_PROGRESS: 'The student is taking this exam right now.',
 };
@@ -55,14 +56,14 @@ const stateForStudent = async (studentId, { examId = null, now = new Date() } = 
   const [payments, grants, attempts, history, clearances, certs, interviews] = await Promise.all([
     OlympiadPayment.find({ student: studentId, status: 'SUCCESS' }).select('exam status verifiedAt createdAt'),
     OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' }).select('exam createdAt'),
-    OlympiadAttempt.find({ student: studentId }).select('exam status startedAt deadline submittedAt createdAt'),
+    OlympiadAttempt.find({ student: studentId }).select('exam status startedAt deadline submittedAt createdAt score totalMarks'),
     OlympiadAttemptHistory.find({ student: studentId }).select('exam originalAttempt'),
     OlympiadClearance.find({ student: studentId }).select('exam clearedAt'),
-    Certificate.find({ student: studentId }).select('exam attempt'),
+    Certificate.find({ student: studentId }).select('exam attempt recordSnapshot'),
     TeacherInterview.find({ student: studentId }).select('exam attempt status'),
   ]);
   const ids = [...new Set([...payments, ...grants, ...attempts, ...history].map((x) => sid(x.exam)))].filter((i) => !examId || i === String(examId));
-  const exams = ids.length ? await OlympiadExam.find({ _id: { $in: ids }, examType: { $ne: 'engineering' } }).select('title standard examType') : [];
+  const exams = ids.length ? await OlympiadExam.find({ _id: { $in: ids }, examType: { $ne: 'engineering' } }).select('title standard examType totalMarks') : [];
   const attemptIds = [...attempts.map((a) => sid(a._id)), ...history.map((h) => sid(h.originalAttempt))];
   const sessions = attemptIds.length ? await ProctoringSession.find({ student: studentId, attempt: { $in: attemptIds } }).select('attempt') : [];
   const evaluations = interviews.length ? await InterviewEvaluation.find({ interview: { $in: interviews.map((i) => sid(i._id)) } }).select('interview') : [];
@@ -79,16 +80,15 @@ const stateForStudent = async (studentId, { examId = null, now = new Date() } = 
     const originals = [attempt && sid(attempt._id), ...hist.map((h) => sid(h.originalAttempt))].filter(Boolean);
     const ss = sessions.filter((s) => originals.includes(sid(s.attempt)));
     const ivIds = ivs.map((i) => sid(i._id));
-    const blocker = cert ? 'CERTIFICATE_ISSUED'
-      : ivs.some((i) => OPEN_INTERVIEW.includes(i.status)) ? 'ACTIVE_INTERVIEW'
+    const blocker = ivs.some((i) => OPEN_INTERVIEW.includes(i.status)) ? 'ACTIVE_INTERVIEW'
       : (attempt && attempt.status === 'IN_PROGRESS' && when(attempt.deadline) && when(attempt.deadline) > now) ? 'EXAM_IN_PROGRESS' : null;
     out.set(eid, {
       exam: e, visible, blocker,
       counts: {
         attempts: attempt ? 1 : 0, submitted: attempt && attempt.status === 'COMPLETED' ? 1 : 0, earlierAttempts: hist.length, proctoringSessions: ss.length,
-        interviews: ivs.length, evaluations: evaluations.filter((v) => ivIds.includes(sid(v.interview))).length,
+        interviews: ivs.length, evaluations: evaluations.filter((v) => ivIds.includes(sid(v.interview))).length, certificateKept: cert ? 1 : 0,
       },
-      attemptIds: originals, sessionIds: ss.map((s) => sid(s._id)),
+      cert, attempt, attemptIds: originals, sessionIds: ss.map((s) => sid(s._id)),
     });
   }
   return out;
@@ -116,7 +116,22 @@ const defaultTx = async (fn) => {
 const opt = (session) => (session ? { session } : {});
 const createOne = async (Model, data, session) => (session ? (await Model.create([data], { session }))[0] : Model.create(data));
 
+/** A certificate is never deleted. Its printed figures come from the attempt, so they are frozen on the certificate first. */
+const freezeCertificate = async (st, studentId, session) => {
+  if (!st.cert) return false;
+  if (st.cert.recordSnapshot && Number(st.cert.recordSnapshot.totalMarks) > 0) return true; // frozen by an earlier clearing
+  const a = st.attempt;
+  const total = a && Number(a.totalMarks) > 0 ? Number(a.totalMarks) : Number(st.exam.totalMarks);
+  if (!a || a.status !== 'COMPLETED' || !Number.isFinite(Number(a.score)) || !(total > 0)) {
+    throw new ClearError(409, 'This exam has a certificate, but its score could not be read safely, so the certificate would break. Nothing was deleted.', 'CERTIFICATE_SNAPSHOT_UNAVAILABLE');
+  }
+  const iv = await interviewFor(studentId, st.exam._id);
+  await Certificate.updateOne({ _id: st.cert._id }, { $set: { recordSnapshot: { score: Number(a.score), totalMarks: total, interviewCompleted: iv.completed, interviewCompletedAt: iv.completedAt || null, capturedAt: new Date() } } }, opt(session));
+  return true;
+};
+
 const wipeExam = async (st, studentId, session) => {
+  await freezeCertificate(st, studentId, session);
   const examId = sid(st.exam._id);
   const own = { student: studentId, exam: examId };
   const counts = { events: 0, proctoringSessions: 0, evaluations: 0, interviews: 0, earlierAttempts: 0, attempts: 0 };
@@ -142,6 +157,14 @@ const audit = async ({ admin, student, st, scope, counts, clearance }) => {
   } catch (e) { console.error('[olympiad-clearance] audit entry could not be written (records were cleared):', e && e.code ? e.code : 'error'); }
 };
 
+// one clearing per (student, exam) at a time: a double click / second admin cannot create a duplicate run
+const inFlight = new Set();
+const guarded = async (keys, fn) => {
+  if (keys.some((k) => inFlight.has(k))) throw new ClearError(409, 'These records are already being cleared. Refresh the profile in a moment.', 'IN_PROGRESS');
+  keys.forEach((k) => inFlight.add(k));
+  try { return await fn(); } finally { keys.forEach((k) => inFlight.delete(k)); }
+};
+
 const loadStudent = async (studentId) => {
   if (!OID_RE.test(String(studentId))) throw new ClearError(400, 'Invalid student id.', 'INVALID_STUDENT');
   const student = await User.findById(studentId).select('name role');
@@ -154,6 +177,9 @@ const loadStudent = async (studentId) => {
 const clearExam = async ({ studentId, examId }, admin, { runTx = defaultTx, now = new Date() } = {}) => {
   if (!OID_RE.test(String(examId))) throw new ClearError(400, 'Invalid exam id.', 'INVALID_EXAM');
   const student = await loadStudent(studentId);
+  return guarded([`${studentId}:${examId}`], () => clearExamLocked({ studentId, examId }, student, admin, runTx, now));
+};
+const clearExamLocked = async ({ studentId, examId }, student, admin, runTx, now) => {
   const states = await stateForStudent(studentId, { examId, now });
   const st = states.get(String(examId));
   if (!st || !st.visible) throw new ClearError(404, 'No Olympiad records were found for this student and exam. They may already have been cleared.', 'NOTHING_TO_CLEAR');
@@ -170,6 +196,9 @@ const clearExam = async ({ studentId, examId }, admin, { runTx = defaultTx, now 
 /** Clears every Std 1-10 exam of ONE student. Exams that must not be cleared (certificate, open interview, live attempt) are skipped and reported. */
 const clearAll = async ({ studentId }, admin, { runTx = defaultTx, now = new Date() } = {}) => {
   const student = await loadStudent(studentId);
+  return guarded([`${studentId}:*`], () => clearAllLocked({ studentId }, student, admin, runTx, now));
+};
+const clearAllLocked = async ({ studentId }, student, admin, runTx, now) => {
   const states = [...(await stateForStudent(studentId, { now })).values()].filter((s) => s.visible);
   if (!states.length) throw new ClearError(404, 'This student has no Olympiad records to clear.', 'NOTHING_TO_CLEAR');
   const todo = states.filter((s) => !s.blocker); const skipped = states.filter((s) => s.blocker);
