@@ -1,4 +1,5 @@
 const svc = require('../services/olympiadAnalytics');
+const clearing = require('../services/olympiadClearance');
 
 /**
  * Admin-only, read-only Olympiad Student Analytics. Role enforcement is on the route (protect + authorize('admin'));
@@ -43,4 +44,28 @@ const exportReport = handler(async (req, res) => {
   res.send(csv);
 });
 
-module.exports = { getAnalytics, getStudent, exportReport };
+// DELETE /api/olympiad/admin/analytics/students/:studentId/exams/:examId/records  (clear ONE exam of ONE student)
+// DELETE /api/olympiad/admin/analytics/students/:studentId/records                (clear ALL Std 1-10 exams of ONE student)
+const clearFail = (res, err) => {
+  if (err instanceof clearing.ClearError) {
+    return res.status(err.status).json({ success: false, code: err.code, message: err.message, skipped: err.skipped });
+  }
+  console.error('[olympiad-clearance] unexpected error:', err);
+  return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'The records could not be cleared. Nothing was reported as cleared; please refresh and check before retrying.' });
+};
+const clearExam = async (req, res) => {
+  try {
+    const data = await clearing.clearExam({ studentId: req.params.studentId, examId: req.params.examId }, req.user);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, message: 'Olympiad records cleared successfully. The analytics have been updated.', ...data });
+  } catch (err) { clearFail(res, err); }
+};
+const clearAll = async (req, res) => {
+  try {
+    const data = await clearing.clearAll({ studentId: req.params.studentId }, req.user);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, message: 'Olympiad records cleared successfully. The analytics have been updated.', ...data });
+  } catch (err) { clearFail(res, err); }
+};
+
+module.exports = { getAnalytics, getStudent, exportReport, clearExam, clearAll };

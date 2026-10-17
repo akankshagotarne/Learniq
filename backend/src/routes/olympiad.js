@@ -35,6 +35,9 @@ router.get('/admin/payments', ...adminAuth, ctrl.adminAllPayments);
 router.get('/admin/analytics', ...adminAuth, perUser(120), analytics.getAnalytics);
 router.get('/admin/analytics/export', ...adminAuth, perUser(10), analytics.exportReport);
 router.get('/admin/analytics/students/:studentId', ...adminAuth, perUser(120), analytics.getStudent);
+// Clear one student's Olympiad records (admin only; payments, certificates, accounts are never touched)
+router.delete('/admin/analytics/students/:studentId/exams/:examId/records', ...adminAuth, perUser(30), analytics.clearExam);
+router.delete('/admin/analytics/students/:studentId/records', ...adminAuth, perUser(30), analytics.clearAll);
 
 // Teacher (only exams they are assigned to via OlympiadExam.teacher)
 router.get('/teacher/exams', ...teacherAuth, ctrl.teacherListExams);

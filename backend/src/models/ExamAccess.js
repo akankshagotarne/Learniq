@@ -54,7 +54,7 @@ historySchema.index({ student: 1, exam: 1, resetAt: -1 });
 const BLOCKED = ['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndDelete', 'findOneAndReplace', 'deleteOne', 'deleteMany', 'replaceOne'];
 const auditSchema = new mongoose.Schema({
   dedupeKey: { type: String, required: true },
-  action: { type: String, enum: ['FREE_ACCESS_GRANTED', 'EXAM_ATTEMPT_RESET'], required: true },
+  action: { type: String, enum: ['FREE_ACCESS_GRANTED', 'EXAM_ATTEMPT_RESET', 'OLYMPIAD_RECORDS_CLEARED'], required: true },
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   studentName: { type: String },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
@@ -74,6 +74,8 @@ const auditSchema = new mongoose.Schema({
   previousAttemptStatus: { type: String },
   history: { type: mongoose.Schema.Types.ObjectId },
   entitlement: { type: String },
+  clearScope: { type: String },                 // OLYMPIAD_RECORDS_CLEARED: EXAM | ALL
+  clearedCounts: { type: mongoose.Schema.Types.Mixed }, // OLYMPIAD_RECORDS_CLEARED: how many documents were removed per collection (numbers only)
   at: { type: Date, default: Date.now },
 }, { timestamps: { createdAt: true, updatedAt: false } });
 auditSchema.index({ dedupeKey: 1 }, { unique: true });
@@ -82,8 +84,26 @@ for (const op of BLOCKED) {
   auditSchema.pre(op, function blocked() { throw new Error('Audit records are append-only.'); });
 }
 
+/**
+ * "Clear Olympiad Records" (services/olympiadClearance.js): one row per clearing of ONE student's ONE exam. This is what removes the
+ * registration from Olympiad Student Analytics WITHOUT touching the payment (payments are protected): the analytics ignore a
+ * registration that has a clearance unless NEW activity (a new attempt, payment or grant) happened after it.
+ */
+const clearanceSchema = new mongoose.Schema({
+  student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
+  clearedAt: { type: Date, default: Date.now },
+  clearedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  clearedByName: { type: String },
+  scope: { type: String, enum: ['EXAM', 'ALL'], required: true },
+  counts: { type: mongoose.Schema.Types.Mixed },
+}, { timestamps: { createdAt: true, updatedAt: false } });
+clearanceSchema.index({ student: 1, exam: 1, clearedAt: -1 });
+clearanceSchema.index({ exam: 1 });
+
 const OlympiadAccessGrant = mongoose.model('OlympiadAccessGrant', grantSchema);
 const OlympiadAttemptHistory = mongoose.model('OlympiadAttemptHistory', historySchema);
 const ExamAdminAudit = mongoose.model('ExamAdminAudit', auditSchema);
+const OlympiadClearance = mongoose.model('OlympiadClearance', clearanceSchema);
 
-module.exports = { OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, REASON_CODES };
+module.exports = { OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, OlympiadClearance, REASON_CODES };

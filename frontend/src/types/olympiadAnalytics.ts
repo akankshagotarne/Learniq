@@ -56,6 +56,13 @@ export interface AnalyticsResponse {
   meta: { truncated: boolean; generatedAt: string };
 }
 
+export interface ClearInfo {
+  examId: string; title: string; standard: number;
+  counts: { attempts: number; submitted: number; earlierAttempts: number; proctoringSessions: number; interviews: number; evaluations: number };
+  blocked: boolean; blockerCode: string | null; blockerMessage: string | null;
+}
+export interface ClearResult { success: boolean; message: string; cleared?: Record<string, number>; clearedExams?: (ClearInfo & { cleared: Record<string, number> })[]; skipped?: ClearInfo[]; totals?: Record<string, number> }
+
 export interface DetailRegistration {
   exam: { _id: string; title: string; standard: number; startDate: string; endDate: string; totalQuestions: number; totalMarks: number; resultsPublishedAt: string | null };
   registered: boolean;
@@ -72,6 +79,7 @@ export interface DetailRegistration {
   attemptHistory: { _id: string; attemptNumber: number; submittedAt: string | null; score: number | null; totalMarks: number | null; percentage: number | null; resetAt: string; resetByName: string | null }[];
   certificate: { certificateNumber: string; status: string; grade: string; issueDate: string } | null;
   needsReview: boolean;
+  clear: ClearInfo | null;
 }
 export interface StudentDetail {
   student: { _id: string; name: string; email: string | null; phone: string | null; standard: number | null; school: string | null; accountCreatedAt: string | null; accountStatus: string };
