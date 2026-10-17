@@ -14,7 +14,7 @@ const handler = (fn) => async (req, res) => {
   }
 };
 
-// GET /api/olympiad/admin/analytics?exam=&standard=&payment=&participation=&view=&search=&sort=&order=&page=&limit=&registeredFrom=&registeredTo=&attemptFrom=&attemptTo=&submittedFrom=&submittedTo=
+// GET /api/olympiad/admin/analytics?exam=&standard=&participation=&view=&search=&sort=&order=&page=&limit=&registeredFrom=&registeredTo=
 const getAnalytics = handler(async (req, res) => {
   const data = await svc.analytics(req.query);
   res.set('Cache-Control', 'no-store');
