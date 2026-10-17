@@ -80,6 +80,9 @@ const FORM = { college: 'Sinhgad Institute of Technology', branch: 'Information 
 const resetAll = async () => {
   Object.values(fake.registry).forEach((m) => { if (!['AuthSession', 'SessionTakeover'].includes(m.name)) m.reset(); });
   const { exam } = await svc.ensureEngineeringExam();
+  // the seeded default deadline is a fixed calendar date; once it has passed the fixture must not depend on the wall clock
+  const stored = fake.OlympiadExam.docs.find((d) => d.slug === svc.EXAM_SLUG);
+  if (stored && stored.endDate < new Date()) { stored.endDate = new Date(Date.now() + 30 * 864e5); exam.endDate = stored.endDate; }
   return exam;
 };
 const examDoc = () => fake.OlympiadExam.docs.find((d) => d.slug === svc.EXAM_SLUG);
