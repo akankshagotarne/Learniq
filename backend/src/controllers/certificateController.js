@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const { Certificate } = require('../models/Certificate');
 const { OlympiadExam, OlympiadAttempt } = require('../models/Olympiad');
 const svc = require('../services/certificateService');
+const release = require('../services/resultsRelease');
+const certRelease = require('../services/certificateRelease');
 const { renderCompletionPdf } = require('../services/certificateCompletionPdf');
 const { buildContext, effectiveIssueDate, maskName, CertificateDataError } = require('../services/certificateContext');
 
@@ -45,15 +47,15 @@ const parseNumber = (raw) => {
 const isAdmin = (user) => user && user.role === 'admin';
 /** A certificate reveals pass/fail and the grade, so a student gets it only once the exam's results are published. */
 const releasedExamIds = async (examIds) => {
-  const exams = await OlympiadExam.find({ _id: { $in: examIds } }).select('examType resultsPublishedAt');
-  return new Set(exams.filter((e) => e.examType === 'engineering' || e.resultsPublishedAt).map((e) => String(e._id)));
+  const exams = await OlympiadExam.find({ _id: { $in: examIds } }).select('examType resultsPublishedAt resultsPublishAt');
+  return new Set(exams.filter((e) => release.isReleased(e)).map((e) => String(e._id)));
 };
 const sameId = (a, b) => String(a) === String(b);
 
 /** Owner / admin views carry the date the certificate was actually issued (results publication), same as the PDF. */
 const ownerViews = async (certs) => {
   const ids = [...new Set(certs.map((c) => String(c.exam)))];
-  const exams = ids.length ? await OlympiadExam.find({ _id: { $in: ids } }).select('resultsPublishedAt') : [];
+  const exams = ids.length ? await OlympiadExam.find({ _id: { $in: ids } }).select('resultsPublishedAt resultsPublishAt') : [];
   const byId = new Map(exams.map((e) => [String(e._id), e]));
   return certs.map((c) => svc.toOwnerView(c, effectiveIssueDate(c, byId.get(String(c.exam)))));
 };
@@ -67,6 +69,10 @@ const loadAccessible = async (req) => {
   }
   if (!isAdmin(req.user) && !(await releasedExamIds([cert.exam])).has(String(cert.exam))) {
     throw new ApiError(404, 'Certificate not found.', 'NOT_FOUND'); // results unpublished: no hint that one exists
+  }
+  if (!isAdmin(req.user) && cert.generationStatus && cert.generationStatus !== 'GENERATED') {
+    const r = await certRelease.ensureGenerated(cert);
+    if (!r.ok) throw new ApiError(409, 'This certificate is still being prepared. Please try again shortly.', 'CERTIFICATE_PREPARING');
   }
   return cert;
 };
@@ -87,28 +93,29 @@ const generate = handler(async (req, res) => {
   if (attempt.status !== 'COMPLETED') {
     throw new ApiError(409, 'Your certificate is available after you submit the examination.', 'NOT_SUBMITTED');
   }
-  if (!exam.resultsPublishedAt && exam.examType !== 'engineering') {
-    throw new ApiError(403, 'Your results and certificate will be available after the results are officially published.', 'RESULT_NOT_PUBLISHED');
+  if (!release.isReleased(exam)) {
+    throw new ApiError(403, 'Your certificates will be available after the official results are published on 18 October 2026 at 6:00 PM IST.', 'RESULT_NOT_PUBLISHED', { releaseAt: release.releaseInstant(exam) });
   }
-  // make sure the official result exists (idempotent, backend-only evaluation)
+  // make sure the official result exists (idempotent, backend-only evaluation). Every submitted attempt is eligible at ANY score.
   attempt = await require('./olympiadController')._internals.ensureEvaluated(attempt);
-
-  const outcome = svc.outcomeFor(attempt.percentage);
-  if (!outcome.passed) {
-    throw new ApiError(403, `A minimum of ${svc.PASS_PERCENTAGE}% is required to receive a certificate.`, 'BELOW_PASS_MARK', {
-      result: 'FAIL', percentage: attempt.percentage, passPercentage: svc.PASS_PERCENTAGE,
-    });
-  }
-  const { certificate, created, reason } = await svc.issueForAttempt(attempt);
-  if (!certificate) throw new ApiError(500, 'The certificate could not be created right now. Please try again.', reason || 'ISSUE_FAILED');
-  res.status(created ? 201 : 200).json({ success: true, created, certificate: (await ownerViews([certificate]))[0] });
+  const out = await certRelease.processAttempt(attempt);
+  const certs = [out.certificate, out.participation].filter(Boolean);
+  if (!certs.length) throw new ApiError(500, 'Your certificates could not be prepared right now. Please try again in a moment.', 'ISSUE_FAILED');
+  const ready = certs.filter((c) => c.generationStatus === 'GENERATED');
+  const views = await ownerViews(ready);
+  res.status(out.created ? 201 : 200).json({
+    success: true, created: !!out.created, certificate: views.find((v) => v.type !== 'PARTICIPATION') || null,
+    participationCertificate: views.find((v) => v.type === 'PARTICIPATION') || null, pending: ready.length < certs.length,
+  });
 });
 
 // GET /api/certificates/mine
 const mine = handler(async (req, res) => {
+  await certRelease.ensureForStudent(req.user._id); // catches up anything the sweeper has not reached yet (idempotent)
   const all = await Certificate.find({ student: req.user._id }).sort({ createdAt: -1 });
   const released = await releasedExamIds(all.map((c) => c.exam));
-  const rows = all.filter((c) => released.has(String(c.exam)));
+  // only released AND generated certificates are offered (legacy records without a generation status count as generated)
+  const rows = all.filter((c) => released.has(String(c.exam)) && (!c.generationStatus || c.generationStatus === 'GENERATED'));
   res.json({ success: true, certificates: await ownerViews(rows) });
 });
 
@@ -157,12 +164,18 @@ const verify = handler(async (req, res) => {
   }
   if (cert.status === 'REVOKED') return res.json({ success: true, integrity, ...svc.toPublicView(cert) });
 
-  const exam = await OlympiadExam.findById(cert.exam).select('examType resultsPublishedAt');
-  if (!exam || (exam.examType !== 'engineering' && !exam.resultsPublishedAt)) {
+  const exam = await OlympiadExam.findById(cert.exam).select('examType resultsPublishedAt resultsPublishAt');
+  if (!exam || !release.isReleased(exam)) {
     // results not officially published yet: the certificate exists but is not issued — never reported as VALID
     return res.json({ success: true, valid: false, status: 'PENDING', integrity, certificateNumber: cert.certificateNumber, message: 'This certificate has not been issued yet. Results are published on the declaration date.' });
   }
   const ctx = await buildContext(cert); // throws CertificateDataError → 409, never a half-true "valid"
+  if (ctx.kind === 'PARTICIPATION') {
+    return res.json({
+      success: true, ...svc.toPublicView(cert), integrity, studentName: maskName(cert.studentName),
+      interviewStatus: ctx.interviewStatus, issueDate: ctx.issueDate, issueDateLabel: ctx.issueDateLabel,
+    });
+  }
   res.json({
     success: true, ...svc.toPublicView(cert), integrity,
     studentName: maskName(cert.studentName),
@@ -188,7 +201,7 @@ const adminList = handler(async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   res.json({
     success: true,
-    certificates: (await ownerViews(rows)).map((v, i) => ({ ...v, examId: String(rows[i].exam), revokeReason: rows[i].revokeReason || null })),
+    certificates: (await ownerViews(rows)).map((v, i) => ({ ...v, examId: String(rows[i].exam), revokeReason: rows[i].revokeReason || null, generationAttempts: rows[i].generationAttempts || 0, generatedAt: rows[i].generatedAt || null })),
     page, limit, total, pages: Math.max(1, Math.ceil(total / limit)),
     summary: { total: validCount + revokedCount, valid: validCount, revoked: revokedCount },
   });
@@ -210,4 +223,15 @@ const adminReinstate = handler(async (req, res) => {
   res.json({ success: true, changed, certificate: (await ownerViews([certificate]))[0] });
 });
 
-module.exports = { generate, mine, getOne, download, verify, adminList, adminRevoke, adminReinstate };
+// POST /api/certificates/admin/exams/:examId/process   - scoped, idempotent retry; refuses before the official release
+const adminProcessExam = handler(async (req, res) => {
+  const examId = String(req.params.examId || '');
+  if (!OBJECT_ID_RE.test(examId)) throw new ApiError(400, 'A valid exam id is required.', 'INVALID_EXAM');
+  const exam = await OlympiadExam.findById(examId);
+  if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
+  if (!release.isReleased(exam)) throw new ApiError(409, 'Results are not published yet; certificates cannot be generated before the release.', 'NOT_RELEASED', { releaseAt: release.releaseInstant(exam) });
+  const out = await certRelease.processExam(exam);
+  res.json({ success: true, ...out });
+});
+
+module.exports = { adminProcessExam, generate, mine, getOne, download, verify, adminList, adminRevoke, adminReinstate };

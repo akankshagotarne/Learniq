@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Issues certificates for students who PASSED (>= 60%) before automatic certificates existed.
+ * Issues the result + participation certificates for every submitted attempt (any score) of a RELEASED exam.
  *
  * New results get their certificate automatically, and an older passed student would also receive theirs the first time
  * they open their result page. This script does the same for everybody at once, so the admin certificate list is
@@ -14,30 +14,34 @@
  */
 const path = require('path');
 
-/** @returns {{ passed, alreadyCertified, missing, issued, byStandard }} */
-const run = async ({ apply = false, log = console.log } = {}) => {
+/** @returns {{ submitted, complete, missing, processed, skippedUnreleased }} */
+const run = async ({ apply = false, log = console.log, now = new Date() } = {}) => {
   const { Certificate } = require('../models/Certificate');
-  const { OlympiadAttempt } = require('../models/Olympiad');
-  const { issueForAttempt, PASS_PERCENTAGE } = require('../services/certificateService');
+  const { OlympiadExam, OlympiadAttempt } = require('../models/Olympiad');
+  const { isReleased } = require('../services/resultsRelease');
+  const rel = require('../services/certificateRelease');
 
-  const attempts = await OlympiadAttempt.find({ status: 'COMPLETED', evaluatedAt: { $exists: true }, percentage: { $gte: PASS_PERCENTAGE } })
-    .sort({ submittedAt: 1 });
-  const certified = new Set((await Certificate.distinct('attempt')).map(String));
-  const missing = attempts.filter((a) => !certified.has(String(a._id)));
-
-  const result = { passed: attempts.length, alreadyCertified: attempts.length - missing.length, missing: missing.length, issued: 0, byStandard: {} };
-  log(`# Certificate backfill — ${apply ? 'APPLY' : 'DRY RUN (nothing is written)'}`);
-  log(`Passed attempts (>= ${PASS_PERCENTAGE}%): ${result.passed}   already have a certificate: ${result.alreadyCertified}   missing: ${result.missing}`);
-
-  for (const attempt of missing) {
-    if (!apply) continue;
-    const { certificate, created } = await issueForAttempt(attempt);
-    if (certificate && created) {
-      result.issued += 1;
-      result.byStandard[certificate.standard] = (result.byStandard[certificate.standard] || 0) + 1;
-    }
+  // EVERY successfully submitted attempt is eligible for both certificates, whatever its score.
+  const attempts = await OlympiadAttempt.find({ status: 'COMPLETED' }).sort({ submittedAt: 1 });
+  const types = {};
+  for (const c of await Certificate.find({}).select('attempt type generationStatus')) {
+    const k = String(c.attempt); (types[k] = types[k] || new Set()).add(c.type === 'PARTICIPATION' ? 'P' : 'R');
   }
-  if (apply) log(`Issued: ${result.issued}${result.issued ? `  (by standard: ${JSON.stringify(result.byStandard)})` : ''}`);
+  const missing = attempts.filter((a) => !(types[String(a._id)] && types[String(a._id)].size === 2));
+  const result = { submitted: attempts.length, complete: attempts.length - missing.length, missing: missing.length, processed: 0, skippedUnreleased: 0 };
+  log(`# Certificate backfill - ${apply ? 'APPLY' : 'DRY RUN (nothing is written)'}`);
+  log(`Submitted attempts: ${result.submitted}   with both certificates: ${result.complete}   missing at least one: ${result.missing}`);
+
+  const examIds = [...new Set(missing.map((a) => String(a.exam)))];
+  for (const id of examIds) {
+    const exam = await OlympiadExam.findById(id);
+    if (!exam || !isReleased(exam, now)) { result.skippedUnreleased += missing.filter((a) => String(a.exam) === id).length; continue; }
+    if (!apply) continue;
+    const r = await rel.processExam(exam, now); // only ever for RELEASED exams; idempotent
+    result.processed += r.processed || 0;
+  }
+  if (result.skippedUnreleased) log(`Skipped (results not released yet): ${result.skippedUnreleased}`);
+  if (apply) log(`Processed: ${result.processed}`);
   else if (result.missing) log('To issue them:  node src/scripts/backfillCertificates.js --apply');
   return result;
 };

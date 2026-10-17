@@ -157,7 +157,8 @@ test('TEST 1 — 84%: PASS, grade A, certificate + number + QR link + PDF + publ
   assert.equal(c.verifyUrl, `https://learniq.example.com/verify-certificate/${c.certificateNumber}?t=${svc.qrSignature(fake.Certificate.docs[0])}`);
   assert.match(c.verifyUrl, /\?t=[a-f0-9]{16}$/);
   assert.equal(c.issueDateLabel, svc.formatIssueDate(new Date()));
-  assert.equal(fake.Certificate.docs.length, 1);
+  assert.equal(fake.Certificate.docs.length, 2, 'a result certificate AND a participation certificate');
+  assert.equal(a.submit.participationCertificate.type, 'PARTICIPATION');
   S.aNumber = c.certificateNumber; S.a = a;
 
   const pdf = await call('GET', `/api/certificates/${c.certificateNumber}/download`, { token: a.token, raw: true });
@@ -182,29 +183,27 @@ test('TEST 1 — 84%: PASS, grade A, certificate + number + QR link + PDF + publ
   assert.equal(pub.body.standardLabel, '10th');
 });
 
-// ─────────────────────── TEST 2: 59 % → FAIL, nothing created ───────────────────────
-test('TEST 2 — 59%: FAIL, no certificate, no record, no download', async () => {
+// ─────────────────────── TEST 2: 59 % → honest FAIL, but BOTH certificates are issued ───────────────────────
+test('TEST 2 — 59%: reported honestly as below the pass mark, yet both certificates are issued (no 60% restriction)', async () => {
   const before = fake.Certificate.docs.length;
   const f = await sitExam(59, { name: 'Almost There' });
   assert.equal(f.submit.result.percentage, 59);
-  assert.equal(f.submit.result.passed, false);
+  assert.equal(f.submit.result.passed, false, 'the result is never turned into a pass');
   assert.equal(f.submit.result.result, 'FAIL');
-  assert.equal(f.submit.result.grade, null);
-  assert.equal(f.submit.certificate, null);
-  assert.equal(fake.Certificate.docs.length, before, 'no certificate record for a FAIL');
-
-  const res = await call('GET', `/api/olympiad/exams/${S.exam._id}/result`, { token: f.token });
-  assert.equal(res.body.certificate, null);
-  assert.equal(res.body.result.result, 'FAIL');
-  const done = await call('GET', '/api/olympiad/completed', { token: f.token });
-  assert.equal(done.body.exams[0].certificate, null);
+  assert.equal(f.submit.result.grade, null, 'no grade is invented');
+  assert.equal(f.submit.certificate.percentage, 59);
+  assert.equal(f.submit.certificate.grade, null);
+  assert.equal(f.submit.certificate.result, 'BELOW_PASS');
+  assert.equal(f.submit.participationCertificate.type, 'PARTICIPATION');
+  assert.equal(fake.Certificate.docs.length, before + 2);
 
   const gen = await call('POST', `/api/certificates/generate`, { token: f.token, body: { examId: String(S.exam._id) } });
-  assert.equal(gen.status, 403);
-  assert.equal(gen.body.code, 'BELOW_PASS_MARK');
-  assert.equal(fake.Certificate.docs.length, before);
+  assert.equal(gen.status, 200);
+  assert.equal(fake.Certificate.docs.length, before + 2, 'generate is idempotent');
   const mine = await call('GET', '/api/certificates/mine', { token: f.token });
-  assert.deepEqual(mine.body.certificates, []);
+  assert.equal(mine.body.certificates.length, 2);
+  const pdf = await call('GET', `/api/certificates/${f.submit.certificate.certificateNumber}/download`, { token: f.token, raw: true });
+  assert.equal(pdf.status, 200);
 });
 
 // ─────────────────────── TEST 3 / 4 + every band ───────────────────────
@@ -224,7 +223,7 @@ test('TEST 5 — submitting twice / refreshing / racing never creates a second c
   const s = await sitExam(75);
   const n = s.submit.certificate.certificateNumber;
   const count = () => fake.Certificate.docs.filter((d) => String(d.student) === String(s.user._id)).length;
-  assert.equal(count(), 1);
+  assert.equal(count(), 2);
 
   const again = await call('POST', `/api/olympiad/exams/${S.exam._id}/submit`, { token: s.token, body: {} });
   assert.equal(again.body.alreadySubmitted, true);
@@ -233,14 +232,14 @@ test('TEST 5 — submitting twice / refreshing / racing never creates a second c
     const r = await call('GET', `/api/olympiad/exams/${S.exam._id}/result`, { token: s.token });
     assert.equal(r.body.certificate.certificateNumber, n);
   }
-  assert.equal(count(), 1);
+  assert.equal(count(), 2);
 
   // explicit generate calls, all at once
   const burst = await Promise.all(Array.from({ length: 6 }, () =>
     call('POST', '/api/certificates/generate', { token: s.token, body: { examId: String(S.exam._id) } })));
   assert.ok(burst.every((r) => [200, 201].includes(r.status)), burst.map((r) => r.status).join());
   assert.ok(burst.every((r) => r.body.certificate.certificateNumber === n));
-  assert.equal(count(), 1);
+  assert.equal(count(), 2);
   assert.equal(burst.filter((r) => r.body.created).length, 0, 'the certificate already existed');
 });
 
@@ -253,17 +252,22 @@ test('race — many workers issuing for the same attempt produce exactly one cer
   });
   const before = fake.Certificate.docs.length;
   const results = await Promise.all(Array.from({ length: 10 }, () => svc.issueForAttempt(attempt._id)));
-  assert.equal(fake.Certificate.docs.length, before + 1);
+  assert.equal(fake.Certificate.docs.length, before + 2, 'one of each type, never duplicated');
   assert.equal(new Set(results.map((r) => r.certificate.certificateNumber)).size, 1);
+  assert.equal(new Set(results.map((r) => r.participation.certificateNumber)).size, 1);
   assert.equal(results.filter((r) => r.created).length, 1);
 });
 
 test('certificate numbers are unique and sequential', async () => {
-  const numbers = fake.Certificate.docs.map((d) => d.certificateNumber);
-  assert.equal(new Set(numbers).size, numbers.length);
-  const seqs = numbers.map((n) => Number(n.split('-')[1])).sort((a, b) => a - b);
-  assert.deepEqual(seqs, seqs.map((_, i) => i + 1));
-  assert.ok(numbers.every((n) => /^LQOLY\d{4}-\d{6}$/.test(n)));
+  for (const [type, re] of [['RESULT', /^LQOLY\d{4}-\d{6}$/], ['PARTICIPATION', /^LQPAR\d{4}-\d{6}$/]]) {
+    const numbers = fake.Certificate.docs.filter((d) => d.type === type).map((d) => d.certificateNumber);
+    assert.equal(new Set(numbers).size, numbers.length);
+    const seqs = numbers.map((n) => Number(n.split('-')[1])).sort((a, b) => a - b);
+    assert.deepEqual(seqs, seqs.map((_, i) => i + 1), `${type} numbers are sequential`);
+    assert.ok(numbers.every((n) => re.test(n)));
+  }
+  const all = fake.Certificate.docs.map((d) => d.certificateNumber);
+  assert.equal(new Set(all).size, all.length, 'no number is shared between the two types');
 });
 
 // ─────────────────────── security ───────────────────────
@@ -274,8 +278,12 @@ test('security — nothing sent by the client can create or alter a certificate'
     token: failing.token,
     body: { examId: String(S.exam._id), percentage: 100, grade: 'A+', result: 'PASS', certificateNumber: 'LQOLY2026-999999', studentName: 'Hacker', studentId: String(S.admin.user._id) },
   });
-  assert.equal(forged.status, 403);
-  assert.equal(fake.Certificate.docs.length, before, 'forged percentage did not produce a certificate');
+  assert.equal(forged.status, 200);
+  assert.equal(forged.body.certificate.percentage, 40, 'the forged percentage was ignored: the stored result is used');
+  assert.equal(forged.body.certificate.grade, null);
+  assert.equal(forged.body.certificate.studentName, 'Sneaky Student');
+  assert.notEqual(forged.body.certificate.certificateNumber, 'LQOLY2026-999999');
+  assert.equal(fake.Certificate.docs.length, before + 2, 'only the genuine pair exists');
 
   const passing = await sitExam(72, { name: 'Honest Student' });
   const gen = await call('POST', '/api/certificates/generate', {
@@ -316,8 +324,9 @@ test('security — a certificate is private to its owner (and admins); strangers
   assert.equal((await call('GET', `/api/certificates/${S.aNumber}`, { token: S.admin.token })).status, 200);
   assert.equal((await call('GET', `/api/certificates/${S.aNumber}/download`, { token: S.admin.token, raw: true })).status, 200);
   const mine = await call('GET', '/api/certificates/mine', { token: S.a.token });
-  assert.equal(mine.body.certificates.length, 1);
-  assert.equal(mine.body.certificates[0].certificateNumber, S.aNumber);
+  assert.equal(mine.body.certificates.length, 2, 'result + participation');
+  assert.ok(mine.body.certificates.some((c) => c.certificateNumber === S.aNumber));
+  assert.deepEqual(mine.body.certificates.map((c) => c.type).sort(), ['PARTICIPATION', 'RESULT']);
   assert.equal((await call('GET', '/api/certificates/LQOLY2026-abc', { token: S.a.token })).status, 404, 'malformed number');
 });
 
@@ -402,7 +411,7 @@ test('admin — list, search by number / name, filter by standard / exam / grade
   const byNumber = await q({ search: S.aNumber.slice(-4) });
   assert.ok(byNumber.body.certificates.some((c) => c.certificateNumber === S.aNumber));
   const byName = await q({ search: 'nikhil reddy' });
-  assert.deepEqual(byName.body.certificates.map((c) => c.studentName), ['Nikhil Reddy']);
+  assert.deepEqual(byName.body.certificates.map((c) => c.studentName), ['Nikhil Reddy', 'Nikhil Reddy'], 'both certificates of that student');
   assert.equal((await q({ search: '.*' })).body.total, 0, 'search text is escaped, not run as a pattern');
 
   const grades = await q({ grade: 'A+' });
@@ -437,12 +446,14 @@ test('a certificate failure never breaks exam submission — the result opens fi
   assert.equal(s.submit.result.percentage, 66, 'the exam was submitted and evaluated');
   assert.equal(s.submit.result.passed, true);
   assert.equal(s.submit.certificate, null, 'no certificate yet');
+  assert.equal(s.submit.participationCertificate, null);
   assert.equal(fake.Certificate.docs.filter((d) => String(d.student) === String(s.user._id)).length, 0);
 
   const later = await call('GET', `/api/olympiad/exams/${S.exam._id}/result`, { token: s.token });
   assert.equal(later.status, 200);
   assert.equal(later.body.certificate.grade, 'B');
-  assert.equal(fake.Certificate.docs.filter((d) => String(d.student) === String(s.user._id)).length, 1);
+  assert.equal(later.body.participationCertificate.type, 'PARTICIPATION');
+  assert.equal(fake.Certificate.docs.filter((d) => String(d.student) === String(s.user._id)).length, 2);
 });
 
 test('students who passed BEFORE this feature existed get their certificate the first time they open their result', async () => {
@@ -457,7 +468,7 @@ test('students who passed BEFORE this feature existed get their certificate the 
   assert.equal(r.body.certificate.grade, 'A');
   const r2 = await call('GET', '/api/olympiad/completed', { token: u.token });
   assert.equal(r2.body.exams[0].certificate.certificateNumber, r.body.certificate.certificateNumber);
-  assert.equal(fake.Certificate.docs.filter((d) => String(d.student) === String(u.user._id)).length, 1);
+  assert.equal(fake.Certificate.docs.filter((d) => String(d.student) === String(u.user._id)).length, 2);
 });
 
 test('the certificate is a snapshot: renaming the student later does not change an issued certificate', async () => {
@@ -478,23 +489,22 @@ test('backfill script: dry run writes nothing; --apply issues only the missing c
       deadline: new Date(Date.now() + 5000), submittedAt: new Date(), evaluatedAt: new Date(), percentage: pct,
     });
   };
-  await mkDone('Old Pass One', 61); await mkDone('Old Pass Two', 99); await mkDone('Old Fail', 58.9);
+  await mkDone('Old Pass One', 61); await mkDone('Old Pass Two', 99); await mkDone('Old Low Score', 28.9);
   const silent = { log: () => {} };
   const before = fake.Certificate.docs.length;
 
   const dry = await run({ apply: false, ...silent });
-  assert.equal(dry.missing, 2);
+  assert.equal(dry.missing, 3, 'every submitted attempt is eligible, whatever the score');
   assert.equal(fake.Certificate.docs.length, before, 'dry run writes nothing');
 
   const applied = await run({ apply: true, ...silent });
-  assert.equal(applied.issued, 2);
-  assert.equal(fake.Certificate.docs.length, before + 2, 'the failing attempt gets no certificate');
-  assert.ok(!fake.Certificate.docs.some((d) => d.studentName === 'Old Fail'));
+  assert.equal(applied.processed >= 3, true);
+  assert.equal(fake.Certificate.docs.length, before + 6, 'both certificates for all three, including the low score');
+  assert.ok(fake.Certificate.docs.some((d) => d.studentName === 'Old Low Score' && d.type === 'PARTICIPATION'));
 
   const again = await run({ apply: true, ...silent });
   assert.equal(again.missing, 0);
-  assert.equal(again.issued, 0);
-  assert.equal(fake.Certificate.docs.length, before + 2);
+  assert.equal(fake.Certificate.docs.length, before + 6, 'a second run changes nothing');
 });
 
 // ─────────────────── Certificate of Completion: QR verification, interview status, issue date ───────────────────

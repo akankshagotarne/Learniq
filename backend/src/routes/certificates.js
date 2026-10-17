@@ -21,6 +21,7 @@ router.get('/verify/:certificateNumber', limit(240, false), ctrl.verify);
 
 // Admin (declared before '/:certificateNumber' so 'admin' is never read as a certificate number)
 router.get('/admin/list', ...adminAuth, ctrl.adminList);
+router.post('/admin/exams/:examId/process', ...adminAuth, limit(10), ctrl.adminProcessExam);
 router.post('/admin/:certificateNumber/revoke', ...adminAuth, limit(60), ctrl.adminRevoke);
 router.post('/admin/:certificateNumber/reinstate', ...adminAuth, limit(60), ctrl.adminReinstate);
 

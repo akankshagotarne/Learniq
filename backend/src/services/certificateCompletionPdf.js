@@ -287,11 +287,19 @@ const drawResultBox = (doc, ctx) => {
   cols.forEach((c) => c.icon(doc, c.cx, iconY));
   const labelY = y + 104; const valueY = y + 142;
   const label = (t, cx) => centred(doc, t, { font: 'sans', size: 19, cx, baseline: labelY, color: NAVY, spacing: 3.2 });
-  label('TEST SCORE', cols[0].cx); label('INTERVIEW STATUS', cols[1].cx); label('OVERALL RESULT', cols[2].cx);
+  const part = ctx.kind === 'PARTICIPATION';
+  label(part ? 'TEST STATUS' : 'TEST SCORE', cols[0].cx); label('INTERVIEW STATUS', cols[1].cx); label(part ? 'OVERALL REMARKS' : 'OVERALL RESULT', cols[2].cx);
   const value = (t, cx) => centred(doc, t, { font: 'serifBold', size: 34, cx, baseline: valueY, color: NAVY, maxWidth: 270, minSize: 22 });
-  value(`Score: ${ctx.scoreLabel}`, cols[0].cx);
-  value(ctx.interview.completed ? 'Completed' : 'Not completed', cols[1].cx);
-  value(`${ctx.resultLabel} / ${ctx.grade}`, cols[2].cx);
+  if (part) {
+    // participation: factual statuses only - nothing about marks
+    value(ctx.testStatus || 'Participated', cols[0].cx);
+    value(ctx.interviewStatus, cols[1].cx);
+    value(ctx.overallRemarks || 'Active Participant', cols[2].cx);
+  } else {
+    value(`Score: ${ctx.scoreLabel}`, cols[0].cx);
+    value(ctx.interview.completed ? 'Completed' : 'Not completed', cols[1].cx);
+    value(ctx.grade ? `${ctx.resultLabel} / ${ctx.grade}` : ctx.resultLabel, cols[2].cx); // below the pass mark there is no grade: the real result is shown
+  }
 };
 
 const drawQr = (doc, url, cx, cy, size) => {
@@ -390,9 +398,9 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     layout: 'landscape',
     margin: 0,
     info: {
-      Title: `LearnIQ Certificate of Completion ${ctx.certificateNumber}`,
+      Title: `LearnIQ Certificate of ${ctx.kind === 'PARTICIPATION' ? 'Participation' : 'Completion'} ${ctx.certificateNumber}`,
       Author: 'LearnIQ',
-      Subject: 'LearnIQ Test & Interview — Certificate of Completion',
+      Subject: `LearnIQ Test & Interview — Certificate of ${ctx.kind === 'PARTICIPATION' ? 'Participation' : 'Completion'}`,
       CreationDate: issued,
       ModDate: issued,
     },
@@ -416,20 +424,26 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     drawTagline(doc);
 
     // headline block
-    centred(doc, 'CERTIFICATE OF COMPLETION', { font: 'heading', size: 84, cx: 768, baseline: 262, color: NAVY, maxWidth: 1050, minSize: 40 });
+    const participation = ctx.kind === 'PARTICIPATION';
+    centred(doc, participation ? 'CERTIFICATE OF PARTICIPATION' : 'CERTIFICATE OF COMPLETION', { font: 'heading', size: 84, cx: 768, baseline: 262, color: NAVY, maxWidth: 1050, minSize: 40 });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(350, 292).lineTo(722, 292).stroke().moveTo(814, 292).lineTo(1186, 292).stroke().restore();
     drawCapIcon(doc, 768, 292, 19, NAVY);
-    const subtitle = ctx.interview.completed ? 'LEARNIQ TEST & INTERVIEW' : 'LEARNIQ TEST';
+    const subtitle = participation || ctx.interview.completed ? 'LEARNIQ TEST & INTERVIEW' : 'LEARNIQ TEST';
     const sw = centred(doc, subtitle, { font: 'serifBold', size: 48, cx: 768, baseline: 362, color: BLUE });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(300, 348).lineTo(768 - sw / 2 - 22, 348).stroke().moveTo(768 + sw / 2 + 22, 348).lineTo(1226, 348).stroke().restore();
     centred(doc, 'This certificate is proudly presented to', { font: 'serif', size: 32, cx: 768, baseline: 410, color: NAVY });
     drawName(doc, ctx.studentName);
     drawRule(doc, 410, 1130, 516, true);
-    const body1 = ctx.interview.completed
-      ? 'for successfully completing the LearnIQ test and interview.'
-      : 'for successfully completing the LearnIQ test.';
+    const body1 = participation
+      ? 'in recognition of participating in the LearnIQ Test & Interview.'
+      : ctx.interview.completed
+        ? 'for successfully completing the LearnIQ test and interview.'
+        : 'for successfully completing the LearnIQ test.';
+    const body2 = participation
+      ? 'Your enthusiasm and effort towards learning are truly appreciated!'
+      : 'Your hard work, dedication and perseverance have truly paid off!';
     centred(doc, body1, { font: 'serif', size: 29, cx: 768, baseline: 560, color: '#1F2F5C' });
-    centred(doc, 'Your hard work, dedication and perseverance have truly paid off!', { font: 'serif', size: 29, cx: 768, baseline: 594, color: '#1F2F5C' });
+    centred(doc, body2, { font: 'serif', size: 29, cx: 768, baseline: 594, color: '#1F2F5C' });
 
     drawResultBox(doc, ctx);
     drawVerifyColumn(doc, ctx);

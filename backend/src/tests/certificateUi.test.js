@@ -32,15 +32,22 @@ test('verification page shows Valid / Revoked / not found from the backend and n
   for (const label of ['Certificate No.', 'Student', 'Standard', 'Examination', 'Test score', 'Interview status', 'Overall result', 'Date of Issue', 'Certificate Invalid', 'not issued yet']) assert.ok(page.includes(label), label);
 });
 
-test('result page: PASS shows the certificate buttons, FAIL shows "Not Available" and never a download button', opts, () => {
+test('result page: the outcome is shown honestly and BOTH certificates are offered at any score (no 60% gate)', opts, () => {
   const banner = read('components/olympiad/CertificateBanner.tsx');
-  const failBranch = banner.slice(banner.indexOf('if (!passed)'), banner.indexOf('const retry'));
-  assert.match(failBranch, /Result: FAIL/);
-  assert.match(failBranch, /Not Available/);
-  assert.ok(!/CertificateActions|Download|View Certificate|certificatesApi/.test(failBranch), 'no certificate action in the FAIL branch');
   assert.match(banner, /Congratulations!/);
   assert.match(banner, /You have successfully passed the LearnIQ All India Olympiad Test 2026\./);
-  assert.match(banner, /<CertificateActions certificate=\{certificate\}/);
+  assert.match(banner, /Below pass mark/);
+  assert.match(banner, /<CertificatePair /);
+  assert.ok(!/Not Available|Result: FAIL|A minimum of/.test(banner), 'no certificate is withheld for a low score');
+  const pair = read('components/olympiad/CertificatePair.tsx');
+  assert.match(pair, /Result Certificate/);
+  assert.match(pair, /Participation Certificate/);
+  assert.match(pair, /<CertificateActions certificate=\{cert\}/);
+  assert.match(pair, /releaseNotice\(releaseAt\)/);
+  assert.ok(pair.indexOf('!released') < pair.indexOf('<CertificateActions'), 'nothing is offered before the release');
+  const notice = read('components/olympiad/certificateRelease.ts');
+  assert.match(notice, /Your certificates will be available after the official results are published on/);
+  assert.match(notice, /2026-10-18T12:30:00\.000Z/);
   const actions = read('components/olympiad/CertificateActions.tsx');
   assert.ok(actions.indexOf("status === 'REVOKED'") < actions.indexOf('View Certificate'), 'a revoked certificate offers no buttons');
   assert.match(actions, /View Certificate/);
@@ -58,7 +65,8 @@ test('student area links to Results & Certificates', opts, () => {
   assert.match(read('components/layout/Sidebar.tsx'), /Results & Certificates', href: '\/student\/certificates'/);
   const page = read('pages/student/StudentCertificatesPage.tsx');
   assert.match(page, /olympiadApi\.completed\(\)/);
-  assert.match(page, /Not Available/);
+  assert.match(page, /<CertificatePair/);
+  assert.ok(!/60% or more|a score of 60%/.test(page), 'no passing-mark restriction text');
 });
 
 test('admin Olympiad dashboard has a Certificates tab with search, filters, view, download and revoke', opts, () => {
@@ -66,7 +74,7 @@ test('admin Olympiad dashboard has a Certificates tab with search, filters, view
   assert.match(admin, /<AdminCertificatesPanel /);
   assert.match(admin, /'certificates'/);
   const panel = read('components/olympiad/AdminCertificatesPanel.tsx');
-  for (const needle of ['Search certificates', 'Filter by standard', 'Filter by exam', 'Filter by grade', 'Filter by status', 'Issued from', 'Issued to',
+  for (const needle of ['Search certificates', 'Filter by standard', 'Filter by exam', 'Filter by grade', 'Filter by type', 'Filter by generation status', 'Retry generation', 'Generation', 'Filter by status', 'Issued from', 'Issued to',
     'View certificate', 'Download certificate', 'Revoke certificate', 'Reinstate certificate', 'Certificate No.', 'Student', 'Exam', 'Grade', 'Result', 'Issued', 'Status']) {
     assert.ok(panel.includes(needle), `admin panel has "${needle}"`);
   }

@@ -44,6 +44,7 @@ const OlympiadResultPage: React.FC = () => {
   const [completion, setCompletion] = useState<OlympiadCompletion | null>(null);
   const [hidden, setHidden] = useState(false); // submitted, results not published yet
   const [certificate, setCertificate] = useState<OlympiadCertificate | null>(null);
+  const [participation, setParticipation] = useState<OlympiadCertificate | null>(null);
   const [review, setReview] = useState<OlympiadReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +64,7 @@ const OlympiadResultPage: React.FC = () => {
         if (cancelled) return;
         setResult(res.result);
         setCertificate(res.certificate ?? null);
+        setParticipation(res.participationCertificate ?? null);
         setReview([...rev].sort((a, b) => a.questionNumber - b.questionNumber));
         // the interview message only applies to the school Olympiad exams (not the engineering mock test)
         if (res.exam.accessMode !== 'approval') {
@@ -174,9 +176,9 @@ const OlympiadResultPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Pass / fail — a PASS (60%+) shows the certificate; a FAIL never does */}
+      {/* Official outcome + BOTH certificates (result + participation) for every submitted exam, at any score */}
       {exam.accessMode !== 'approval' && (
-        <CertificateBanner examId={examId} result={result} certificate={certificate} onCertificate={setCertificate} />
+        <CertificateBanner examId={examId} result={result} certificate={certificate} participation={participation} releaseAt={exam.resultsReleaseAt} onCertificates={(c) => { setCertificate(c.certificate); setParticipation(c.participation); }} />
       )}
 
       {/* Stat cards */}

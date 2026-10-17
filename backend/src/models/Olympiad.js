@@ -74,6 +74,11 @@ const olympiadExamSchema = new mongoose.Schema({
   // Test results are stored at submission but stay hidden from students until an administrator publishes them
   // (null = hidden). Publishing / withdrawing is audited. Students are never told their marks before this is set.
   resultsPublishedAt: { type: Date, default: null },
+  // Scheduled release (config/resultsRelease.js). Released = resultsPublishedAt set OR this instant has passed (services/resultsRelease.js).
+  resultsPublishAt: { type: Date, default: null },
+  resultsScheduleSeeded: { type: Boolean, default: false },
+  // Set when every submitted attempt of this exam has both certificates generated (services/certificateRelease.js)
+  certificatesReleasedAt: { type: Date, default: null },
   resultsPublishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   resultsAudit: { type: [new mongoose.Schema({ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, action: String }, { _id: false })], default: [] },
 
