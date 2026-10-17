@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 /**
  * Olympiad certificates.
  *
- * One certificate per (student, exam), created ONLY by the backend from the official stored
+ * One certificate per (student, exam, TYPE) - the percentage/grade RESULT certificate and the PARTICIPATION certificate are two
+ * separate records with separate numbers - created ONLY by the backend from the official stored
  * result (see services/certificateService.js). Every value is a snapshot taken at issue time, so a
  * later profile / exam edit can never change a certificate that has already been issued.
  *
@@ -11,7 +12,10 @@ const mongoose = require('mongoose');
  * verification page then reports it as revoked instead of valid.
  */
 const certificateSchema = new mongoose.Schema({
-  certificateNumber: { type: String, required: true, unique: true, trim: true }, // LQOLY2026-000123
+  certificateNumber: { type: String, required: true, unique: true, trim: true }, // LQOLY2026-000123 (result) / LQPAR2026-000123 (participation)
+  // RESULT = the existing percentage/grade certificate; PARTICIPATION = the "Certificate of Participation". Legacy documents have
+  // no type and are treated as RESULT (services/certificateMigration.js writes it onto them once).
+  type: { type: String, enum: ['RESULT', 'PARTICIPATION'], default: 'RESULT' },
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   attempt: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadAttempt', required: true },
@@ -20,8 +24,9 @@ const certificateSchema = new mongoose.Schema({
   studentName: { type: String, required: true, trim: true },
   standard: { type: String, required: true, trim: true }, // '10' — rendered as "10th" on the certificate
   percentage: { type: Number, required: true, min: 0, max: 100 },
-  grade: { type: String, required: true, enum: ['A+', 'A', 'B+', 'B'] },
-  result: { type: String, required: true, enum: ['PASS'], default: 'PASS' }, // a FAIL never produces a record
+  // Below the pass mark there is NO grade (the grading rules are unchanged): the certificate still exists and shows the real result.
+  grade: { type: String, enum: ['A+', 'A', 'B+', 'B', null], default: null },
+  result: { type: String, required: true, enum: ['PASS', 'BELOW_PASS', 'PARTICIPATED'], default: 'PASS' },
   issueDate: { type: Date, required: true },
 
   verificationToken: { type: String, required: true, unique: true }, // random, unguessable; also accepted by the public verify endpoint
@@ -35,6 +40,13 @@ const certificateSchema = new mongoose.Schema({
     capturedAt: { type: Date },
   },
 
+  // The record exists from submission, but a certificate is only offered once its PDF has been produced successfully (GENERATED).
+  // Legacy certificates have no value and count as generated. FAILED ones are retried by services/certificateRelease.js.
+  generationStatus: { type: String, enum: ['PENDING', 'GENERATED', 'FAILED'] },
+  generatedAt: { type: Date },
+  generationAttempts: { type: Number, default: 0 },
+  generationError: { type: String, trim: true, maxlength: 200 },
+
   status: { type: String, enum: ['VALID', 'REVOKED'], default: 'VALID' },
   revokedAt: { type: Date },
   revokedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -43,9 +55,11 @@ const certificateSchema = new mongoose.Schema({
   reinstatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
-// A student can hold at most ONE certificate per exam — the database enforces it even if two requests race.
-certificateSchema.index({ student: 1, exam: 1 }, { unique: true, name: 'one_certificate_per_student_exam' });
-certificateSchema.index({ attempt: 1 }, { unique: true, name: 'one_certificate_per_attempt' });
+// A student can hold at most ONE certificate of each type per exam - the database enforces it even if two requests race.
+// (The old single-certificate indexes one_certificate_per_student_exam / one_certificate_per_attempt are replaced at startup by
+// services/certificateMigration.js; until then they simply do not allow the second type.)
+certificateSchema.index({ student: 1, exam: 1, type: 1 }, { unique: true, name: 'one_certificate_per_student_exam_type' });
+certificateSchema.index({ attempt: 1, type: 1 }, { unique: true, name: 'one_certificate_per_attempt_type' });
 certificateSchema.index({ status: 1, createdAt: -1 });
 certificateSchema.index({ standard: 1, grade: 1 });
 certificateSchema.index({ student: 1, createdAt: -1 });

@@ -74,8 +74,11 @@ export const certificatesApi = {
 
   mine: async (): Promise<OlympiadCertificate[]> => (await api.get('/certificates/mine')).data.certificates || [],
 
-  /** Only the exam id is sent; the server checks the stored result and issues (or returns) the certificate. */
-  generate: async (examId: string): Promise<OlympiadCertificate> => (await api.post('/certificates/generate', { examId })).data.certificate,
+  /** Only the exam id is sent; the server checks the stored result and issues (or returns) BOTH certificates once results are released. */
+  generate: async (examId: string): Promise<{ certificate: OlympiadCertificate | null; participationCertificate: OlympiadCertificate | null; pending: boolean }> => {
+    const d = (await api.post('/certificates/generate', { examId })).data;
+    return { certificate: d.certificate ?? null, participationCertificate: d.participationCertificate ?? null, pending: !!d.pending };
+  },
 
   // admin
   adminList: async (query: AdminCertificateQuery = {}): Promise<AdminCertificateList> => {
@@ -83,6 +86,9 @@ export const certificatesApi = {
     Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== '' && v !== 'all') params[k] = v as string | number; });
     return (await api.get('/certificates/admin/list', { params })).data as AdminCertificateList;
   },
+  /** Scoped, idempotent retry for ONE exam; the server refuses it before the official release. */
+  adminProcessExam: async (examId: string): Promise<{ ok: boolean; processed?: number; failed?: number }> =>
+    (await api.post(`/certificates/admin/exams/${encodeURIComponent(examId)}/process`)).data,
   adminRevoke: async (certificateNumber: string, reason?: string): Promise<OlympiadCertificate> =>
     (await api.post(`/certificates/admin/${encodeURIComponent(certificateNumber)}/revoke`, { reason })).data.certificate,
   adminReinstate: async (certificateNumber: string): Promise<OlympiadCertificate> =>

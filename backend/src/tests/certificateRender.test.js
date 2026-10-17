@@ -55,8 +55,8 @@ test('schema: unique indexes guard duplicates at the database level', () => {
   const find = (fields) => idx.find((i) => JSON.stringify(i.fields) === JSON.stringify(fields));
   assert.ok(Certificate.schema.path('certificateNumber').options.unique, 'unique certificateNumber');
   assert.ok(Certificate.schema.path('verificationToken').options.unique, 'unique verification token');
-  assert.equal(find({ student: 1, exam: 1 }).opts.unique, true, 'one certificate per student + exam');
-  assert.equal(find({ attempt: 1 }).opts.unique, true, 'one certificate per attempt');
+  assert.equal(find({ student: 1, exam: 1, type: 1 }).opts.unique, true, 'one certificate per student + exam + type');
+  assert.equal(find({ attempt: 1, type: 1 }).opts.unique, true, 'one certificate per attempt + type');
   assert.ok(find({ status: 1, createdAt: -1 }) && find({ standard: 1, grade: 1 }), 'admin filter indexes');
   assert.equal(Counter.schema.path('_id').instance, 'String');
 });

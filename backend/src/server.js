@@ -200,6 +200,15 @@ const startServer = async () => {
     await verifyUserIndexes();
     await backfillLegacyPhones();
     await verifySessionIndexes();
+    // Certificates: add the type-aware unique indexes BEFORE anything can issue a second certificate type (additive; deletes nothing)
+    try {
+      const m = await require('./services/certificateMigration').migrateCertificateIndexes(require('./models/Certificate').Certificate);
+      console.log(`🎓 Certificate indexes ready (${m.backfilled} legacy certificate(s) typed RESULT, ${m.dropped} old index(es) replaced)`);
+    } catch (err) {
+      console.error(`🚨 Certificate index migration FAILED (${err.message}). Participation certificates will not be issued until this is fixed.`);
+    }
+    const cs = require('./services/certificateRelease').startCertificateSweeper(); // 18 Oct 2026 6:00 PM IST release + certificate generation (persistent: state is in the database)
+    console.log(cs.started ? '📜 Certificate release sweeper: running (every 60 s)' : `⚠️  Certificate release sweeper NOT running: ${cs.reason}`);
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired
     require('./services/interviews').startInterviewSweeper(); // frees stale interview sessions (nobody present for INTERVIEW_STALE_MINUTES)
     startExamSweeper(); // same for teacher exams (server-owned deadline)

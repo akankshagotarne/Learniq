@@ -65,9 +65,20 @@ const PublicVerifyCertificatePage: React.FC = () => {
                 <Row label="Student" value={state.data.studentName} />
                 <Row label="Standard" value={state.data.standardLabel} />
                 <Row label="Examination" value={state.data.examName} />
-                <Row label="Test score" value={state.data.scoreLabel ?? `${state.data.percentage}%`} />
-                <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
-                <Row label="Overall result" value={<span className="text-[#16A34A]">{state.data.resultLabel ?? state.data.result} / {state.data.grade}</span>} />
+                <Row label="Certificate type" value={state.data.type === 'PARTICIPATION' ? 'Participation' : 'Result'} />
+                {state.data.type === 'PARTICIPATION' ? (
+                  <>
+                    <Row label="Test status" value="Participated" />
+                    <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
+                    <Row label="Overall remarks" value={<span className="text-[#16A34A]">Active Participant</span>} />
+                  </>
+                ) : (
+                  <>
+                    <Row label="Test score" value={state.data.scoreLabel ?? `${state.data.percentage}%`} />
+                    <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
+                    <Row label="Overall result" value={<span className="text-[#16A34A]">{state.data.resultLabel ?? state.data.result}{state.data.grade ? ` / ${state.data.grade}` : ''}</span>} />
+                  </>
+                )}
                 <Row label="Date of Issue" value={state.data.issueDateLabel} />
               </dl>
             </>
