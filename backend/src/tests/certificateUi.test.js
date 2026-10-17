@@ -29,7 +29,7 @@ test('verification page shows Valid / Revoked / not found from the backend and n
   assert.match(page, /Certificate not found/);
   assert.match(page, /certificatesApi\.verify\(/);
   assert.ok(!/useAuth|ProtectedRoute|localStorage/.test(page));
-  for (const label of ['Certificate No.', 'Student', 'Standard', 'Olympiad', 'Percentage', 'Grade', 'Result', 'Date of Issue']) assert.ok(page.includes(label), label);
+  for (const label of ['Certificate No.', 'Student', 'Standard', 'Examination', 'Test score', 'Interview status', 'Overall result', 'Date of Issue', 'Certificate Invalid', 'not issued yet']) assert.ok(page.includes(label), label);
 });
 
 test('result page: PASS shows the certificate buttons, FAIL shows "Not Available" and never a download button', opts, () => {

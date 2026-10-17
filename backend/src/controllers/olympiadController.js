@@ -232,7 +232,7 @@ const certificatePayload = async (attempt) => {
   if (owner && owner.examType === 'engineering') return null;
   if (owner && !resultsReleased(owner)) return null; // a certificate would reveal the outcome: nothing until the results are published
   const { certificate } = await certificates.safeIssueForAttempt(attempt);
-  return certificate ? certificates.toOwnerView(certificate) : null;
+  return certificate ? certificates.toOwnerView(certificate, require('../services/certificateContext').effectiveIssueDate(certificate, owner)) : null;
 };
 
 /** Atomically lock the attempt as COMPLETED, then evaluate. Safe to call concurrently / repeatedly. */

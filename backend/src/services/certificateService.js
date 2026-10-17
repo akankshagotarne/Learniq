@@ -153,10 +153,34 @@ const safeIssueForAttempt = async (attemptOrId, now) => {
 // ──────────────────────────────────────────────
 // Serialisers — no MongoDB ids, no internal fields
 // ──────────────────────────────────────────────
-const verificationUrl = (cert) => `${getPrimaryClientUrl()}/verify-certificate/${encodeURIComponent(cert.certificateNumber)}`;
+const PRODUCTION_SITE = 'https://www.learniq.study';
+/**
+ * Public site the QR code points to. CERTIFICATE_VERIFY_BASE_URL wins; otherwise the primary CLIENT_URL; a certificate
+ * must never carry a non-HTTPS (or localhost) link, so anything else falls back to the production domain.
+ */
+const verifyBaseUrl = () => {
+  const candidate = String(process.env.CERTIFICATE_VERIFY_BASE_URL || getPrimaryClientUrl()).trim().replace(/\/+$/, '');
+  return /^https:\/\/[^\s/]+$/i.test(candidate) && !/localhost|127\.0\.0\.1/i.test(candidate) ? candidate : PRODUCTION_SITE;
+};
+
+/**
+ * Integrity tag printed inside the QR URL: HMAC(number) keyed with the certificate's secret verificationToken (never
+ * printed). A QR whose number was edited — or invented — cannot carry a matching tag.
+ */
+const qrSignature = (cert) => crypto.createHmac('sha256', String(cert.verificationToken || '')).update(String(cert.certificateNumber)).digest('hex').slice(0, 16);
+const SIGNATURE_RE = /^[a-f0-9]{16}$/;
+const checkSignature = (cert, provided) => {
+  if (provided === undefined || provided === null || provided === '') return 'NOT_PROVIDED';
+  const p = String(provided).toLowerCase();
+  if (!SIGNATURE_RE.test(p)) return 'MISMATCH';
+  const a = Buffer.from(p); const b = Buffer.from(qrSignature(cert));
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? 'MATCH' : 'MISMATCH';
+};
+
+const verificationUrl = (cert) => `${verifyBaseUrl()}/verify-certificate/${encodeURIComponent(cert.certificateNumber)}?t=${qrSignature(cert)}`;
 
 /** What a logged-in student (or admin) sees */
-const toOwnerView = (c) => ({
+const toOwnerView = (c, issueDate = c.issueDate) => ({
   certificateNumber: c.certificateNumber,
   studentName: c.studentName,
   standard: c.standard,
@@ -165,8 +189,8 @@ const toOwnerView = (c) => ({
   percentage: c.percentage,
   grade: c.grade,
   result: c.result,
-  issueDate: c.issueDate,
-  issueDateLabel: formatIssueDate(c.issueDate),
+  issueDate,
+  issueDateLabel: formatIssueDate(issueDate),
   status: c.status,
   revokedAt: c.revokedAt || null,
   downloadPath: `/certificates/${c.certificateNumber}/download`,
@@ -252,6 +276,6 @@ module.exports = {
   PASS_PERCENTAGE, GRADE_BANDS, CERT_PREFIX,
   gradeFor, isPass, ordinal, formatPercentage, formatIssueDate, yearIST, formatNumber,
   issueForAttempt, safeIssueForAttempt, outcomeFor,
-  verificationUrl, toOwnerView, toPublicView,
+  verificationUrl, verifyBaseUrl, qrSignature, checkSignature, toOwnerView, toPublicView,
   buildAdminFilter, revokeCertificate, reinstateCertificate, escapeRegex,
 };

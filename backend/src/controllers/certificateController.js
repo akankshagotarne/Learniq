@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 const { Certificate } = require('../models/Certificate');
 const { OlympiadExam, OlympiadAttempt } = require('../models/Olympiad');
 const svc = require('../services/certificateService');
-const { renderCertificatePdf } = require('../services/certificatePdf');
+const { renderCompletionPdf } = require('../services/certificateCompletionPdf');
+const { buildContext, effectiveIssueDate, maskName, CertificateDataError } = require('../services/certificateContext');
 
 /**
  * Certificates API. Rules (who passed, which grade, which number) live in services/certificateService.js and are
@@ -21,6 +22,10 @@ const handler = (fn) => async (req, res) => {
   } catch (err) {
     if (err instanceof ApiError) {
       return res.status(err.status).json({ success: false, message: err.message, code: err.code, ...err.extra });
+    }
+    if (err instanceof CertificateDataError) {
+      console.error('[certificates] inconsistent certificate data:', err.code, err.message);
+      return res.status(409).json({ success: false, code: err.code, message: err.message });
     }
     console.error('[certificates] unexpected error:', err);
     return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'Something went wrong on our side. Please try again in a moment.' });
@@ -44,6 +49,14 @@ const releasedExamIds = async (examIds) => {
   return new Set(exams.filter((e) => e.examType === 'engineering' || e.resultsPublishedAt).map((e) => String(e._id)));
 };
 const sameId = (a, b) => String(a) === String(b);
+
+/** Owner / admin views carry the date the certificate was actually issued (results publication), same as the PDF. */
+const ownerViews = async (certs) => {
+  const ids = [...new Set(certs.map((c) => String(c.exam)))];
+  const exams = ids.length ? await OlympiadExam.find({ _id: { $in: ids } }).select('resultsPublishedAt') : [];
+  const byId = new Map(exams.map((e) => [String(e._id), e]));
+  return certs.map((c) => svc.toOwnerView(c, effectiveIssueDate(c, byId.get(String(c.exam)))));
+};
 
 /** Load a certificate the caller may see: its owner, or an admin. Anyone else gets a plain 404 (no existence leak). */
 const loadAccessible = async (req) => {
@@ -88,7 +101,7 @@ const generate = handler(async (req, res) => {
   }
   const { certificate, created, reason } = await svc.issueForAttempt(attempt);
   if (!certificate) throw new ApiError(500, 'The certificate could not be created right now. Please try again.', reason || 'ISSUE_FAILED');
-  res.status(created ? 201 : 200).json({ success: true, created, certificate: svc.toOwnerView(certificate) });
+  res.status(created ? 201 : 200).json({ success: true, created, certificate: (await ownerViews([certificate]))[0] });
 });
 
 // GET /api/certificates/mine
@@ -96,14 +109,14 @@ const mine = handler(async (req, res) => {
   const all = await Certificate.find({ student: req.user._id }).sort({ createdAt: -1 });
   const released = await releasedExamIds(all.map((c) => c.exam));
   const rows = all.filter((c) => released.has(String(c.exam)));
-  res.json({ success: true, certificates: rows.map(svc.toOwnerView) });
+  res.json({ success: true, certificates: await ownerViews(rows) });
 });
 
 // GET /api/certificates/:certificateNumber   (owner or admin)
 const getOne = handler(async (req, res) => {
   const cert = await loadAccessible(req);
   res.setHeader('Cache-Control', 'private, no-store');
-  res.json({ success: true, certificate: svc.toOwnerView(cert) });
+  res.json({ success: true, certificate: (await ownerViews([cert]))[0] });
 });
 
 // GET /api/certificates/:certificateNumber/download[?disposition=inline]   (owner or admin)
@@ -112,7 +125,8 @@ const download = handler(async (req, res) => {
   if (cert.status === 'REVOKED' && !isAdmin(req.user)) {
     throw new ApiError(403, 'This certificate has been revoked and can no longer be downloaded.', 'CERTIFICATE_REVOKED');
   }
-  const pdf = await renderCertificatePdf(cert, svc.verificationUrl(cert));
+  // rendered fresh from the authoritative records on every request — the PDF is never stored, so it can never be stale
+  const pdf = await renderCompletionPdf(await buildContext(cert));
   const inline = req.query.disposition === 'inline';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="LearnIQ-Certificate-${cert.certificateNumber}.pdf"`);
@@ -126,13 +140,35 @@ const download = handler(async (req, res) => {
 // ──────────────────────────────────────────────
 // GET /api/certificates/verify/:certificateNumber   (the number from the QR code; the long verification token also works)
 const verify = handler(async (req, res) => {
-  const raw = String(req.params.certificateNumber || '').trim();
-  let cert = null;
-  if (NUMBER_RE.test(raw.toUpperCase())) cert = await Certificate.findOne({ certificateNumber: raw.toUpperCase() });
-  else if (TOKEN_RE.test(raw.toLowerCase())) cert = await Certificate.findOne({ verificationToken: raw.toLowerCase() });
   res.setHeader('Cache-Control', 'no-store'); // a revocation must show up immediately
-  if (!cert) return res.status(404).json({ success: false, valid: false, code: 'NOT_FOUND', message: 'No certificate matches this number.' });
-  res.json({ success: true, ...svc.toPublicView(cert) });
+  res.setHeader('X-Robots-Tag', 'noindex');
+  const raw = String(req.params.certificateNumber || '').trim().slice(0, 80);
+  let cert = null;
+  let byNumber = false;
+  if (NUMBER_RE.test(raw.toUpperCase())) { byNumber = true; cert = await Certificate.findOne({ certificateNumber: raw.toUpperCase() }); }
+  else if (TOKEN_RE.test(raw.toLowerCase())) cert = await Certificate.findOne({ verificationToken: raw.toLowerCase() });
+  if (!cert) {
+    return res.status(404).json({ success: false, valid: false, status: 'INVALID', code: 'NOT_FOUND', message: 'No LearnIQ certificate matches this number.' });
+  }
+  // tamper check: the QR carries a short HMAC tag of the number; a mismatch means the link was edited or invented
+  const integrity = byNumber ? svc.checkSignature(cert, req.query.t) : 'NOT_PROVIDED';
+  if (integrity === 'MISMATCH') {
+    return res.json({ success: true, valid: false, status: 'INVALID', code: 'MISMATCH', integrity, certificateNumber: cert.certificateNumber, message: 'This verification link does not match the certificate. It may have been altered — do not rely on it.' });
+  }
+  if (cert.status === 'REVOKED') return res.json({ success: true, integrity, ...svc.toPublicView(cert) });
+
+  const exam = await OlympiadExam.findById(cert.exam).select('examType resultsPublishedAt');
+  if (!exam || (exam.examType !== 'engineering' && !exam.resultsPublishedAt)) {
+    // results not officially published yet: the certificate exists but is not issued — never reported as VALID
+    return res.json({ success: true, valid: false, status: 'PENDING', integrity, certificateNumber: cert.certificateNumber, message: 'This certificate has not been issued yet. Results are published on the declaration date.' });
+  }
+  const ctx = await buildContext(cert); // throws CertificateDataError → 409, never a half-true "valid"
+  res.json({
+    success: true, ...svc.toPublicView(cert), integrity,
+    studentName: maskName(cert.studentName),
+    scoreLabel: ctx.scoreLabel, interviewStatus: ctx.interviewStatus, resultLabel: ctx.resultLabel,
+    issueDate: ctx.issueDate, issueDateLabel: ctx.issueDateLabel,
+  });
 });
 
 // ──────────────────────────────────────────────
@@ -152,7 +188,7 @@ const adminList = handler(async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   res.json({
     success: true,
-    certificates: rows.map((c) => ({ ...svc.toOwnerView(c), examId: String(c.exam), revokeReason: c.revokeReason || null })),
+    certificates: (await ownerViews(rows)).map((v, i) => ({ ...v, examId: String(rows[i].exam), revokeReason: rows[i].revokeReason || null })),
     page, limit, total, pages: Math.max(1, Math.ceil(total / limit)),
     summary: { total: validCount + revokedCount, valid: validCount, revoked: revokedCount },
   });
@@ -163,7 +199,7 @@ const adminRevoke = handler(async (req, res) => {
   const number = parseNumber(req.params.certificateNumber);
   const { certificate, changed } = await svc.revokeCertificate(number, req.user._id, req.body && req.body.reason);
   if (!certificate) throw new ApiError(404, 'Certificate not found.', 'NOT_FOUND');
-  res.json({ success: true, changed, certificate: svc.toOwnerView(certificate) });
+  res.json({ success: true, changed, certificate: (await ownerViews([certificate]))[0] });
 });
 
 // POST /api/certificates/admin/:certificateNumber/reinstate
@@ -171,7 +207,7 @@ const adminReinstate = handler(async (req, res) => {
   const number = parseNumber(req.params.certificateNumber);
   const { certificate, changed } = await svc.reinstateCertificate(number, req.user._id);
   if (!certificate) throw new ApiError(404, 'Certificate not found.', 'NOT_FOUND');
-  res.json({ success: true, changed, certificate: svc.toOwnerView(certificate) });
+  res.json({ success: true, changed, certificate: (await ownerViews([certificate]))[0] });
 });
 
 module.exports = { generate, mine, getOne, download, verify, adminList, adminRevoke, adminReinstate };

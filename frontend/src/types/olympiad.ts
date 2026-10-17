@@ -100,18 +100,25 @@ export interface OlympiadCertificate {
   revokeReason?: string | null;
 }
 
-/** What the public verification page receives (a revoked certificate carries only its number and status). */
+/** What the public verification page receives. Only a VALID certificate carries details; every other status carries just the number. */
+export type CertificateVerifyStatus = 'VALID' | 'REVOKED' | 'PENDING' | 'INVALID';
 export interface CertificateVerification {
   valid: boolean;
-  status: CertificateStatus;
+  status: CertificateVerifyStatus;
   certificateNumber: string;
+  code?: 'MISMATCH' | 'NOT_FOUND';
+  message?: string;
+  integrity?: 'MATCH' | 'MISMATCH' | 'NOT_PROVIDED';
   revokedAt?: string | null;
-  studentName?: string;
+  studentName?: string;   // privacy-safe: "Nikhil R."
   standardLabel?: string;
   examName?: string;
   percentage?: number;
+  scoreLabel?: string;    // "85/120"
   grade?: CertificateGrade;
   result?: 'PASS';
+  resultLabel?: string;
+  interviewStatus?: 'Completed' | 'Not completed';
   issueDateLabel?: string;
 }
 

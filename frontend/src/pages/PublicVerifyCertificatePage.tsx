@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { LogoLink } from '../components/ui/Logo';
 import { certificatesApi } from '../services/certificates';
@@ -21,16 +21,18 @@ const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value
 /** Public page opened by the QR code on a certificate. No login; everything comes from the backend. */
 const PublicVerifyCertificatePage: React.FC = () => {
   const { certificateNumber = '' } = useParams<{ certificateNumber: string }>();
+  const [search] = useSearchParams();
+  const tag = search.get('t'); // integrity tag printed in the QR code
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: 'loading' });
-    certificatesApi.verify(certificateNumber)
+    certificatesApi.verify(certificateNumber, tag)
       .then(data => { if (!cancelled) setState(data ? { kind: 'found', data } : { kind: 'missing' }); })
       .catch(() => { if (!cancelled) setState({ kind: 'error' }); });
     return () => { cancelled = true; };
-  }, [certificateNumber]);
+  }, [certificateNumber, tag]);
 
   return (
     <div className="min-h-screen bg-page flex items-center justify-center p-4 relative overflow-hidden transition-colors">
@@ -62,16 +64,36 @@ const PublicVerifyCertificatePage: React.FC = () => {
                 <Row label="Certificate No." value={<span className="font-mono">{state.data.certificateNumber}</span>} />
                 <Row label="Student" value={state.data.studentName} />
                 <Row label="Standard" value={state.data.standardLabel} />
-                <Row label="Olympiad" value={state.data.examName} />
-                <Row label="Percentage" value={`${state.data.percentage}%`} />
-                <Row label="Grade" value={state.data.grade} />
-                <Row label="Result" value={<span className="text-[#16A34A]">{state.data.result}</span>} />
+                <Row label="Examination" value={state.data.examName} />
+                <Row label="Test score" value={state.data.scoreLabel ?? `${state.data.percentage}%`} />
+                <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
+                <Row label="Overall result" value={<span className="text-[#16A34A]">{state.data.resultLabel ?? state.data.result} / {state.data.grade}</span>} />
                 <Row label="Date of Issue" value={state.data.issueDateLabel} />
               </dl>
             </>
           )}
 
-          {state.kind === 'found' && !state.data.valid && (
+          {state.kind === 'found' && !state.data.valid && state.data.status === 'PENDING' && (
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-full bg-[#FEF3C7] border border-[#FCD34D] flex items-center justify-center mx-auto mb-3"><AlertTriangle className="w-7 h-7 text-[#D97706]" /></div>
+              <h1 className="font-heading text-xl font-bold text-text-primary" data-testid="verify-status">Certificate not issued yet</h1>
+              <p className="text-sm text-text-secondary mt-2">{state.data.message || 'Results have not been officially published yet. This certificate cannot be verified until the declaration.'}</p>
+              <div className="mt-5 p-3 rounded-xl bg-surface-alt border border-border-subtle">
+                <p className="text-xs text-text-muted">Certificate Number</p>
+                <p className="font-mono font-semibold text-text-primary">{state.data.certificateNumber}</p>
+              </div>
+            </div>
+          )}
+
+          {state.kind === 'found' && !state.data.valid && state.data.status === 'INVALID' && (
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-full bg-[#FFE4EC] border border-[#F9A8C0] flex items-center justify-center mx-auto mb-3"><XCircle className="w-7 h-7 text-[#E1447A]" /></div>
+              <h1 className="font-heading text-xl font-bold text-[#E1447A]" data-testid="verify-status">✕ Certificate Invalid</h1>
+              <p className="text-sm text-text-secondary mt-2">{state.data.message || 'This certificate could not be verified.'}</p>
+            </div>
+          )}
+
+          {state.kind === 'found' && !state.data.valid && state.data.status === 'REVOKED' && (
             <div className="text-center">
               <div className="w-14 h-14 rounded-full bg-[#FFE4EC] border border-[#F9A8C0] flex items-center justify-center mx-auto mb-3"><XCircle className="w-7 h-7 text-[#E1447A]" /></div>
               <h1 className="font-heading text-xl font-bold text-[#E1447A]" data-testid="verify-status">✕ Certificate Revoked</h1>
@@ -101,7 +123,7 @@ const PublicVerifyCertificatePage: React.FC = () => {
         </div>
 
         <p className="text-center text-xs text-text-muted mt-5">
-          LearnIQ All India Olympiad · <Link to="/" className="underline hover:text-brand-primary">learniq</Link>
+          LearnIQ Test &amp; Interview · <Link to="/" className="underline hover:text-brand-primary">learniq</Link>
         </p>
       </div>
     </div>

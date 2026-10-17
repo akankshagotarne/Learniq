@@ -62,9 +62,9 @@ export const downloadCertificate = async (certificateNumber: string): Promise<vo
 
 export const certificatesApi = {
   /** Public — no login. Resolves with the verification result; a 404 means "no such certificate". */
-  verify: async (certificateNumber: string): Promise<CertificateVerification | null> => {
+  verify: async (certificateNumber: string, tag?: string | null): Promise<CertificateVerification | null> => {
     try {
-      const { data } = await api.get(`/certificates/verify/${encodeURIComponent(certificateNumber)}`);
+      const { data } = await api.get(`/certificates/verify/${encodeURIComponent(certificateNumber)}`, { params: tag ? { t: tag } : undefined });
       return data as CertificateVerification;
     } catch (err: any) {
       if (err?.response?.status === 404) return null;
