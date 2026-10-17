@@ -55,3 +55,7 @@ Claude outputs/
 backend/payment-backup-*.json
 backend/payments-backup*.json
 backend/report.json
+
+# old Olympiad record cleanup: dry-run reports, execution audit and recovery archives (contain student data)
+cleanup-output/
+old-olympiad-archive-*/
