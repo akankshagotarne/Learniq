@@ -4,7 +4,7 @@ import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
-  Menu, X, Trophy, Award, Video
+  Menu, X, Trophy, Award, Video, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -58,6 +58,7 @@ const adminNav: NavItem[] = [
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy, exact: true },
   { label: 'Olympiad Student Analytics', href: '/admin/olympiad/analytics', icon: BarChart2, sub: true },
+  { label: 'Olympiad Exam Management', href: '/admin/olympiad/exam-management', icon: CalendarClock, sub: true },
   { label: 'Engineering', href: '/admin/engineering', icon: GraduationCap },
   { label: 'Interviews', href: '/admin/interviews', icon: Video },
   { label: 'Help & Support', href: '/admin/support', icon: HelpCircle },

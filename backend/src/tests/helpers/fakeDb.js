@@ -451,9 +451,10 @@ const createFakeDb = () => {
   const { sessionToken } = sessionStore;
   const authSessionModels = sessionStore.models;
 
+  const OlympiadExamAudit = new FakeModel('OlympiadExamAudit', { registry, defaults: () => ({ at: new Date(), success: true }) });
   const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
 
-  return { examAccessModels, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { examAccessModels, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, OlympiadExamAudit, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**

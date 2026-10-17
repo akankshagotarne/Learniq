@@ -4,6 +4,7 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/olympiadController');
 const analytics = require('../controllers/olympiadAnalyticsController');
+const management = require('../controllers/olympiadExamManagementController');
 
 const perUser = (max, windowMs = 60 * 1000) =>
   rateLimit({
@@ -30,6 +31,11 @@ router.put('/admin/exams/:id/proctoring', ...adminAuth, perUser(30), ctrl.adminU
 router.put('/admin/exams/:id/teacher', ...adminAuth, ctrl.adminAssignTeacher);
 router.get('/admin/exams/:id/payments', ...adminAuth, ctrl.adminPayments);
 router.get('/admin/payments', ...adminAuth, ctrl.adminAllPayments);
+
+// Olympiad Exam Management (admin only; Olympiad exams only - Engineering has its own page)
+router.get('/admin/exam-management', ...adminAuth, perUser(120), management.list);
+router.get('/admin/exam-management/:id', ...adminAuth, perUser(120), management.detail);
+router.patch('/admin/exam-management/:id', ...adminAuth, perUser(30), management.update);
 
 // Olympiad Student Analytics (read-only; admin only)
 router.get('/admin/analytics', ...adminAuth, perUser(120), analytics.getAnalytics);
