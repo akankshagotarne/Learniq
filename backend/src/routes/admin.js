@@ -30,6 +30,8 @@ router.get('/students/:id', ...adminAuth, profileCtrl.requireObjectId, profileCt
 router.get('/students/:id/exam-access', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.overview);
 router.post('/students/:id/exam-access/grant', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.grant);
 router.post('/students/:id/exam-access/reset', ...adminAuth, profileCtrl.requireObjectId, examAccessCtrl.reset);
+// Permanently delete a TEACHER with no owned courses/content/interviews (409 otherwise; Deactivate keeps everything). Audited.
+router.delete('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, userCtrl.deleteTeacherAdmin);
 router.get('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.getTeacherProfile);
 // Edit a student's / teacher's profile (explicit allow-lists in services/profileUpdates.js; role, approval and status are NOT editable here)
 const editCtrl = require('../controllers/profileController');

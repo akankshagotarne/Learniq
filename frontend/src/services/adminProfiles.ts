@@ -17,4 +17,7 @@ export const adminProfilesApi = {
   /** Permanently deletes a STUDENT account. Payment records are kept on the server for accounting. */
   deleteStudent: async (id: string): Promise<{ message: string; paymentsKept: number }> =>
     (await api.delete(`/admin/users/${encodeURIComponent(id)}`)).data,
+  /** Permanently deletes a TEACHER account. The server refuses (409) while the teacher still owns courses, content or interview records. */
+  deleteTeacher: async (id: string): Promise<{ message: string }> =>
+    (await api.delete(`/admin/teachers/${encodeURIComponent(id)}`)).data,
 };

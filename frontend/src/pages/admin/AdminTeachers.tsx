@@ -1,12 +1,14 @@
 import { avatarSrc } from '../../utils/avatar';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Award, UserCheck, UserX, Clock, BookOpen } from 'lucide-react';
+import { Search, Award, UserCheck, UserX, Clock, BookOpen, Trash2 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { User } from '../../types';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '../../components/admin/ProfileParts';
+import { adminProfilesApi } from '../../services/adminProfiles';
+import { olympiadErrorMessage } from '../../services/olympiad';
 
 type FilterMode = 'all' | 'pending' | 'approved' | 'rejected';
 /** PENDING / APPROVED / REJECTED, read the same way the backend does (legacy teachers only have the isApproved flag) */
@@ -15,6 +17,8 @@ const statusOf = (t: User): 'PENDING' | 'APPROVED' | 'REJECTED' => t.approvalSta
 const AdminTeachers: React.FC = () => {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -58,6 +62,24 @@ const AdminTeachers: React.FC = () => {
       toast.success(teacher.isActive ? 'Teacher deactivated.' : 'Teacher activated.');
     } catch {
       toast.error('Failed to update teacher.');
+    }
+  };
+
+  const deleteTeacher = async () => {
+    const teacher = deleting;
+    if (!teacher || deleteBusy) return; // one request at a time
+    setDeleteBusy(true);
+    try {
+      await adminProfilesApi.deleteTeacher(teacher._id);
+      setDeleting(null);
+      setTeachers(prev => prev.filter(t => t._id !== teacher._id)); // counts, filters and search all derive from this list
+      toast.success('Teacher account deleted successfully.');
+      void fetchTeachers(); // re-sync with the server so the teacher cannot reappear
+    } catch (err: any) {
+      if (err?.response?.status === 404) { setDeleting(null); void fetchTeachers(); } // already deleted elsewhere
+      toast.error(olympiadErrorMessage(err, 'Failed to delete teacher.'));
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -174,7 +196,7 @@ const AdminTeachers: React.FC = () => {
                         <p className="text-text-muted text-xs mt-0.5">{teacher.qualification}{teacher.experience ? ` • ${teacher.experience}` : ''}</p>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0" onClick={e => e.stopPropagation()}>
                       {!teacher.isApproved ? (
                         <div className="flex gap-2">
                           <button onClick={() => setApproval(teacher, true)}
@@ -200,6 +222,14 @@ const AdminTeachers: React.FC = () => {
                           {teacher.isActive ? 'Deactivate' : 'Activate'}
                         </button>
                       )}
+                      <button
+                        onClick={e => { e.stopPropagation(); setDeleting(teacher); }}
+                        onKeyDown={e => e.stopPropagation()}
+                        aria-label={`Delete ${teacher.name}`}
+                        className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all inline-flex items-center gap-1 bg-surface text-[#E1447A] border-[#F9C6D7] hover:bg-[#FFE4EC]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -214,6 +244,21 @@ const AdminTeachers: React.FC = () => {
         message={<>{confirming?.name} will not be able to log in until you activate the account again. Their courses and lectures are kept.</>}
         onConfirm={() => { const t = confirming; setConfirming(null); if (t) void toggleActive(t); }}
         onCancel={() => setConfirming(null)}
+      />
+      <ConfirmDialog
+        open={deleting !== null} tone="danger" busy={deleteBusy} title="Delete Teacher Account?" confirmLabel="Delete Teacher"
+        message={<>
+          This will permanently delete this teacher account. This action cannot be undone.
+          <dl className="mt-3 space-y-1 text-xs">
+            <div className="flex gap-2"><dt className="w-14 flex-shrink-0 text-text-muted">Name</dt><dd className="font-semibold text-text-primary" data-testid="delete-teacher-name">{deleting?.name}</dd></div>
+            <div className="flex gap-2"><dt className="w-14 flex-shrink-0 text-text-muted">Email</dt><dd className="min-w-0 break-all">{deleting?.email || '—'}</dd></div>
+            <div className="flex gap-2"><dt className="w-14 flex-shrink-0 text-text-muted">Phone</dt><dd>{deleting?.phone || '—'}</dd></div>
+            <div className="flex gap-2"><dt className="w-14 flex-shrink-0 text-text-muted">Status</dt><dd>{deleting ? ({ APPROVED: 'Approved', REJECTED: 'Rejected', PENDING: 'Pending approval' } as const)[statusOf(deleting)] : ''}</dd></div>
+          </dl>
+        </>}
+        note="Students, results, certificates and payments are never deleted. A teacher who still owns courses, content or interview records cannot be deleted — use Deactivate to remove their access and keep everything."
+        onConfirm={() => void deleteTeacher()}
+        onCancel={() => { if (!deleteBusy) setDeleting(null); }}
       />
     </div>
   );
