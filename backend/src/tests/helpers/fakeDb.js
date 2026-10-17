@@ -421,7 +421,8 @@ const createFakeDb = () => {
   const OlympiadAccessGrant = new FakeModel('OlympiadAccessGrant', { registry, refs: { student: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam'], where: (d) => d.status === 'ACTIVE' }], defaults: () => ({ status: 'ACTIVE', includesInterview: true }) });
   const OlympiadAttemptHistory = new FakeModel('OlympiadAttemptHistory', { registry, unique: [{ fields: ['originalAttempt'] }], defaults: () => ({ resetAt: new Date() }) });
   const ExamAdminAudit = new FakeModel('ExamAdminAudit', { registry, unique: [{ fields: ['dedupeKey'] }], defaults: () => ({ at: new Date() }) });
-  const examAccessModels = { ...require('../../models/ExamAccess'), OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit };
+  const OlympiadClearance = new FakeModel('OlympiadClearance', { registry, defaults: () => ({ clearedAt: new Date() }) });
+  const examAccessModels = { ...require('../../models/ExamAccess'), OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, OlympiadClearance };
   const InterviewSetting = new FakeModel('InterviewSetting', { registry, unique: [{ fields: ['key'] }], defaults: () => ({ key: 'global', requestsEnabled: true }) });
 
   // teaching content (used by the admin teacher profile counts)
@@ -453,7 +454,7 @@ const createFakeDb = () => {
 
   const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
 
-  return { examAccessModels, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { examAccessModels, OlympiadClearance, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**

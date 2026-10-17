@@ -222,6 +222,7 @@ export const analyticsDetail = {
     registered: true, registeredAt: iso(NOW - 6 * day), registeredStandard: 10, eligible: true, basis: 'REGISTERED',
     examStatus: 'SUBMITTED', submittedAt: iso(NOW - 3 * day + 2875e3), score: 47, totalMarks: 60, percentage: 78.33, resultStatus: 'AVAILABLE',
     attemptHistory: [], certificate: { certificateNumber: 'LQOLY2026-000123', status: 'VALID', grade: 'A', issueDate: iso(NOW - day) }, needsReview: false,
+    clear: { examId: 'oly-done', title: 'LearnIQ – All India Olympiad Examination 2026', standard: 10, counts: { attempts: 1, submitted: 1, earlierAttempts: 0, proctoringSessions: 0, interviews: 0, evaluations: 0 }, blocked: false, blockerCode: null, blockerMessage: null },
   }],
 };
 
