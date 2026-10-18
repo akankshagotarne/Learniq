@@ -165,8 +165,8 @@ const login = async (req, res) => {
     let user = null;
     if (id.kind === 'email') {
       user = await User.findOne({ email: id.email });
-      if (!user) { await bcrypt.compare(password, DUMMY_HASH).catch(() => false); return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED }); }
-      if (!(await user.comparePassword(password))) return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
+      if (!user) { await bcrypt.compare(password, DUMMY_HASH).catch(() => false); console.info('[login] refused: no account (email)'); return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED }); }
+      if (!(await user.comparePassword(password))) { console.info(`[login] refused: wrong password (email, user ${user._id})`); return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED }); }
     } else {
       // A phone can (in legacy data) be shared by several accounts: never take "the first match". The password decides, and
       // only if EXACTLY ONE eligible account accepts it is that account signed in; anything else fails generically.
@@ -176,11 +176,15 @@ const login = async (req, res) => {
       for (const c of candidates) if (await c.comparePassword(password)) accepted.push(c);
       const eligible = accepted.filter((c) => !signInBlock(c));
       user = eligible.length === 1 ? eligible[0] : (eligible.length === 0 && accepted.length === 1 ? accepted[0] : null);
-      if (!user) return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
+      if (!user) {
+        console.info(`[login] refused: phone, ${candidates.length} account(s) with this number, ${accepted.length} accepted the password, ${eligible.length} eligible`); // counts only
+        return res.status(401).json({ success: false, message: identity.MESSAGES.LOGIN_FAILED });
+      }
     }
 
     const blocked = signInBlock(user);
     if (blocked) {
+      console.info(`[login] blocked: ${blocked.code} (user ${user._id})`);
       return res.status(blocked.status).json({ success: false, code: blocked.code, message: blocked.message });
     }
 
