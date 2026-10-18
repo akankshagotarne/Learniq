@@ -221,7 +221,7 @@ const startServer = async () => {
     console.log(rem.started
       ? `⏰ Interview reminders: worker running; WhatsApp ${remProv.configured.whatsapp ? 'configured' : 'NOT configured'}, SMS ${remProv.configured.sms ? 'configured' : 'NOT configured'} (unconfigured = no automated reminders)`
       : `⚠️  Interview reminder worker NOT running: ${rem.reason}`);
-    // Exam day: every Olympiad exam is open 17 Oct 2026 00:00 - 23:59:59.999 IST (writes only startDate/endDate, only where they differ)
+    // Exam window: only FILLS a missing startDate/endDate from the event calendar; an administrator's saved window is never changed (OLYMPIAD_WINDOW_SYNC=force is the explicit reset)
     require('./services/olympiadSchedule').syncOlympiadWindow()
       .catch((err) => console.error('⚠️  Olympiad window sync skipped:', err.message));
     // Make sure the Standard 9 and Standard 10 Olympiad exams exist (no-op when they are already there)

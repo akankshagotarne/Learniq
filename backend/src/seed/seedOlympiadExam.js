@@ -67,9 +67,6 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
         standard,
         instructions: INSTRUCTIONS,
         sections: sections.map((s) => ({ name: s.name, questionCount: s.count, marks: s.marks })),
-        startDate: START,
-        endDate: END,
-        durationMinutes,
         totalQuestions: questions.length,
         totalMarks,
         negativeMarking: false,
@@ -78,6 +75,8 @@ async function seedOlympiadExam(config, { standalone = false, ifMissing = false 
         currency: 'INR',
         isPublished: true,
       },
+      // the schedule and duration belong to the administrator once the exam exists (admin Exam Management): a re-seed never resets them
+      $setOnInsert: { startDate: START, endDate: END, durationMinutes },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
