@@ -15,3 +15,13 @@
   `VALID` · `REVOKED` · `PENDING` (results not published) · `INVALID` (unknown number, or `code: MISMATCH` for a wrong tag).
   The name is privacy-masked ("Nikhil R.").
 * **Tests** — `npm run test:certificates` (QR is decoded from the rendered PDF with jsQR; needs poppler, else those tests skip).
+* **Student photo** — `services/certificatePhoto.js` reads the student's CURRENT photo from the existing `ProfilePhoto` collection
+  (by the certificate's own `student` id, re-checked against the photo's owner), validates it (real JPEG/PNG signature, size,
+  not truncated; WebP is not embeddable by PDFKit) and the renderer crops it "cover"-style into a 3:4 framed portrait at the top
+  right; the QR code then sits in a small framed card at the left (reference layout). With no usable photo the certificate is the
+  normal photo-free design (QR in the right-hand frame). A missing / unsupported / corrupt / slow photo never blocks a certificate.
+  The photo is only added by `buildPdfContext()` (rendering) - never by `buildContext()` (public verification). Because PDFs are
+  rendered on every download, a new profile photo shows on the next download; no certificate is regenerated, re-numbered or stored.
+* **Founder signature** — one shared asset, `assets/certificate/completion/sig-raut.png` (transparent PNG processed from the
+  handwritten original: background removed with a soft alpha ramp, paper specks dropped, 3x upscaled). It is mandatory: if it
+  cannot be read the PDF fails (and is retried by the release sweeper) rather than printing a blank signature.

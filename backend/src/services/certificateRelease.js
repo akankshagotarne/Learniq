@@ -2,7 +2,7 @@ const { Certificate } = require('../models/Certificate');
 const { OlympiadExam, OlympiadAttempt } = require('../models/Olympiad');
 const svc = require('./certificateService');
 const pdf = require('./certificateCompletionPdf');
-const { buildContext } = require('./certificateContext');
+const { buildPdfContext } = require('./certificateContext');
 const release = require('./resultsRelease');
 
 /**
@@ -24,7 +24,7 @@ const ensureGenerated = async (cert, now = new Date()) => {
   if (!cert) return { ok: false, reason: 'MISSING' };
   if (!cert.generationStatus || cert.generationStatus === 'GENERATED') return { ok: true, already: true }; // legacy certificates count as generated
   try {
-    const buffer = await pdf.renderCompletionPdf(await buildContext(cert));
+    const buffer = await pdf.renderCompletionPdf(await buildPdfContext(cert));
     if (!Buffer.isBuffer(buffer) || buffer.length < 1000) throw Object.assign(new Error('empty pdf'), { code: 'EMPTY_PDF' });
     await Certificate.updateOne(
       { _id: cert._id, generationStatus: { $ne: 'GENERATED' } },
