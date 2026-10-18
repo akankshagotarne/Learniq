@@ -72,10 +72,10 @@ test('PDF text: heading, name, three result boxes, number, date, signatories and
   const pdf = write(await renderCompletionPdf(ctx()), 'full.pdf');
   const t = text(pdf);
   const squashed = t.replace(/\s+/g, ''); // letter-spaced labels are extracted with gaps between letters
-  for (const label of ['TESTSCORE', 'INTERVIEWSTATUS', 'OVERALLRESULT', 'SCANTOVERIFY']) assert.ok(squashed.includes(label), label);
+  for (const label of ['PROCTOREDTESTSCORE', 'PROCTOREDINTERVIEWSTATUS', 'OVERALLRESULT', 'SCANTOVERIFY']) assert.ok(squashed.includes(label), label);
   for (const expected of [
-    'CERTIFICATE OF COMPLETION', 'LEARNIQ TEST & INTERVIEW', 'This certificate is proudly presented to', 'Nikhil Reddy',
-    'for successfully completing the LearnIQ test and interview.', 'Your hard work, dedication and perseverance have truly paid off!',
+    'CERTIFICATE OF COMPLETION', 'LEARNIQ PROCTORED TEST & INTERVIEW', 'This certificate is proudly presented to', 'Nikhil Reddy',
+    'for successfully completing the LearnIQ Proctored Test & Interview.', 'Your hard work, dedication and perseverance have truly paid off!',
     'Score: 85/120', 'Completed', 'Pass / A+', 'Certificate No.', 'LQOLY2026-000123', 'Date of Issue', '18 October 2026',
     CONTACT.website, CONTACT.email, CONTACT.social,
   ]) assert.ok(t.includes(expected), `missing: ${expected}`);
@@ -83,12 +83,22 @@ test('PDF text: heading, name, three result boxes, number, date, signatories and
   assert.deepEqual(SIGNATORIES.map((s) => `${s.name}|${s.title}`), ['Nikhil Kandangire|CMO', 'Kruti Kahane|CTO', 'Akanksha Gotarne|CEO', 'Prof. Mayur Raut|Founder & MD']);
 });
 
+test('PDF text: the Participation certificate keeps its own wording (no PROCTORED labels)', { skip: !POPPLER }, async () => {
+  const t = text(write(await renderCompletionPdf(ctx({ kind: 'PARTICIPATION', testStatus: 'Participated', interviewStatus: 'Pending', overallRemarks: 'Active Participant' })), 'part.pdf'));
+  const sq = t.replace(/\s+/g, '');
+  assert.ok(t.includes('LEARNIQ TEST & INTERVIEW'));
+  assert.ok(t.includes('in recognition of participating in the LearnIQ Test & Interview.'));
+  assert.ok(sq.includes('TESTSTATUS') && sq.includes('INTERVIEWSTATUS') && sq.includes('OVERALLREMARKS'));
+  assert.ok(!/PROCTORED/i.test(t));
+});
+
 test('PDF text: interview NOT completed is never printed as completed', { skip: !POPPLER }, async () => {
   const t = text(write(await renderCompletionPdf(ctx({ interview: { completed: false } })), 'noint.pdf'));
   assert.ok(t.includes('Not completed'));
-  assert.ok(t.includes('LEARNIQ TEST'));
+  assert.ok(t.includes('LEARNIQ PROCTORED TEST'));
   assert.ok(!t.includes('TEST & INTERVIEW'));
-  assert.ok(!t.includes('and interview'));
+  assert.ok(!/& Interview/.test(t));
+  assert.ok(t.includes('for successfully completing the LearnIQ Proctored Test.'));
 });
 
 test('PDF text: every grade, score and result renders from the data (nothing hard-coded)', { skip: !POPPLER }, async () => {
