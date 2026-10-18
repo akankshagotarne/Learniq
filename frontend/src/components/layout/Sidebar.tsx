@@ -28,6 +28,7 @@ interface NavItem {
 
 const studentNav: NavItem[] = [
   { label: 'Dashboard', href: '/student', icon: Home },
+  { label: 'My Profile', href: '/student/profile', icon: User },
   { label: 'My Courses', href: '/student/my-courses', icon: GraduationCap, courses: true },
   { label: 'My Standard', href: '/student/standard', icon: Layers },
   { label: 'Courses', href: '/courses', icon: BookOpen, courses: true },
@@ -36,7 +37,6 @@ const studentNav: NavItem[] = [
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
   { label: 'Interview Results', href: '/student/interview-results', icon: Video },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },
-  { label: 'My Profile', href: '/student/profile', icon: User },
   { label: 'Settings', href: '/student/settings', icon: Settings },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },
 ];
