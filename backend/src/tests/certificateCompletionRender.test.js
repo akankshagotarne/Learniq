@@ -74,8 +74,8 @@ test('PDF text: heading, name, three result boxes, number, date, signatories and
   const squashed = t.replace(/\s+/g, ''); // letter-spaced labels are extracted with gaps between letters
   for (const label of ['PROCTOREDTESTSCORE', 'PROCTOREDINTERVIEWSTATUS', 'OVERALLRESULT', 'SCANTOVERIFY']) assert.ok(squashed.includes(label), label);
   for (const expected of [
-    'CERTIFICATE OF COMPLETION', 'LEARNIQ PROCTORED TEST & INTERVIEW', 'This certificate is proudly presented to', 'Nikhil Reddy',
-    'for successfully completing the LearnIQ Proctored Test & Interview.', 'Your hard work, dedication and perseverance have truly paid off!',
+    'CERTIFICATE OF COMPLETION', 'LEARNIQ PROCTORED (TEST & INTERVIEW)', 'This certificate is proudly presented to', 'Nikhil Reddy',
+    'for successfully completing the LearnIQ Proctored (Test & Interview).', 'Your hard work, dedication and perseverance have truly paid off!',
     'Score: 85/120', 'Completed', 'Pass / A+', 'Certificate No.', 'LQOLY2026-000123', 'Date of Issue', '18 October 2026',
     CONTACT.website, CONTACT.email, CONTACT.social,
   ]) assert.ok(t.includes(expected), `missing: ${expected}`);
