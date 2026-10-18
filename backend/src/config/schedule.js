@@ -7,8 +7,8 @@
  *   interview results announced 18 Oct 2026 18:00 IST (only FINALISED evaluations are shown, see services/interviewResults.js)
  *
  * The exam window is stored on every Olympiad exam record (startDate / endDate) - that is what windowState() reads - and is
- * kept equal to these values by seed/seedOlympiadExam.js (new exams), services/olympiadSchedule.js (start-up sync of existing
- * exams) and scripts/setOlympiadEndDate.js. Environment overrides exist for staging only and must be full ISO strings with an offset.
+ * given these values when an exam is CREATED (seed/seedOlympiadExam.js) or has none (services/olympiadSchedule.js). After that the stored
+ * value is authoritative and only the admin Exam Management page (or the explicit scripts/setOlympiadEndDate.js) changes it. Environment overrides exist for staging only and must be full ISO strings with an offset.
  */
 const TIME_ZONE = 'Asia/Kolkata';
 

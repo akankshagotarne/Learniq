@@ -898,7 +898,7 @@ test('EXAM DAY: a paid student cannot start before 09:00 IST on 17 Oct, can from
   await openWindow();
 });
 
-test('window sync: only startDate/endDate of Olympiad exams are set to the exam day; payments, attempts, other exam types untouched; idempotent; can be switched off', async () => {
+test('window sync: by default it NEVER overwrites a stored window (admin edits survive restarts); "force" resets only startDate/endDate of Olympiad exams; "off" does nothing; idempotent', async () => {
   const sched = require('../config/schedule');
   const { syncOlympiadWindow } = require('../services/olympiadSchedule');
   const old = { startDate: new Date('2026-09-29T00:00:00+05:30'), endDate: new Date('2026-10-15T23:59:59.999+05:30') };
@@ -910,14 +910,21 @@ test('window sync: only startDate/endDate of Olympiad exams are set to the exam 
   assert.equal((await syncOlympiadWindow({ models: M, log: () => {} })).skipped, true);
   assert.equal((await M.OlympiadExam.findById(S.exam._id)).endDate.toISOString(), old.endDate.toISOString(), 'switched off: nothing written');
   delete process.env.OLYMPIAD_WINDOW_SYNC;
+  const keep = await syncOlympiadWindow({ models: M, log: () => {} });
+  assert.equal(keep.changed, 0, 'default mode leaves a stored window alone');
+  assert.equal((await M.OlympiadExam.findById(S.exam._id)).endDate.toISOString(), old.endDate.toISOString());
+  process.env.OLYMPIAD_WINDOW_SYNC = 'force';
   const res = await syncOlympiadWindow({ models: M, log: () => {} });
+  delete process.env.OLYMPIAD_WINDOW_SYNC;
   assert.ok(res.changed >= 1);
   const e = await M.OlympiadExam.findById(S.exam._id);
   assert.equal(e.startDate.toISOString(), sched.EXAM_OPENS_AT.toISOString()); assert.equal(e.endDate.toISOString(), sched.EXAM_CLOSES_AT.toISOString());
   assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026'); assert.equal(e.fee, FEE);
   const e2 = await M.OlympiadExam.findById(eng._id); assert.equal(e2.endDate.toISOString(), old.endDate.toISOString(), 'the engineering mock test keeps its own dates');
   assert.deepEqual(await counts(), before);
+  process.env.OLYMPIAD_WINDOW_SYNC = 'force';
   assert.equal((await syncOlympiadWindow({ models: M, log: () => {} })).changed, 0, 'idempotent');
+  delete process.env.OLYMPIAD_WINDOW_SYNC;
   await M.OlympiadExam.deleteMany({ _id: eng._id });
   await openWindow();
 });
