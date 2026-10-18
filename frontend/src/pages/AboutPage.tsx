@@ -226,6 +226,7 @@ const AboutPage: React.FC = () => {
                   </div>
                   <div className="mt-4">
                     <h3 className="font-heading text-xl font-bold text-text-primary">Prof. Mayur Raut</h3>
+                    <p className="text-text-secondary text-sm font-semibold mt-1">Founder & MD (Chairman)</p>
                     <p className="text-brand-primary text-xs font-semibold uppercase tracking-wider mt-1">Founder & Mentor</p>
                   </div>
                 </div>
