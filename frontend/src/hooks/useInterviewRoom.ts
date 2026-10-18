@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSocket } from '../services/socket';
 import { interviewApi } from '../services/interview';
+import { CameraSwitchError, cameraSwitchMessage, facingOf, listCameras, switchCamera as runCameraSwitch, type Facing } from '../services/cameraSwitch';
 import { diag, InterviewMediaError, mediaPool, mediaProblemMessage, MediaProblem, TimeoutError, withTimeout, type MediaLease } from '../services/interviewMedia';
 
 /**
@@ -44,6 +45,13 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
   const [camOn, setCamOn] = useState(true);
   const [peerMedia, setPeerMedia] = useState<{ camera: boolean; mic: boolean }>({ camera: true, mic: true });
   const [attempt, setAttempt] = useState(0);
+  // camera switching (front/rear on phones, next webcam on computers) - see services/cameraSwitch.ts
+  const [cameraCount, setCameraCount] = useState(0);
+  const [facing, setFacing] = useState<Facing>('unknown');
+  const [switching, setSwitching] = useState(false);
+  const [switchMessage, setSwitchMessage] = useState<string | null>(null);
+  const switchRef = useRef<(() => Promise<void>) | null>(null);
+  const switchingRef = useRef(false);
 
   const endedRef = useRef(onEnded);
   endedRef.current = onEnded;
@@ -68,6 +76,48 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
     const socket = getSocket();
     const alive = () => !cancelled;
     const ctx = { interviewId, role };
+    let removeDeviceListener: (() => void) | null = null;
+
+    const mediaEnv = () => {
+      const md = navigator.mediaDevices;
+      return { getUserMedia: (c: MediaStreamConstraints) => md.getUserMedia(c), enumerateDevices: () => md.enumerateDevices() };
+    };
+    const refreshCameras = async () => {
+      try { const n = (await listCameras(mediaEnv())).length; if (alive()) setCameraCount(n); } catch { /* the button just stays disabled */ }
+    };
+    const watchTrack = (t: MediaStreamTrack) => { t.onended = () => { if (alive()) { diag('track-ended', { ...ctx, kind: t.kind }); if (t.kind === 'video') setCamOn(false); else setMicOn(false); } }; };
+
+    /** Switch THIS participant's outgoing camera. Same peer connection, same sender (replaceTrack), microphone untouched. */
+    const doSwitch = async () => {
+      const s = stream; const old = s?.getVideoTracks()[0];
+      if (!s || !old || switchingRef.current || !alive()) return;
+      switchingRef.current = true; setSwitching(true); setSwitchMessage(null);
+      diag('camera-switch-start', ctx);
+      try {
+        const res = await runCameraSwitch({
+          env: mediaEnv(),
+          current: old,
+          isCancelled: () => !alive() || cleaned,
+          replace: async (next) => {
+            const sender = pc?.getSenders().find((x) => x.track === old) || pc?.getSenders().find((x) => x.track && x.track.kind === 'video');
+            if (sender) await sender.replaceTrack(next as MediaStreamTrack); // no peer yet (waiting for the other person): makePeer() will publish the new track
+          },
+          commit: (next, prev) => {
+            s.removeTrack(prev as MediaStreamTrack); s.addTrack(next as MediaStreamTrack);
+            watchTrack(next as MediaStreamTrack);
+            if (alive()) { setLocalStream(new MediaStream(s.getTracks())); setCamOn(true); }
+          },
+        });
+        if (alive()) { setFacing(res.facing); diag('camera-switch-ok', { ...ctx, facing: res.facing, handoff: res.handoff }); void refreshCameras(); }
+      } catch (e) {
+        const code = e instanceof CameraSwitchError ? e.code : 'failed';
+        diag('camera-switch-failed', { ...ctx, code, restored: e instanceof CameraSwitchError ? e.restored : undefined });
+        if (alive() && code !== 'cancelled') {
+          setSwitchMessage(cameraSwitchMessage(code));
+          if (e instanceof CameraSwitchError && !e.restored) setCamOn(false); // the previous camera could not be brought back: say so honestly
+        }
+      } finally { switchingRef.current = false; if (alive()) setSwitching(false); }
+    };
 
     const signal = (data: any) => socket.emit('interview:signal', { data });
 
@@ -192,6 +242,9 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
       diag('cleanup-start', ctx);
       if (heartbeat) clearInterval(heartbeat);
       heartbeat = null;
+      removeDeviceListener?.(); removeDeviceListener = null;
+      switchRef.current = null; switchingRef.current = false;
+      if (!cancelled) { setSwitching(false); setCameraCount(0); }
       socket.off('interview:signal', onSignal);
       socket.off('interview:peer-joined', onPeerJoined);
       socket.off('interview:peer-left', onPeerLeft);
@@ -237,7 +290,10 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
       diag('media-ready', { ...ctx, video: stream.getVideoTracks().length, audio: stream.getAudioTracks().length });
       setLocalStream(stream); setMicOn(true); setCamOn(true);
       // a device unplugged mid-call ends its track: tell the user instead of failing silently
-      stream.getTracks().forEach((t) => { t.onended = () => { if (alive()) { diag('track-ended', { ...ctx, kind: t.kind }); if (t.kind === 'video') setCamOn(false); else setMicOn(false); } }; });
+      stream.getTracks().forEach(watchTrack);
+      setFacing(facingOf(stream.getVideoTracks()[0])); void refreshCameras();
+      switchRef.current = doSwitch;
+      if (navigator.mediaDevices?.addEventListener) { navigator.mediaDevices.addEventListener('devicechange', refreshCameras); removeDeviceListener = () => navigator.mediaDevices.removeEventListener('devicechange', refreshCameras); }
 
       socket.on('interview:signal', onSignal);
       socket.on('interview:peer-joined', onPeerJoined);
@@ -270,6 +326,8 @@ export const useInterviewRoom = ({ interviewId, role, enabled, onEnded }: Option
   }, [localStream]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const switchCamera = useCallback(() => (switchRef.current ? switchRef.current() : Promise.resolve()), []);
+  const canSwitchCamera = cameraCount >= 2;
 
-  return { phase, mediaProblem, error, localStream, remoteStream, micOn, camOn, peerMedia, toggleMic: () => toggle('audio'), toggleCam: () => toggle('video'), retry };
+  return { facing, cameraCount, canSwitchCamera, switching, switchMessage, switchCamera, phase, mediaProblem, error, localStream, remoteStream, micOn, camOn, peerMedia, toggleMic: () => toggle('audio'), toggleCam: () => toggle('video'), retry };
 };
