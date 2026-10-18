@@ -150,4 +150,14 @@ const maskName = (name) => {
   return [parts[0], ...parts.slice(1).map((p) => `${[...p][0].toUpperCase()}.`)].join(' ');
 };
 
-module.exports = { buildContext, participationInterview, effectiveIssueDate, interviewFor, maskName, CertificateDataError };
+/**
+ * buildContext() plus the student's photo, for RENDERING only. The photo bytes are kept out of buildContext() on purpose: that
+ * object also feeds the public verification page, which must never carry a photo.
+ */
+const buildPdfContext = async (cert, { photoLoader = require('./certificatePhoto').loadStudentPhoto } = {}) => {
+  const ctx = await buildContext(cert);
+  const photo = await photoLoader(cert.student);
+  return photo ? { ...ctx, photo } : ctx;
+};
+
+module.exports = { buildContext, buildPdfContext, participationInterview, effectiveIssueDate, interviewFor, maskName, CertificateDataError };

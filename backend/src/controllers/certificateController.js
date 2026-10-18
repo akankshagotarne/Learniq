@@ -5,7 +5,7 @@ const svc = require('../services/certificateService');
 const release = require('../services/resultsRelease');
 const certRelease = require('../services/certificateRelease');
 const { renderCompletionPdf } = require('../services/certificateCompletionPdf');
-const { buildContext, effectiveIssueDate, maskName, CertificateDataError } = require('../services/certificateContext');
+const { buildContext, buildPdfContext, effectiveIssueDate, maskName, CertificateDataError } = require('../services/certificateContext');
 
 /**
  * Certificates API. Rules (who passed, which grade, which number) live in services/certificateService.js and are
@@ -133,7 +133,7 @@ const download = handler(async (req, res) => {
     throw new ApiError(403, 'This certificate has been revoked and can no longer be downloaded.', 'CERTIFICATE_REVOKED');
   }
   // rendered fresh from the authoritative records on every request — the PDF is never stored, so it can never be stale
-  const pdf = await renderCompletionPdf(await buildContext(cert));
+  const pdf = await renderCompletionPdf(await buildPdfContext(cert));
   const inline = req.query.disposition === 'inline';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="LearnIQ-Certificate-${cert.certificateNumber}.pdf"`);

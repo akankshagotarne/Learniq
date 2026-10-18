@@ -320,6 +320,19 @@ const drawQr = (doc, url, cx, cy, size) => {
   return n;
 };
 
+/** Cert-number and issue-date boxes of the right-hand column (always drawn, at the same place on every certificate). */
+const drawResultBoxes = (doc, ctx) => {
+  const cx = 1393;
+  const box = (y, h, label, value, font, size) => {
+    doc.save().roundedRect(1290, y, 206, h, 10).fill('#FBF4E4').lineWidth(1.2).roundedRect(1290, y, 206, h, 10).stroke(GOLD_LIGHT).restore();
+    centred(doc, label, { font: 'serif', size: 20, cx, baseline: y + 27, color: NAVY });
+    centred(doc, value, { font, size, cx, baseline: y + h - 15, color: '#151515', maxWidth: 184, minSize: 13 });
+  };
+  box(582, 76, 'Certificate No.', ctx.certificateNumber, 'serifBold', 25);
+  box(676, 76, 'Date of Issue', ctx.issueDateLabel, 'serifBold', 25);
+};
+
+/** WITHOUT a student photo: the QR code takes the framed spot in the right-hand column (the existing design). */
 const drawVerifyColumn = (doc, ctx) => {
   const cx = 1393;
   doc.save();
@@ -329,13 +342,47 @@ const drawVerifyColumn = (doc, ctx) => {
   drawQr(doc, ctx.verifyUrl, cx, 395, 162);
   centred(doc, 'SCAN TO VERIFY', { font: 'sans', size: 18, cx, baseline: 538, color: BLUE, spacing: 2.2 });
   centred(doc, 'CERTIFICATE', { font: 'sans', size: 18, cx, baseline: 562, color: BLUE, spacing: 2.2 });
-  const box = (y, h, label, value, font, size) => {
-    doc.save().roundedRect(1290, y, 206, h, 10).fill('#FBF4E4').lineWidth(1.2).roundedRect(1290, y, 206, h, 10).stroke(GOLD_LIGHT).restore();
-    centred(doc, label, { font: 'serif', size: 20, cx, baseline: y + 27, color: NAVY });
-    centred(doc, value, { font, size, cx, baseline: y + h - 15, color: '#151515', maxWidth: 184, minSize: 13 });
-  };
-  box(582, 76, 'Certificate No.', ctx.certificateNumber, 'serifBold', 25);
-  box(676, 76, 'Date of Issue', ctx.issueDateLabel, 'serifBold', 25);
+  drawResultBoxes(doc, ctx);
+};
+
+/**
+ * Photo geometry in design px. The frame sits where the QR frame is in the photo-free layout (x 1287-1492, y 285-567), so
+ * nothing else on the page moves; the 192 x 257 picture area is 3:4, the usual portrait proportion.
+ */
+const PHOTO = { frame: { x: 1287, y: 285, w: 205, h: 282 }, pic: { x: 1294, y: 292, w: 192, h: 257 } };
+/** Where the photo is cropped from: faces sit in the upper part of a portrait, so the crop keeps the head and trims the lower body first. */
+const PHOTO_FOCUS_Y = 0.2;
+
+/** Opens the student photo for pdfkit; returns null (-> the photo-free layout) when it cannot be embedded. Never throws. */
+const preparePhoto = (doc, photo) => {
+  try {
+    if (!photo || !Buffer.isBuffer(photo.buffer) || !photo.buffer.length) return null;
+    const img = doc.openImage(photo.buffer);
+    return img && img.width > 0 && img.height > 0 ? { buffer: photo.buffer, width: img.width, height: img.height } : null;
+  } catch (e) { return null; }
+};
+
+/** WITH a photo (reference layout): framed portrait at the top right, the QR code in a small framed card at the left. */
+const drawPhotoLayout = (doc, ctx, photo) => {
+  const { frame, pic } = PHOTO;
+  doc.save().rect(frame.x, frame.y, frame.w, frame.h).fill('#FFFFFF').restore();
+  doc.save();
+  doc.rect(pic.x, pic.y, pic.w, pic.h).clip();
+  const scale = Math.max(pic.w / photo.width, pic.h / photo.height); // "cover": fill the frame, keep the aspect ratio, never stretch
+  const w = photo.width * scale; const h = photo.height * scale;
+  doc.image(photo.buffer, pic.x - (w - pic.w) / 2, pic.y - (h - pic.h) * PHOTO_FOCUS_Y, { width: w, height: h });
+  doc.restore();
+  doc.save().lineWidth(2.4).rect(frame.x, frame.y, frame.w, frame.h).stroke(GOLD).restore();
+
+  // QR card on the left, under the medal
+  const card = { x: 56, y: 372, w: 148, h: 178 };
+  doc.save().rect(card.x, card.y, card.w, card.h).fill('#F7FAFE').lineWidth(2.4).rect(card.x, card.y, card.w, card.h).stroke(GOLD).restore();
+  const cx = card.x + card.w / 2;
+  doc.save().rect(cx - 66, card.y + 9, 132, 132).fill('#FFFFFF').restore();
+  drawQr(doc, ctx.verifyUrl, cx, card.y + 9 + 66, 116);
+  centred(doc, 'SCAN TO VERIFY', { font: 'sans', size: 12.5, cx, baseline: card.y + 158, color: BLUE, spacing: 0.8 });
+  centred(doc, 'CERTIFICATE', { font: 'sans', size: 12.5, cx, baseline: card.y + 174, color: BLUE, spacing: 0.8 });
+  drawResultBoxes(doc, ctx);
 };
 
 const drawSignatures = (doc) => {
@@ -446,7 +493,8 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     centred(doc, body2, { font: 'serif', size: 29, cx: 768, baseline: 594, color: '#1F2F5C' });
 
     drawResultBox(doc, ctx);
-    drawVerifyColumn(doc, ctx);
+    const photo = preparePhoto(doc, ctx.photo);
+    if (photo) drawPhotoLayout(doc, ctx, photo); else drawVerifyColumn(doc, ctx);
     drawSignatures(doc);
     drawFooter(doc);
 
@@ -457,4 +505,4 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
   }
 });
 
-module.exports = { renderCompletionPdf, printableName, formatScore, SIGNATORIES, CONTACT, DESIGN_W, DESIGN_H, A4_W, A4_H };
+module.exports = { renderCompletionPdf, PHOTO, printableName, formatScore, SIGNATORIES, CONTACT, DESIGN_W, DESIGN_H, A4_W, A4_H };
