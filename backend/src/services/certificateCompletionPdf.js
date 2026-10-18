@@ -479,7 +479,7 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     centred(doc, participation ? 'CERTIFICATE OF PARTICIPATION' : 'CERTIFICATE OF COMPLETION', { font: 'heading', size: 84, cx: 768, baseline: 262, color: NAVY, maxWidth: 1050, minSize: 40 });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(350, 292).lineTo(722, 292).stroke().moveTo(814, 292).lineTo(1186, 292).stroke().restore();
     drawCapIcon(doc, 768, 292, 19, NAVY);
-    const subtitle = participation ? 'LEARNIQ TEST & INTERVIEW' : ctx.interview.completed ? 'LEARNIQ PROCTORED TEST & INTERVIEW' : 'LEARNIQ PROCTORED TEST';
+    const subtitle = participation ? 'LEARNIQ TEST & INTERVIEW' : ctx.interview.completed ? 'LEARNIQ PROCTORED (TEST & INTERVIEW)' : 'LEARNIQ PROCTORED TEST';
     const sw = centred(doc, subtitle, { font: 'serifBold', size: 48, cx: 768, baseline: 362, color: BLUE, maxWidth: 800, minSize: 34 });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(300, 348).lineTo(768 - sw / 2 - 22, 348).stroke().moveTo(768 + sw / 2 + 22, 348).lineTo(1226, 348).stroke().restore();
     centred(doc, 'This certificate is proudly presented to', { font: 'serif', size: 32, cx: 768, baseline: 410, color: NAVY });
@@ -488,7 +488,7 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     const body1 = participation
       ? 'in recognition of participating in the LearnIQ Test & Interview.'
       : ctx.interview.completed
-        ? 'for successfully completing the LearnIQ Proctored Test & Interview.'
+        ? 'for successfully completing the LearnIQ Proctored (Test & Interview).'
         : 'for successfully completing the LearnIQ Proctored Test.';
     const body2 = participation
       ? 'Your enthusiasm and effort towards learning are truly appreciated!'
