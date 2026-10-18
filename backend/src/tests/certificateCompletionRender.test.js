@@ -83,13 +83,13 @@ test('PDF text: heading, name, three result boxes, number, date, signatories and
   assert.deepEqual(SIGNATORIES.map((s) => `${s.name}|${s.title}`), ['Nikhil Kandangire|CMO', 'Kruti Kahane|CTO', 'Akanksha Gotarne|CEO', 'Prof. Mayur Raut|Founder & MD']);
 });
 
-test('PDF text: the Participation certificate keeps its own wording (no PROCTORED labels)', { skip: !POPPLER }, async () => {
+test('PDF text: the Participation certificate carries the same PROCTORED wording', { skip: !POPPLER }, async () => {
   const t = text(write(await renderCompletionPdf(ctx({ kind: 'PARTICIPATION', testStatus: 'Participated', interviewStatus: 'Pending', overallRemarks: 'Active Participant' })), 'part.pdf'));
   const sq = t.replace(/\s+/g, '');
-  assert.ok(t.includes('LEARNIQ TEST & INTERVIEW'));
-  assert.ok(t.includes('in recognition of participating in the LearnIQ Test & Interview.'));
-  assert.ok(sq.includes('TESTSTATUS') && sq.includes('INTERVIEWSTATUS') && sq.includes('OVERALLREMARKS'));
-  assert.ok(!/PROCTORED/i.test(t));
+  assert.ok(t.includes('LEARNIQ PROCTORED (TEST & INTERVIEW)'));
+  assert.ok(t.includes('in recognition of participating in the LearnIQ Proctored (Test & Interview).'));
+  assert.ok(sq.includes('PROCTOREDTESTSTATUS') && sq.includes('PROCTOREDINTERVIEWSTATUS') && sq.includes('OVERALLREMARKS'));
+  assert.ok(t.includes('Active Participant') && t.includes('Pending'));
 });
 
 test('PDF text: interview NOT completed is never printed as completed', { skip: !POPPLER }, async () => {
