@@ -62,6 +62,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    const onRequired = () => setUser((u) => (u && !u.mustChangePassword ? { ...u, mustChangePassword: true } : u));
+    window.addEventListener('learniq:password-change-required', onRequired);
+    return () => window.removeEventListener('learniq:password-change-required', onRequired);
+  }, []);
+
+  useEffect(() => {
     if (token) {
       fetchMe();
     } else {

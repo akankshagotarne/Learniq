@@ -35,7 +35,7 @@ const AdminStudentProfilePage: React.FC = () => {
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
   const [tempPw, setTempPw] = useState('');
-  const [showPw, setShowPw] = useState(false);
+  const [showPw, setShowPw] = useState(true);
   const [editing, setEditing] = useState(false);
   const latest = useRef(0);
 
@@ -90,7 +90,7 @@ const AdminStudentProfilePage: React.FC = () => {
     try {
       const r = await adminProfilesApi.setStudentPassword(profile.user._id, tempPw);
       toast.success(r.message);
-      setPending(null); setTempPw(''); setShowPw(false);
+      setPending(null); setTempPw(''); setShowPw(true);
     } catch (err: any) {
       toast.error(olympiadErrorMessage(err, 'Could not set the password.'));
     } finally { setBusy(false); }
@@ -157,7 +157,7 @@ const AdminStudentProfilePage: React.FC = () => {
                   <button onClick={() => setPending('reset')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" /> Send password reset
                   </button>
-                  <button onClick={() => { setTempPw(''); setShowPw(false); setPending('setpw'); }} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
+                  <button onClick={() => { setTempPw(''); setShowPw(true); setPending('setpw'); }} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" /> Set password
                   </button>
                   {COURSES_ENABLED && (
@@ -378,7 +378,7 @@ const AdminStudentProfilePage: React.FC = () => {
         }
         confirmDisabled={passwordProblem(tempPw) !== ''}
         note="Share the temporary password with the student or parent yourself. LearnIQ never shows or stores it in readable form, so avoid easy-to-guess passwords."
-        onConfirm={() => void setPassword()} onCancel={() => { if (!busy) { setPending(null); setTempPw(''); setShowPw(false); } }}
+        onConfirm={() => void setPassword()} onCancel={() => { if (!busy) { setPending(null); setTempPw(''); setShowPw(true); } }}
       />
       <ConfirmDialog
         open={pending === 'delete'} tone="danger" busy={busy} title="Delete this student permanently?" confirmLabel="Delete student"

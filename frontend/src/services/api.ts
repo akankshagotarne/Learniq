@@ -28,6 +28,10 @@ const SIGN_IN_REQUEST = /\/auth\/(login|register|forgot-password|reset-password|
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 403 && error.response?.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+      // an admin set a temporary password: show the "choose a new password" page instead of a broken screen
+      try { window.dispatchEvent(new CustomEvent('learniq:password-change-required')); } catch { /* non-browser */ }
+    }
     if (error.response?.status === 401 && !SIGN_IN_REQUEST.test(error.config?.url || '')) {
       const { code, message } = error.response.data || {};
       localStorage.removeItem('learniq_token');
