@@ -286,9 +286,13 @@ const drawResultBox = (doc, ctx) => {
   const iconY = y + 44;
   cols.forEach((c) => c.icon(doc, c.cx, iconY));
   const labelY = y + 104; const valueY = y + 142;
-  const label = (t, cx) => centred(doc, t, { font: 'sans', size: 19, cx, baseline: labelY, color: NAVY, spacing: 3.2 });
+  const long = !(ctx.kind === 'PARTICIPATION');
+  // the two PROCTORED labels are longer: slightly smaller type and tighter tracking keep them inside their column, away from the dividers
+  const label = (t, cx, wide = false) => (wide && long
+    ? centred(doc, t, { font: 'sans', size: 16, cx, baseline: labelY, color: NAVY, spacing: 1.7, maxWidth: 268, minSize: 12 })
+    : centred(doc, t, { font: 'sans', size: 19, cx, baseline: labelY, color: NAVY, spacing: 3.2 }));
   const part = ctx.kind === 'PARTICIPATION';
-  label(part ? 'TEST STATUS' : 'TEST SCORE', cols[0].cx); label('INTERVIEW STATUS', cols[1].cx); label(part ? 'OVERALL REMARKS' : 'OVERALL RESULT', cols[2].cx);
+  label(part ? 'TEST STATUS' : 'PROCTORED TEST SCORE', cols[0].cx, true); label(part ? 'INTERVIEW STATUS' : 'PROCTORED INTERVIEW STATUS', cols[1].cx, true); label(part ? 'OVERALL REMARKS' : 'OVERALL RESULT', cols[2].cx);
   const value = (t, cx) => centred(doc, t, { font: 'serifBold', size: 34, cx, baseline: valueY, color: NAVY, maxWidth: 270, minSize: 22 });
   if (part) {
     // participation: factual statuses only - nothing about marks
@@ -475,8 +479,8 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     centred(doc, participation ? 'CERTIFICATE OF PARTICIPATION' : 'CERTIFICATE OF COMPLETION', { font: 'heading', size: 84, cx: 768, baseline: 262, color: NAVY, maxWidth: 1050, minSize: 40 });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(350, 292).lineTo(722, 292).stroke().moveTo(814, 292).lineTo(1186, 292).stroke().restore();
     drawCapIcon(doc, 768, 292, 19, NAVY);
-    const subtitle = participation || ctx.interview.completed ? 'LEARNIQ TEST & INTERVIEW' : 'LEARNIQ TEST';
-    const sw = centred(doc, subtitle, { font: 'serifBold', size: 48, cx: 768, baseline: 362, color: BLUE });
+    const subtitle = participation ? 'LEARNIQ TEST & INTERVIEW' : ctx.interview.completed ? 'LEARNIQ PROCTORED TEST & INTERVIEW' : 'LEARNIQ PROCTORED TEST';
+    const sw = centred(doc, subtitle, { font: 'serifBold', size: 48, cx: 768, baseline: 362, color: BLUE, maxWidth: 800, minSize: 34 });
     doc.save().lineWidth(1.6).strokeColor(GOLD).moveTo(300, 348).lineTo(768 - sw / 2 - 22, 348).stroke().moveTo(768 + sw / 2 + 22, 348).lineTo(1226, 348).stroke().restore();
     centred(doc, 'This certificate is proudly presented to', { font: 'serif', size: 32, cx: 768, baseline: 410, color: NAVY });
     drawName(doc, ctx.studentName);
@@ -484,12 +488,12 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
     const body1 = participation
       ? 'in recognition of participating in the LearnIQ Test & Interview.'
       : ctx.interview.completed
-        ? 'for successfully completing the LearnIQ test and interview.'
-        : 'for successfully completing the LearnIQ test.';
+        ? 'for successfully completing the LearnIQ Proctored Test & Interview.'
+        : 'for successfully completing the LearnIQ Proctored Test.';
     const body2 = participation
       ? 'Your enthusiasm and effort towards learning are truly appreciated!'
       : 'Your hard work, dedication and perseverance have truly paid off!';
-    centred(doc, body1, { font: 'serif', size: 29, cx: 768, baseline: 560, color: '#1F2F5C' });
+    centred(doc, body1, { font: 'serif', size: 29, cx: 768, baseline: 560, color: '#1F2F5C', maxWidth: 900, minSize: 24 });
     centred(doc, body2, { font: 'serif', size: 29, cx: 768, baseline: 594, color: '#1F2F5C' });
 
     drawResultBox(doc, ctx);
