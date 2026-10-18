@@ -24,6 +24,7 @@ const LecturePlayerPage = lazy(() => import('./pages/LecturePlayerPage'));
 const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
 const PublicVerifyCertificatePage = lazy(() => import('./pages/PublicVerifyCertificatePage'));
 const VerifyEmailChangePage = lazy(() => import('./pages/VerifyEmailChangePage'));
+const ForcePasswordChangePage = lazy(() => import('./pages/shared/ForcePasswordChangePage'));
 const ProfilePage = lazy(() => import('./pages/shared/AccountPages').then(m => ({ default: m.ProfilePage })));
 const SettingsPage = lazy(() => import('./pages/shared/AccountPages').then(m => ({ default: m.SettingsPage })));
 
@@ -97,6 +98,9 @@ const ProtectedRoute: React.FC<{
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
+
+  // An admin-set temporary password must be replaced before anything else (the backend enforces this too).
+  if (user.mustChangePassword) return <ForcePasswordChangePage />;
 
   // An unapproved teacher never sees a teacher page (the backend refuses their API calls too).
   if (user.role === 'teacher' && user.isApproved !== true) return <Navigate to="/pending-approval" replace />;

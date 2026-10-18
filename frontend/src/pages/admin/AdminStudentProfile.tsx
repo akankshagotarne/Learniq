@@ -16,9 +16,10 @@ import { AdminProfilePayment, AdminStudentProfile } from '../../types/adminProfi
 import { formatDuration, formatISTDate, formatISTDateTime, formatRupees } from '../../utils/olympiadFormat';
 import { COURSES_ENABLED } from '../../constants/features';
 import { standardLabel, standardShortLabel } from '../../constants/standards';
+import { PASSWORD_HELP, passwordProblem } from '../../constants/passwordPolicy';
 
 type TabId = 'overview' | 'courses' | 'olympiad' | 'payments';
-type Pending = 'deactivate' | 'reset' | 'delete' | null;
+type Pending = 'deactivate' | 'reset' | 'setpw' | 'delete' | null;
 
 const PAYMENT_TONE: Record<AdminProfilePayment['status'], Tone> = { completed: 'green', pending: 'amber', failed: 'pink', refunded: 'gray', unconfirmed: 'gray' };
 const PAYMENT_LABEL: Record<AdminProfilePayment['status'], string> = { completed: 'Paid', pending: 'Pending', failed: 'Failed', refunded: 'Refunded', unconfirmed: 'Under review' };
@@ -33,6 +34,8 @@ const AdminStudentProfilePage: React.FC = () => {
   const [tab, setTab] = useState<TabId>('overview');
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
+  const [tempPw, setTempPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [editing, setEditing] = useState(false);
   const latest = useRef(0);
 
@@ -78,6 +81,18 @@ const AdminStudentProfilePage: React.FC = () => {
     } catch (err: any) {
       toast.error(olympiadErrorMessage(err, 'Could not send the reset email.'));
       setPending(null);
+    } finally { setBusy(false); }
+  };
+
+  const setPassword = async () => {
+    if (!profile || busy) return;
+    setBusy(true);
+    try {
+      const r = await adminProfilesApi.setStudentPassword(profile.user._id, tempPw);
+      toast.success(r.message);
+      setPending(null); setTempPw(''); setShowPw(false);
+    } catch (err: any) {
+      toast.error(olympiadErrorMessage(err, 'Could not set the password.'));
     } finally { setBusy(false); }
   };
 
@@ -141,6 +156,9 @@ const AdminStudentProfilePage: React.FC = () => {
                   </button>
                   <button onClick={() => setPending('reset')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" /> Send password reset
+                  </button>
+                  <button onClick={() => { setTempPw(''); setShowPw(false); setPending('setpw'); }} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5" /> Set password
                   </button>
                   {COURSES_ENABLED && (
                     <button onClick={() => setTab('courses')} className="px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle bg-surface text-text-primary hover:bg-surface-alt inline-flex items-center gap-1.5">
@@ -341,6 +359,26 @@ const AdminStudentProfilePage: React.FC = () => {
         message={<>A link to choose a new password will be emailed to <b className="text-text-primary">{maskEmail(u?.email)}</b>. The link expires in 15 minutes. The current password is never shown.</>}
         note="Passwords are stored securely and cannot be viewed."
         onConfirm={() => void sendReset()} onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={pending === 'setpw'} busy={busy} title="Set a temporary password?" confirmLabel="Set password"
+        message={<>Choose a temporary password for <b className="text-text-primary">{u?.name}</b>. They will be signed out everywhere and must choose their own password the next time they log in.</>}
+        extra={
+          <div>
+            <label htmlFor="temp-pw" className="mb-1 block text-xs font-semibold text-text-secondary">Temporary password</label>
+            <input
+              id="temp-pw" data-testid="temp-password" type={showPw ? 'text' : 'password'} autoComplete="new-password" className="input-field"
+              value={tempPw} maxLength={128} onChange={(e) => setTempPw(e.target.value)} disabled={busy}
+            />
+            <label className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
+              <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show password
+            </label>
+            <p className="mt-1 text-[11px] text-text-muted">{tempPw && passwordProblem(tempPw) ? passwordProblem(tempPw) : PASSWORD_HELP}</p>
+          </div>
+        }
+        confirmDisabled={passwordProblem(tempPw) !== ''}
+        note="Share the temporary password with the student or parent yourself. LearnIQ never shows or stores it in readable form, so avoid easy-to-guess passwords."
+        onConfirm={() => void setPassword()} onCancel={() => { if (!busy) { setPending(null); setTempPw(''); setShowPw(false); } }}
       />
       <ConfirmDialog
         open={pending === 'delete'} tone="danger" busy={busy} title="Delete this student permanently?" confirmLabel="Delete student"

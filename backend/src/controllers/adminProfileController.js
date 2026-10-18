@@ -41,6 +41,40 @@ const maskEmail = (email) => {
   return `${local.slice(0, 1)}***@${domain}`;
 };
 
+// POST /api/admin/students/:id/set-password { password }
+// The admin picks a TEMPORARY password for a STUDENT (e.g. a phone-only account with no e-mail for a reset link). The student must
+// replace it at the next sign-in (middleware/auth.js blocks everything else until they do) and every existing session is ended.
+// The password is only hashed (User pre-save hook, bcrypt); it is never logged, audited or returned.
+const setTemporaryPassword = async (req, res) => {
+  try {
+    const { passwordProblem } = require('../services/passwordPolicy');
+    const password = req.body && req.body.password;
+    const problem = passwordProblem(password);
+    if (problem) return res.status(400).json({ success: false, code: 'INVALID_PASSWORD', field: 'password', message: problem });
+
+    const target = await User.findOne({ _id: req.params.id, role: 'student' });
+    if (!target) return res.status(404).json({ success: false, code: 'STUDENT_NOT_FOUND', message: 'Student not found. Only student passwords can be set here.' });
+
+    target.password = password; // hashed by the pre-save hook
+    target.mustChangePassword = true;
+    target.resetPasswordToken = undefined; // any older reset link stops working
+    target.resetPasswordExpire = undefined;
+    await target.save();
+    await require('../services/authSessions').endAllSessions(target._id, 'password_reset').catch(() => {});
+
+    try {
+      const { AdminAuditLog } = require('../models/AdminAuditLog');
+      await AdminAuditLog.create({ action: 'PASSWORD_SET_BY_ADMIN', admin: req.user._id, adminName: req.user.name, targetType: 'student', target: target._id, targetLabel: target.name, detail: { temporary: true }, status: 'SUCCESS', at: new Date() });
+    } catch (e) { console.error('set-password audit entry could not be written:', e && e.message); }
+    console.info(`Admin ${req.user._id} set a temporary password for student ${target._id}`); // ids only
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, message: 'Temporary password set. The student was signed out everywhere and must choose a new password at the next login.' });
+  } catch (error) {
+    console.error('POST /admin/students/:id/set-password failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Server error. The password was not changed — please try again.' });
+  }
+};
+
 const sendPasswordReset = async (req, res) => {
   try {
     // only the fields the reset needs — the password hash is never loaded
@@ -77,4 +111,4 @@ const sendPasswordReset = async (req, res) => {
   }
 };
 
-module.exports = { requireObjectId, getStudentProfile, getTeacherProfile, sendPasswordReset };
+module.exports = { requireObjectId, getStudentProfile, getTeacherProfile, sendPasswordReset, setTemporaryPassword };

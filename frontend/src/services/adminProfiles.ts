@@ -14,6 +14,9 @@ export const adminProfilesApi = {
   update: async (id: string, patch: { isActive?: boolean; isApproved?: boolean }): Promise<void> => {
     await api.put(`/admin/users/${encodeURIComponent(id)}`, patch);
   },
+  /** Sets a TEMPORARY password for a STUDENT; the student must replace it at the next sign-in. The password is never returned. */
+  setStudentPassword: async (id: string, password: string): Promise<{ message: string }> =>
+    (await api.post(`/admin/students/${encodeURIComponent(id)}/set-password`, { password })).data,
   /** Permanently deletes a STUDENT account. Payment records are kept on the server for accounting. */
   deleteStudent: async (id: string): Promise<{ message: string; paymentsKept: number }> =>
     (await api.delete(`/admin/users/${encodeURIComponent(id)}`)).data,

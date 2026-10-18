@@ -121,6 +121,7 @@ const changePassword = async (req, res) => {
     if (problem) throw new ProfileError(400, 'WEAK_PASSWORD', problem, { field: 'newPassword' });
     if (await full.comparePassword(newPassword)) throw new ProfileError(400, 'PASSWORD_UNCHANGED', 'Please choose a password you are not already using.', { field: 'newPassword' });
     full.password = newPassword; // hashed by the model's pre-save hook, like every password
+    full.mustChangePassword = false; // an admin-set temporary password is now replaced
     await full.save();
     // every OTHER device is signed out; this session continues
     try {

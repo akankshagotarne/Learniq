@@ -7,6 +7,8 @@ export interface User {
   phone?: string;
   /** teachers: PENDING until an administrator approves (undefined on legacy accounts - use isApproved) */
   approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  /** an admin chose a temporary password: the account must set its own before anything else works */
+  mustChangePassword?: boolean;
   approvedAt?: string;
   reviewNote?: string;
   avatar?: string;

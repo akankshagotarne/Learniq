@@ -23,6 +23,10 @@ const protect = async (req, res, next) => {
   }
   req.user = auth.user;
   req.authSession = auth.session;
+  // A temporary password chosen by an admin must be replaced first: only the account endpoints needed to do that stay open.
+  if (req.user.mustChangePassword === true && !/^\/api\/auth\/(change-password|me|logout|session)/.test(String(req.originalUrl || '').split('?')[0])) {
+    return res.status(403).json({ success: false, code: 'PASSWORD_CHANGE_REQUIRED', message: 'Please set a new password before continuing.' });
+  }
   return next();
 };
 

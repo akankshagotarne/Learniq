@@ -41,15 +41,15 @@ test('clicking a student / teacher row opens the profile; the row buttons do not
   }
 });
 
-test('no profile file can display or request a password: no password field, no password value, only the reset-email endpoint', opts, () => {
+test('no profile file can display or read a stored password: no password field in any data, only the reset-email and the admin "set temporary password" endpoints', opts, () => {
   for (const f of PROFILE_FILES) {
     const src = read(f);
-    assert.ok(!/\.password\b|password:|passwordHash|resetPasswordToken|\btoken\b/i.test(src.replace(/Send password reset|send-password-reset|sendPasswordReset|password reset|choose a new password|Passwords are stored securely[^"<]*/gi, '')),
+    assert.ok(!/\.password\b|password:|passwordHash|resetPasswordToken|\btoken\b/i.test(src.replace(/Send password reset|send-password-reset|sendPasswordReset|password reset|choose a new password|Passwords are stored securely[^"<]*|setStudentPassword: async \(id: string, password: string\)|\{ password \}/gi, '')),
       `${f} must not touch a password/token field`);
   }
   const svc = read('services/adminProfiles.ts');
   const endpoints = [...svc.matchAll(/api\.(get|post|put)\(`([^`]+)`/g)].map((m) => `${m[1].toUpperCase()} ${m[2].replace(/\$\{[^}]+\}/g, ':id')}`).sort();
-  assert.deepEqual(endpoints, ['GET /admin/students/:id', 'GET /admin/teachers/:id', 'POST /admin/users/:id/send-password-reset', 'PUT /admin/users/:id']);
+  assert.deepEqual(endpoints, ['GET /admin/students/:id', 'GET /admin/teachers/:id', 'POST /admin/students/:id/set-password', 'POST /admin/users/:id/send-password-reset', 'PUT /admin/users/:id']);
 });
 
 test('destructive profile actions require confirmation; activation and approval do not', opts, () => {

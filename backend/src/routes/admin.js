@@ -41,6 +41,8 @@ router.patch('/teachers/:id', ...adminAuth, profileCtrl.requireObjectId, editCtr
 router.post('/users/:id/photo', ...adminAuth, profileCtrl.requireObjectId, uploadProfilePhoto.single('photo'), handleMulterError, editCtrl.adminUploadPhoto);
 router.delete('/users/:id/photo', ...adminAuth, profileCtrl.requireObjectId, editCtrl.adminRemovePhoto);
 router.post('/users/:id/send-password-reset', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.sendPasswordReset);
+// Admin picks a TEMPORARY password for a STUDENT (forced change at next sign-in, all sessions ended, audited without the password)
+router.post('/students/:id/set-password', ...adminAuth, profileCtrl.requireObjectId, profileCtrl.setTemporaryPassword);
 
 // Courses
 router.get('/courses', ...adminAuth, async (req, res) => {

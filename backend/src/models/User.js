@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   // see the PARTIAL unique index `uniq_email` below. Never stored as '' (accounts without an email simply have no email field).
   email: { type: String, lowercase: true, trim: true, default: undefined },
   password: { type: String, required: true, minlength: 6 },
+  mustChangePassword: { type: Boolean, default: false },   // set when an admin chose a temporary password: only change-password / me / logout work until it is replaced
   role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
   phone: { type: String, trim: true },
   // Canonical E.164 form of `phone` ("+919876543210"); the unique index below makes a phone number usable by ONE account only.
