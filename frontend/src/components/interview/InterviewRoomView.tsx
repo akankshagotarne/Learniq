@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, Mic, MicOff, RefreshCw, Video, VideoOff, WifiOff } from 'lucide-react';
+import { AlertTriangle, Loader2, Mic, MicOff, RefreshCw, SwitchCamera, Video, VideoOff, WifiOff } from 'lucide-react';
 import { useInterviewRoom, mediaProblemMessage, RoomPhase } from '../../hooks/useInterviewRoom';
 
 const PHASE_TEXT: Partial<Record<RoomPhase, string>> = {
@@ -80,7 +80,7 @@ const InterviewRoomView: React.FC<Props> = ({ interviewId, role, peerLabel, onEn
           )}
           {r.phase === 'connected' && !r.peerMedia.mic && <span className="absolute right-2 top-2 text-[11px] px-2 py-0.5 rounded-full bg-black/60 text-white flex items-center gap-1"><MicOff className="w-3 h-3" /> Muted</span>}
         </div>
-        <Video_ stream={r.localStream} muted mirror label="You" off={!r.camOn} testId="local-video" placeholder={r.localStream ? 'Camera off' : 'Starting your camera…'} />
+        <Video_ stream={r.localStream} muted mirror={r.facing !== 'environment'} label="You" off={!r.camOn} testId="local-video" placeholder={r.localStream ? 'Camera off' : 'Starting your camera…'} />
       </div>
       <p className="text-xs text-text-secondary flex flex-wrap gap-x-4 gap-y-1" data-testid="device-status" role="status">
         <span data-testid="camera-status">Camera: {camReady ? (r.camOn ? 'ready' : 'turned off') : busy ? 'starting…' : 'not available'}</span>
@@ -96,8 +96,20 @@ const InterviewRoomView: React.FC<Props> = ({ interviewId, role, peerLabel, onEn
           className="min-h-[44px] min-w-[44px] px-3 rounded-xl bg-surface-alt border border-border-subtle text-text-primary text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50">
           {r.camOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4 text-[#E1447A]" />} {!r.localStream ? 'Camera not ready' : r.camOn ? 'Camera on' : 'Camera off'}
         </button>
+        {(() => {
+          const why = !r.localStream ? 'Your camera is not ready yet.' : !r.camOn ? 'Turn your camera on to switch cameras.' : !r.canSwitchCamera ? 'No other camera was found on this device.' : r.switching ? 'Switching camera…' : '';
+          const disabled = !!why || r.phase === 'ended' || r.phase === 'replaced';
+          return (
+            <button type="button" onClick={() => { void r.switchCamera(); }} disabled={disabled} aria-busy={r.switching} title={why || 'Switch between your front and rear camera'} data-testid="switch-camera"
+              className="min-h-[44px] min-w-[44px] px-3 rounded-xl bg-surface-alt border border-border-subtle text-text-primary text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-50">
+              {r.switching ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <SwitchCamera className="w-4 h-4" aria-hidden="true" />} {r.switching ? 'Switching…' : 'Switch Camera'}
+            </button>
+          );
+        })()}
         {actions}
       </div>
+      {r.switchMessage && <p className="text-xs text-[#E1447A]" role="alert" data-testid="switch-camera-message">{r.switchMessage}</p>}
+      {r.localStream && r.camOn && !r.canSwitchCamera && !busy && <p className="text-[11px] text-text-muted" data-testid="switch-camera-hint">Only one camera was found on this device, so Switch Camera is unavailable.</p>}
       <p className="text-[11px] text-text-muted">Video and audio go directly between you and {role === 'teacher' ? 'the student' : 'your teacher'}. LearnIQ does not record this interview.</p>
     </div>
   );
