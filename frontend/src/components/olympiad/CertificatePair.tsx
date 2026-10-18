@@ -42,7 +42,7 @@ const CertificatePair: React.FC<Props> = ({ examId, released, releaseAt, certifi
           <span className={`p-1.5 rounded-lg ${isResult ? 'bg-[#FFC24B]/15 text-[#D97706]' : 'bg-[#EDE9FE] text-[#6C63F2]'}`}>{isResult ? <Award className="w-4 h-4" /> : <Users className="w-4 h-4" />}</span>
           <h3 className="font-heading font-bold text-sm text-text-primary">{isResult ? 'Result Certificate' : 'Participation Certificate'}</h3>
         </div>
-        <p className="text-xs text-text-secondary">{isResult ? 'Your percentage and grade for this examination.' : 'Recognises your participation in the LearnIQ Test & Interview.'}</p>
+        <p className="text-xs text-text-secondary">{isResult ? 'Your percentage and grade for this examination.' : 'Recognises your participation in the LearnIQ Proctored (Test & Interview).'}</p>
         {!released ? (
           <p className="mt-4 text-xs text-text-secondary flex items-start gap-1.5" data-testid="certificate-unreleased"><Clock className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#D97706]" /> {releaseNotice(releaseAt)}</p>
         ) : cert ? (
