@@ -40,7 +40,7 @@ test('A: navbar - LearnIQ logo unchanged and primary, affiliation line beneath i
   for (const label of ['Home', 'Live Classes', 'About', 'Contact']) await expect(page.locator('nav').getByRole('link', { name: label, exact: true })).toBeVisible();
 });
 
-test('B: About page - relationship explained, both registrations + dates, office, phones and email as real text; anchor link works', async ({ page }) => {
+test('B: About page - relationship explained, NO detailed society card; anchor link works', async ({ page }) => {
   await mockApi(page, 'guest');
   for (const width of [360, 1280]) {
     await page.setViewportSize({ width, height: 900 });
@@ -48,21 +48,18 @@ test('B: About page - relationship explained, both registrations + dates, office
     const s = page.getByTestId('about-society');
     await expect(s.getByRole('heading', { name: 'About LearnIQ & Virat Education Society' })).toBeVisible();
     await expect(s).toContainText('LearnIQ is an educational initiative operating under Virat Education Society');
-    await expect(page.getByTestId('society-reg-1')).toHaveText(REG1);
-    await expect(page.getByTestId('society-reg-2')).toHaveText(REG2);
-    const regs = page.getByTestId('society-registrations');
-    await expect(regs).toContainText('16 February 2019'); await expect(regs).toContainText('25 May 2019');
-    const addr = page.getByTestId('society-address');
-    for (const l of ['Plot No. 13, Ramgopalnagar', 'Nashik Road, Padegaon', 'District: Chharapati Sambhajinagar', 'Maharashtra – 431001']) await expect(addr).toContainText(l);
-    await expect(page.getByTestId('society-contacts').getByRole('link', { name: '9765550636' })).toHaveAttribute('href', 'tel:+919765550636');
-    await expect(page.getByTestId('society-contacts').getByRole('link', { name: '9860182080' })).toHaveAttribute('href', 'tel:+919860182080');
-    await expect(page.getByTestId('society-contacts').getByRole('link', { name: 'cool00mayur@gmail.com' })).toHaveAttribute('href', 'mailto:cool00mayur@gmail.com');
-    await expect(page.locator('img[alt="Virat Education Society emblem"]')).toBeVisible();
+    // the detailed society card (emblem, registrations, office, phones, email) is NOT on the About page
+    for (const id of ['society-details', 'society-registrations', 'society-address', 'society-contacts']) await expect(page.getByTestId(id)).toHaveCount(0);
+    await expect(page.locator('img[alt="Virat Education Society emblem"]')).toHaveCount(0);
+    // page content only: the footer intentionally keeps the short affiliation + registration line
+    const body = await page.evaluate(() => { const c = document.body.cloneNode(true) as HTMLElement; c.querySelectorAll('footer, nav').forEach((e) => e.remove()); return c.innerText || c.textContent || ''; });
+    for (const t of ['MAH-93/19', 'F-25431', '9765550636', '9860182080', 'cool00mayur@gmail.com', 'Ramgopalnagar', '431001']) expect(body, t).not.toContain(t);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
   await expect(page).toHaveTitle('About LearnIQ & Virat Education Society');
   const ld = JSON.parse(await page.locator('#ld-organization').textContent() || '{}');
   expect(ld.name).toBe('LearnIQ'); expect(ld.parentOrganization.name).toBe('Virat Education Society');
+  expect(JSON.stringify(ld)).not.toMatch(/9765550636|cool00mayur|431001/);
   // existing About content is still there
   await expect(page.getByRole('heading', { name: 'Who We Are' })).toBeVisible();
   await expect(page.getByText('Prof. Mayur Raut').first()).toBeVisible();
