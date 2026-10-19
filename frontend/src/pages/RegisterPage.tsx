@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { LogoLink } from '../components/ui/Logo';
+import { AffiliationLine, LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
 import { PASSWORD_HELP, PASSWORD_MIN_LENGTH, passwordProblem } from '../constants/passwordPolicy';
 
@@ -109,7 +109,8 @@ const RegisterPage: React.FC = () => {
 
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-block mb-3"><LogoLink size="lg" /></div>
+          <div className="inline-block mb-1"><LogoLink size="lg" /></div>
+          <AffiliationLine className="text-xs mb-3" />
           <p className="text-text-secondary text-sm">Create your free learning account</p>
         </div>
 

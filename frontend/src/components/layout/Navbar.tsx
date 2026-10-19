@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Search, Menu, X, ChevronDown, LogOut, User, Settings, BookOpen, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { LogoLink } from '../ui/Logo';
+import { BrandLockup } from '../ui/Logo';
 import ThemeToggle from '../ui/ThemeToggle';
 import { COURSES_ENABLED } from '../../constants/features';
 import api from '../../services/api';
@@ -73,8 +73,9 @@ const Navbar: React.FC = () => {
       <div className="page-container">
         <div className="flex items-center justify-between h-16">
           {/* Logo (the compact size on phones leaves room for the account buttons) */}
-          <span className="sm:hidden"><LogoLink size="sm" /></span>
-          <span className="hidden sm:block"><LogoLink size="md" /></span>
+          {/* + the secondary "An Initiative of Virat Education Society" line; LearnIQ stays the primary brand */}
+          <span className="sm:hidden min-w-0"><BrandLockup size="sm" /></span>
+          <span className="hidden sm:block"><BrandLockup size="md" /></span>
 
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-1">

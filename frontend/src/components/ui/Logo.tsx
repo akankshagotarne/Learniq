@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { SOCIETY } from '../../constants/organization';
 
 const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; className?: string }> = ({ size = 'md', className = '' }) => {
   const sizes = {
@@ -42,6 +43,24 @@ export const LogoLink: React.FC<{ to?: string; size?: 'sm' | 'md' | 'lg' }> = ({
   <Link to={to}>
     <Logo size={size} />
   </Link>
+);
+
+/**
+ * The secondary brand line: LearnIQ stays the primary brand, the society is named underneath in small, muted text.
+ * The only wording used across the site (constants/organization.ts), so every page says the same thing.
+ */
+export const AffiliationLine: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <p className={`text-text-secondary font-medium leading-tight tracking-[0.01em] ${className}`} data-testid="society-affiliation">
+    {SOCIETY.affiliation}
+  </p>
+);
+
+/** LearnIQ logo with the affiliation line directly beneath it (navbar, footer). */
+export const BrandLockup: React.FC<{ size?: 'sm' | 'md'; lineClassName?: string }> = ({ size = 'md', lineClassName = '' }) => (
+  <div className="flex flex-col min-w-0">
+    <LogoLink size={size} />
+    <AffiliationLine className={`${size === 'sm' ? 'text-[9.5px] mt-0.5 max-w-[9.5rem]' : 'text-[11px] mt-1'} ${lineClassName}`} />
+  </div>
 );
 
 export default Logo;

@@ -5,7 +5,7 @@ import { useAuth, SessionConflict } from '../context/AuthContext';
 import SessionConflictDialog, { ConflictDialogState } from '../components/auth/SessionConflictDialog';
 import { AUTH_NOTICE_KEY } from '../services/api';
 import { User } from '../types';
-import { LogoLink } from '../components/ui/Logo';
+import { AffiliationLine, LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -115,7 +115,8 @@ const LoginPage: React.FC = () => {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-block mb-3"><LogoLink size="lg" /></div>
+          <div className="inline-block mb-1"><LogoLink size="lg" /></div>
+          <AffiliationLine className="text-xs mb-3" />
           <p className="text-text-secondary text-sm">Log in with your email or phone number</p>
         </div>
 

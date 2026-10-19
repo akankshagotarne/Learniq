@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import api from '../services/api';
+import { useLocation } from 'react-router-dom';
+import SocietyDetails from '../components/organization/SocietyDetails';
+import { SOCIETY, telHref } from '../constants/organization';
 import { Mail, Phone, MapPin, Target, Eye, Heart, Sparkles, Users, Code2 } from 'lucide-react';
 
 interface CompanyData {
@@ -18,6 +21,42 @@ const AboutPage: React.FC = () => {
   useEffect(() => {
     api.get('/admin/company').then(r => setCompany(r.data.company)).catch(() => {});
   }, []);
+
+  // page title / description / structured data: LearnIQ as the brand, operating under Virat Education Society (facts only)
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = `About LearnIQ & ${SOCIETY.name}`;
+    let meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    const created = !meta;
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'description'; document.head.appendChild(meta); }
+    const prevDesc = meta.content;
+    meta.content = `LearnIQ is an educational initiative of ${SOCIETY.name} (Regd. No. ${SOCIETY.registrations.map((r) => r.number).join(', ')}). Registered office: ${SOCIETY.office.locality}, ${SOCIETY.office.region}.`;
+    const ld = document.createElement('script');
+    ld.type = 'application/ld+json'; ld.id = 'ld-organization';
+    ld.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'EducationalOrganization',
+      name: 'LearnIQ',
+      url: 'https://www.learniq.study',
+      parentOrganization: {
+        '@type': 'Organization',
+        name: SOCIETY.name,
+        email: SOCIETY.email,
+        telephone: SOCIETY.phones.map((p) => telHref(p).replace('tel:', '')),
+        address: { '@type': 'PostalAddress', streetAddress: SOCIETY.office.lines.slice(1, 3).join(', '), addressLocality: SOCIETY.office.locality, addressRegion: SOCIETY.office.region, postalCode: SOCIETY.office.postalCode, addressCountry: SOCIETY.office.country },
+      },
+    });
+    document.head.appendChild(ld);
+    return () => { document.title = prevTitle; if (created) meta?.remove(); else if (meta) meta.content = prevDesc; ld.remove(); };
+  }, []);
+
+  // footer link "About Virat Education Society" -> /about#virat-education-society
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const t = setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => clearTimeout(t);
+  }, [hash]);
 
   const c = company || {
     name: 'Learniq',
@@ -193,6 +232,19 @@ const AboutPage: React.FC = () => {
             <h2 className="font-heading font-bold text-2xl text-text-primary mb-4">Who We Are</h2>
             <p className="text-text-secondary leading-relaxed text-base">{c.about}</p>
           </div>
+
+          {/* LearnIQ & Virat Education Society */}
+          <section id="virat-education-society" className="mb-16 scroll-mt-24" aria-labelledby="ves-heading" data-testid="about-society">
+            <div className="card-soft p-8 mb-6">
+              <span className="badge bg-brand-primary/10 text-brand-primary border border-brand-primary/20 mb-3 inline-block text-xs font-semibold px-3 py-1">{SOCIETY.affiliation}</span>
+              <h2 id="ves-heading" className="font-heading font-bold text-2xl text-text-primary mb-4">About LearnIQ &amp; {SOCIETY.name}</h2>
+              <div className="space-y-3 text-text-secondary leading-relaxed text-base">
+                <p>LearnIQ is an educational initiative operating under {SOCIETY.name}. LearnIQ focuses on making learning more accessible through digital educational tools, assessments, examinations and learning experiences - including the LearnIQ Olympiad tests, teacher interviews and verifiable certificates.</p>
+                <p>{SOCIETY.name} provides the organisational context under which the LearnIQ initiative operates. LearnIQ continues to serve as the primary educational brand; the society's official details are provided below for transparency and organisational identification.</p>
+              </div>
+            </div>
+            <SocietyDetails headingLevel="h3" />
+          </section>
 
           {/* Meet Our Founder & Mentor */}
           <div className="mb-20">
@@ -386,7 +438,8 @@ const AboutPage: React.FC = () => {
 
           {/* Contact */}
           <div className="card-soft p-8">
-            <h2 className="font-heading font-bold text-2xl text-text-primary mb-6 text-center">Get In Touch</h2>
+            <h2 className="font-heading font-bold text-2xl text-text-primary mb-1 text-center">Get In Touch</h2>
+            <p className="text-text-secondary text-sm text-center mb-6">LearnIQ Support - help with the LearnIQ platform, exams, interviews and certificates</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
               <a href={`mailto:${c.email}`} className="flex flex-col items-center gap-2 p-5 bg-surface-alt border border-border-subtle rounded-xl hover:bg-surface transition-all">
                 <div className="w-10 h-10 bg-brand-primary/10 rounded-xl flex items-center justify-center text-brand-primary">
