@@ -168,7 +168,7 @@ test('K. student side: the saved deadline decides whether a student can start (o
 
 test('L. only administrators may change a deadline', async () => {
   reset(); const s = await mkUser('student'); const t = await mkUser('teacher'); const a = await mkUser('admin');
-  const exam = await mkExam({ endDate: OLD_CLOSE });
+  const exam = await mkExam({ startDate: new Date('2026-10-17T09:00:00+05:30'), endDate: OLD_CLOSE }); // fixed dates: the test must not depend on today's date
   assert.equal((await patch(null, exam, { endDate: NEW_END })).status, 401);
   assert.equal((await patch(s, exam, { endDate: NEW_END })).status, 403);
   assert.equal((await patch(t, exam, { endDate: NEW_END })).status, 403);

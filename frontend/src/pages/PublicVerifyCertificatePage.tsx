@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Loader2, ShieldCheck, XCircle } from 'lucide-react';
-import { LogoLink } from '../components/ui/Logo';
+import { AffiliationLine, LogoLink } from '../components/ui/Logo';
 import { certificatesApi } from '../services/certificates';
 import { CertificateVerification } from '../types/olympiad';
 
@@ -43,7 +43,8 @@ const PublicVerifyCertificatePage: React.FC = () => {
 
       <div className="relative z-10 w-full max-w-lg">
         <div className="text-center mb-6">
-          <div className="inline-block mb-2"><LogoLink size="lg" /></div>
+          <div className="inline-block mb-1"><LogoLink size="lg" /></div>
+          <AffiliationLine className="text-xs mb-2" />
           <p className="text-text-secondary text-sm flex items-center justify-center gap-1.5"><ShieldCheck className="w-4 h-4 text-brand-primary" /> Certificate Verification</p>
         </div>
 

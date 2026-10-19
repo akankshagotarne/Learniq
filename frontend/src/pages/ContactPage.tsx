@@ -3,6 +3,7 @@ import {
   Mail, Phone, MapPin, Clock, Send, MessageSquare,
   HelpCircle, CheckCircle2, ChevronDown, ChevronUp, Sparkles
 } from 'lucide-react';
+import SocietyDetails from '../components/organization/SocietyDetails';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import toast from 'react-hot-toast';
@@ -84,7 +85,7 @@ const ContactPage: React.FC = () => {
             {[
               {
                 icon: Phone,
-                title: 'Call Support',
+                title: 'Call LearnIQ Support',
                 value: '+91 95524 41233',
                 sub: 'Mon - Sat: 9 AM - 8 PM',
                 action: 'tel:+919552441233',
@@ -92,7 +93,7 @@ const ContactPage: React.FC = () => {
               },
               {
                 icon: Mail,
-                title: 'Email Us',
+                title: 'Email LearnIQ Support',
                 value: 'learniq.admin@gmail.com',
                 sub: 'Quick response in 2 hours',
                 action: 'mailto:learniq.admin@gmail.com',
@@ -100,7 +101,7 @@ const ContactPage: React.FC = () => {
               },
               {
                 icon: MapPin,
-                title: 'Headquarters',
+                title: 'LearnIQ Office',
                 value: 'Baner Tech Hub',
                 sub: 'Pune, Maharashtra 411045',
                 action: 'https://maps.google.com',
@@ -128,6 +129,11 @@ const ContactPage: React.FC = () => {
               );
             })}
           </div>
+        </div>
+
+        {/* The society LearnIQ operates under (registered office + contact), clearly separate from LearnIQ Support */}
+        <div className="page-container max-w-6xl mb-16">
+          <SocietyDetails compact headingLevel="h2" />
         </div>
 
         {/* Form and FAQ Split */}

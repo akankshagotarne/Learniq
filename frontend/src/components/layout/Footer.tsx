@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { LogoLink } from '../ui/Logo';
+import { BrandLockup } from '../ui/Logo';
+import { SOCIETY } from '../../constants/organization';
 import { Mail, Phone, MapPin } from 'lucide-react';
 import { LinkedinIcon, TwitterIcon, InstagramIcon, YoutubeIcon } from '../ui/SocialIcons';
 import { COURSES_ENABLED } from '../../constants/features';
@@ -12,7 +13,7 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <LogoLink size="md" />
+            <BrandLockup size="md" />
             <p className="text-text-secondary text-sm leading-relaxed mt-4 max-w-sm">
               Learniq connects passionate teachers with eager students through live classes, recorded lectures,
               interactive quizzes, and personalized learning experiences. Learn Smarter. Grow Better.
@@ -41,6 +42,7 @@ const Footer: React.FC = () => {
                 { label: 'Courses', href: '/courses' },
                 { label: 'Live Classes', href: '/live-sessions' },
                 { label: 'About Learniq', href: '/about' },
+                { label: `About ${SOCIETY.name}`, href: '/about#virat-education-society' },
                 { label: 'Contact', href: '/contact' },
               ].filter(link => COURSES_ENABLED || link.href !== '/courses').map(link => (
                 <li key={link.label}>
@@ -71,6 +73,7 @@ const Footer: React.FC = () => {
             </ul>
 
             <div className="space-y-2">
+              <p className="text-text-primary text-xs font-semibold">LearnIQ Support</p>
               <a href="mailto:learniq.admin@gmail.com" className="flex items-center gap-2 text-text-secondary hover:text-brand-primary text-xs transition-colors">
                 <Mail className="w-3.5 h-3.5 text-brand-primary" /> learniq.admin@gmail.com
               </a>
@@ -100,8 +103,17 @@ const Footer: React.FC = () => {
           </div>
         </div>}
 
+        {/* Organisation line: who runs LearnIQ (full details on the About page) */}
+        <div className="border-t border-border-subtle pt-6 pb-2 text-center sm:text-left" data-testid="footer-society">
+          <p className="text-text-secondary text-xs">
+            <span className="font-semibold text-text-primary">LearnIQ</span> — {SOCIETY.affiliation}
+            <span className="hidden sm:inline"> · </span><br className="sm:hidden" />
+            <span className="text-text-muted">Regd. No. {SOCIETY.registrations.map((r) => r.number).join(' | ')}</span>
+          </p>
+        </div>
+
         {/* Copyright */}
-        <div className="border-t border-border-subtle pt-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-text-muted text-xs">
             © 2024 Learniq Technologies Pvt. Ltd. All rights reserved.
           </p>

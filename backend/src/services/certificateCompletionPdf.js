@@ -53,6 +53,10 @@ const SIGNATORIES = [
   { name: 'Prof. Mayur Raut', title: 'Founder & MD', image: 'sigRaut', cx: 1210 },
 ];
 
+const { SOCIETY, registrationLine } = require('../config/organization');
+/** The single printed organisation line (also checked by the tests). */
+const societyLine = () => `${SOCIETY.affiliation}   •   Registration References: ${registrationLine()}`;
+
 const CONTACT = { website: 'www.learniq.study', email: 'learniq.admin@gmail.com', social: '/LearnIQ_official', tagline: 'LEARN SMARTER, GROW BETTER' };
 
 const imageCache = {};
@@ -406,19 +410,20 @@ const drawSignatures = (doc) => {
 const drawFooter = (doc) => {
   const top = FOOTER_TOP;
   doc.rect(0, top, DESIGN_W, DESIGN_H - top).fill(NAVY);
-  const cy = top + (DESIGN_H - top) / 2;
+  // two rows: the LearnIQ contact row, then the organisation line (Virat Education Society + both registration references)
+  const cy = top + 26;
   const baseline = cy + 7;
   const white = '#FFFFFF';
   // globe
   doc.save().lineWidth(2).strokeColor(GOLD_LIGHT).circle(137, cy, 17).stroke().ellipse(137, cy, 7, 17).stroke()
     .moveTo(120, cy).lineTo(154, cy).stroke().restore();
   left(doc, CONTACT.website, { font: 'serif', size: 24, x: 175, baseline, color: white });
-  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(375, top + 25).lineTo(375, DESIGN_H - 25).stroke().restore();
+  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(375, top + 9).lineTo(375, top + 43).stroke().restore();
   // envelope
   doc.save().lineWidth(2).strokeColor(GOLD_LIGHT).roundedRect(426, cy - 12, 31, 24, 3).stroke()
     .moveTo(427, cy - 11).lineTo(441.5, cy + 2).lineTo(456, cy - 11).stroke().restore();
   left(doc, CONTACT.email, { font: 'serif', size: 24, x: 481, baseline, color: white });
-  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(732, top + 25).lineTo(732, DESIGN_H - 25).stroke().restore();
+  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(732, top + 9).lineTo(732, top + 43).stroke().restore();
   // social icons
   doc.save().fillColor(white).roundedRect(783, cy - 13, 35, 26, 7).fill();
   doc.fillColor(NAVY).polygon([796, cy - 7], [796, cy + 7], [808, cy]).fill().restore();
@@ -427,9 +432,20 @@ const drawFooter = (doc) => {
   doc.save().fillColor(white).roundedRect(868, cy - 13, 26, 26, 4).fill().restore();
   left(doc, 'in', { font: 'sans', size: 17, x: 873, baseline: cy + 6, color: NAVY });
   left(doc, CONTACT.social, { font: 'serif', size: 24, x: 912, baseline, color: white });
-  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(1091, top + 25).lineTo(1091, DESIGN_H - 25).stroke().restore();
+  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(1091, top + 9).lineTo(1091, top + 43).stroke().restore();
   const tw = left(doc, CONTACT.tagline, { font: 'sansMedium', size: 15, x: 1145, baseline: baseline - 1, color: '#DCE6F7', spacing: 3.2 });
   doc.save().lineWidth(2.4).strokeColor(GOLD).moveTo(1145 + tw + 14, cy).lineTo(1145 + tw + 44, cy).stroke().restore();
+  drawSocietyLine(doc, top);
+};
+
+/**
+ * Organisation line in the footer band (both certificate types): LearnIQ stays the brand at the top of the page; this secondary
+ * line names the society and prints BOTH registration references in full, in a font with clear digits and brackets.
+ */
+const drawSocietyLine = (doc, top) => {
+  const y = top + 51; // baseline at top + 66: ~14 pt above the paper edge, inside normal printer margins
+  doc.save().lineWidth(1).strokeColor(GOLD).opacity(0.55).moveTo(120, y - 2).lineTo(DESIGN_W - 120, y - 2).stroke().restore();
+  centred(doc, societyLine(), { font: 'sansMedium', size: 15.5, cx: DESIGN_W / 2, baseline: y + 15, color: GOLD_LIGHT, spacing: 0.5, maxWidth: DESIGN_W - 260, minSize: 12 });
 };
 
 /** The student's name must always fit on one line: shrink it a little, never wrap, never overflow. */
@@ -509,4 +525,4 @@ const renderCompletionPdf = (ctx) => new Promise((resolve, reject) => {
   }
 });
 
-module.exports = { renderCompletionPdf, PHOTO, printableName, formatScore, SIGNATORIES, CONTACT, DESIGN_W, DESIGN_H, A4_W, A4_H };
+module.exports = { renderCompletionPdf, societyLine, PHOTO, printableName, formatScore, SIGNATORIES, CONTACT, DESIGN_W, DESIGN_H, A4_W, A4_H };
