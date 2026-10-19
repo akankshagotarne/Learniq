@@ -28,10 +28,9 @@ const FONT_FILES = {
 const IMAGES = {
   bolt: path.join(BRAND, 'logo-bolt.png'),
   wordmark: path.join(BRAND, 'wordmark.png'),
-  sigKandangire: path.join(BRAND, 'sig-kandangire.png'),
-  sigKahane: path.join(BRAND, 'sig-kahane.png'),
   sigGotarne: path.join(BRAND, 'sig-gotarne.png'),
   sigRaut: path.join(BRAND, 'sig-raut.png'),
+  societyStamp: path.join(BRAND, 'society-stamp.png'),
 };
 
 const DESIGN_W = 1536;
@@ -46,12 +45,13 @@ const GOLD = '#C99A3B';
 const GOLD_LIGHT = '#E8C46A';
 const GOLD_DARK = '#8A5A12';
 
+/** Two signatories only (CEO left, Founder & MD right) with the Virat Education Society stamp centred between them. */
 const SIGNATORIES = [
-  { name: 'Nikhil Kandangire', title: 'CMO', image: 'sigKandangire', cx: 340 },
-  { name: 'Kruti Kahane', title: 'CTO', image: 'sigKahane', cx: 622 },
-  { name: 'Akanksha Gotarne', title: 'CEO', image: 'sigGotarne', cx: 915 },
-  { name: 'Prof. Mayur Raut', title: 'Founder & MD', image: 'sigRaut', cx: 1210 },
+  { name: 'Akanksha Gotarne', title: 'CEO', image: 'sigGotarne', cx: 430 },
+  { name: 'Prof. Mayur Raut', title: 'Founder & MD', image: 'sigRaut', cx: 1106 },
 ];
+/** The supplied official stamp (cropped to its outer ring, ink-only alpha; never redrawn, stretched or rotated). Aspect 700:673. */
+const STAMP = { cx: 768, cy: 878, h: 142, aspect: 700 / 673 };
 
 const { SOCIETY, registrationLine } = require('../config/organization');
 /** The single printed organisation line (also checked by the tests). */
@@ -210,14 +210,24 @@ const drawMedal = (doc) => {
   doc.restore();
 };
 
+/** Organisation name at the very top (name only - registrations/address stay in the footer); LearnIQ stays the larger primary brand. */
+const drawSocietyName = (doc) => {
+  const name = SOCIETY.name.toUpperCase();
+  const sw = centred(doc, name, { font: 'serifBold', size: 28, cx: DESIGN_W / 2, baseline: 68, color: NAVY, spacing: 1.5, maxWidth: 760, minSize: 18 });
+  const gap = 26;
+  doc.save().lineWidth(1.4).strokeColor(GOLD).moveTo(DESIGN_W / 2 - sw / 2 - gap - 150, 60).lineTo(DESIGN_W / 2 - sw / 2 - gap, 60).stroke()
+    .moveTo(DESIGN_W / 2 + sw / 2 + gap, 60).lineTo(DESIGN_W / 2 + sw / 2 + gap + 150, 60).stroke().restore();
+};
+
 const drawLogo = (doc) => {
-  const boltH = 104; const boltW = boltH * (467 / 422);
-  const wmH = 82; const wmW = wmH * (469 / 117);
-  const total = boltW + 16 + wmW;
+  drawSocietyName(doc);
+  const boltH = 78; const boltW = boltH * (467 / 422);
+  const wmH = 62; const wmW = wmH * (469 / 117);
+  const total = boltW + 14 + wmW;
   const x0 = DESIGN_W / 2 - total / 2;
-  doc.image(loadImage('bolt'), x0, 50, { width: boltW, height: boltH });
-  doc.image(loadImage('wordmark'), x0 + boltW + 16, 62, { width: wmW, height: wmH });
-  centred(doc, CONTACT.tagline, { font: 'sansMedium', size: 16, cx: DESIGN_W / 2, baseline: 176, color: NAVY, spacing: 3 });
+  doc.image(loadImage('bolt'), x0, 82, { width: boltW, height: boltH });
+  doc.image(loadImage('wordmark'), x0 + boltW + 14, 90, { width: wmH * (469 / 117), height: wmH });
+  centred(doc, CONTACT.tagline, { font: 'sansMedium', size: 14, cx: DESIGN_W / 2, baseline: 183, color: NAVY, spacing: 3 });
 };
 
 const drawTagline = (doc) => {
@@ -393,7 +403,15 @@ const drawPhotoLayout = (doc, ctx, photo) => {
   drawResultBoxes(doc, ctx);
 };
 
+const drawStamp = (doc) => {
+  // loadImage throws when the asset is missing: the render fails loudly rather than printing a look-alike
+  const buf = loadImage('societyStamp');
+  const w = STAMP.h * STAMP.aspect;
+  doc.image(buf, STAMP.cx - w / 2, STAMP.cy - STAMP.h / 2, { width: w, height: STAMP.h });
+};
+
 const drawSignatures = (doc) => {
+  drawStamp(doc);
   SIGNATORIES.forEach((s) => {
     const lineY = 895;
     const buf = loadImage(s.image);
