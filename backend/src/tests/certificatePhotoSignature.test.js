@@ -240,10 +240,8 @@ test('a photo that cannot be embedded never blocks the certificate (corrupt PNG 
 });
 
 // ───────────── Founder signature ─────────────
-test('G: the Founder signature is the new transparent handwritten image; the other three signatures are byte-for-byte unchanged', () => {
+test('G: the Founder signature is the new transparent handwritten image; the CEO signature is byte-for-byte unchanged', () => {
   const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(BRAND, f))).digest('hex');
-  assert.equal(sha('sig-kandangire.png'), 'e52d6d29a949a57e8586d05b9d8d12cfc068a03fabea4bb41e58a2dfb01758de');
-  assert.equal(sha('sig-kahane.png'), '616fa97fde36d0f4aa3008a8bbd630e1dfc022738d5f400cdfdc90c909f9ff5a');
   assert.equal(sha('sig-gotarne.png'), 'c3b9d6232d748398c57124e55e70285200242dd7b4b281f63c4bbc4aceadccc4');
   assert.notEqual(sha('sig-raut.png'), 'b2b55149ea7979c40a0a36ac603f5ff3741dea5230fb700e2edc021b5ab0afd5', 'the old Founder signature is gone');
   const img = PNG.sync.read(fs.readFileSync(path.join(BRAND, 'sig-raut.png')));
@@ -253,7 +251,7 @@ test('G: the Founder signature is the new transparent handwritten image; the oth
   assert.ok(transparent / (img.width * img.height) > 0.6, 'paper background removed (transparent)');
   assert.ok(opaque > 3000, 'the pen strokes are kept');
   const sig = completion.SIGNATORIES.map((s) => `${s.name}|${s.title}|${s.image}`);
-  assert.deepEqual(sig, ['Nikhil Kandangire|CMO|sigKandangire', 'Kruti Kahane|CTO|sigKahane', 'Akanksha Gotarne|CEO|sigGotarne', 'Prof. Mayur Raut|Founder & MD|sigRaut']);
+  assert.deepEqual(sig, ['Akanksha Gotarne|CEO|sigGotarne', 'Prof. Mayur Raut|Founder & MD|sigRaut']);
 });
 
 test('G: the Founder signature is the ONLY place the Founder signature comes from (shared asset, both certificate types)', () => {

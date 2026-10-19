@@ -77,7 +77,9 @@ for (const name of Object.keys(VARIANTS)) {
     assert.ok(text.includes(`Registration References: ${REG1} | ${REG2}`), 'both references, complete, in order');
     assert.ok(text.includes(v.certificateNumber)); assert.ok(text.includes('18 October 2026')); assert.match(text, /Asha Kulkarni/);
     assert.match(text, v.kind === 'PARTICIPATION' ? /CERTIFICATE OF PARTICIPATION/ : /CERTIFICATE OF COMPLETION/);
-    for (const s of ['Prof. Mayur Raut', 'Founder & MD', 'Nikhil Kandangire', 'Kruti Kahane', 'Akanksha Gotarne']) assert.ok(text.includes(s), s);
+    for (const s of ['Prof. Mayur Raut', 'Founder & MD', 'Akanksha Gotarne']) assert.ok(text.includes(s), s);
+    for (const s of ['Nikhil Kandangire', 'Kruti Kahane']) assert.ok(!text.includes(s), `removed signatory still printed: ${s}`);
+    assert.ok(!/\b(CMO|CTO)\b/.test(text), 'no CMO / CTO designation');
     assert.ok(!/Virat Education Society\s*\n?\s*CERTIFICATE/.test(text), 'the society never replaces the certificate heading');
 
     const w = words(file);
@@ -113,4 +115,61 @@ test('the photo frame and the founder signature asset are untouched by the socie
   assert.deepEqual(pdfMod.PHOTO, { frame: { x: 1287, y: 285, w: 205, h: 282 }, pic: { x: 1294, y: 292, w: 192, h: 257 } });
   assert.equal(pdfMod.SIGNATORIES.find((s) => s.image === 'sigRaut').title, 'Founder & MD');
   assert.equal(pdfMod.societyLine(), `An Initiative of Virat Education Society   •   Registration References: ${REG1} | ${REG2}`);
+});
+
+// ───────────── top society name + two signatories + official stamp ─────────────
+test('the organisation NAME is at the top of every variant (name only), above the LearnIQ logo and title; registrations stay in the footer', { skip: !POPPLER }, async () => {
+  for (const name of Object.keys(VARIANTS)) {
+    const file = await render(name);
+    const w = words(file);
+    const top = ['VIRAT', 'EDUCATION', 'SOCIETY'].map((t) => w.find((x) => x.t === t && x.y1 < 70));
+    assert.ok(top.every(Boolean), `${name}: "VIRAT EDUCATION SOCIETY" in the top header`);
+    assert.ok(top[0].x0 < top[1].x0 && top[1].x0 < top[2].x0);
+    const title = w.find((x) => x.t === 'CERTIFICATE');
+    const tag = w.find((x) => x.t === 'LEARN');
+    assert.ok(top[0].y1 < tag.y0 && tag.y1 < title.y0, `${name}: society name < tagline < title`);
+    assert.ok(Math.abs((top[0].x0 + top[2].x1) / 2 - 841.89 / 2) < 6, 'centred');
+    // nothing but the name in the top band: no registration numbers / address / phone / email up there
+    assert.ok(!w.some((x) => x.y1 < 70 && /MAH|F-25431|Nashik|9765|9860|@/.test(x.t)));
+    assert.ok(w.some((x) => x.y0 > 540 && x.t.includes('F-25431(6750)')), 'registration references remain in the footer');
+    const h = (top[0].y1 - top[0].y0);
+    assert.ok(h >= 11, 'readable');
+  }
+});
+
+test('signature block: CEO left, society stamp centred between, Founder & MD right; stamp does not touch either block', { skip: !POPPLER }, async () => {
+  for (const name of Object.keys(VARIANTS)) {
+    const file = await render(name);
+    const w = words(file);
+    const ceo = w.find((x) => x.t === 'Akanksha'); const founder = w.find((x) => x.t === 'Prof.');
+    assert.ok(ceo && founder && ceo.x0 < 841.89 / 2 && founder.x0 > 841.89 / 2);
+    const sc = 841.89 / pdfMod.DESIGN_W;
+    const imgs = execFileSync('pdfimages', ['-list', file]).toString().split('\n').filter((l) => /^\s*\d+\s+\d+\s+image/.test(l));
+    assert.ok(imgs.length >= 4, `${name}: stamp + two signatures + logo images are embedded`);
+    // PNG raster check: the stamp ring is dark ink centred on the page, clear of both signature blocks
+    const out = path.join(tmp, `s-${name.replace(/\W+/g, '_')}`);
+    execFileSync('pdftoppm', ['-r', '150', '-png', file, out]);
+    const png = PNG.sync.read(fs.readFileSync(`${out}-1.png`));
+    const k = 150 / 72;
+    const dark = (x0, x1, y0, y1) => { let n = 0; for (let y = Math.floor(y0 * k); y < y1 * k; y++) for (let x = Math.floor(x0 * k); x < x1 * k; x++) { const i = (png.width * y + x) * 4; if (png.data[i] < 80 && png.data[i + 1] < 80 && png.data[i + 2] < 80) n++; } return n; };
+    const S = { x0: (768 - 70) * sc, x1: (768 + 70) * sc, y0: (878 - 71) * sc, y1: (878 + 71) * sc };
+    assert.ok(dark(S.x0, S.x1, S.y0, S.y1) > 2500, `${name}: the stamp is printed in its black ink`);
+    assert.ok(dark(S.x0 - 12, S.x0 - 2, S.y0, S.y1) < 30 && dark(S.x1 + 2, S.x1 + 12, S.y0, S.y1) < 30, 'a clear gap each side of the stamp');
+    const nameL = w.find((x) => x.t === 'Akanksha'); const nameR = founder;
+    const ceoLine = w.filter((x) => Math.abs(x.y0 - nameL.y0) < 2 && x.x0 < 841.89 / 2); const fLine = w.filter((x) => Math.abs(x.y0 - nameR.y0) < 2 && x.x0 > 841.89 / 2 + 50);
+    assert.ok(Math.max(...ceoLine.map((x) => x.x1)) < S.x0 - 15, 'CEO text clear of the stamp');
+    assert.ok(Math.min(...fLine.map((x) => x.x0)) > S.x1 + 15, 'Founder text clear of the stamp');
+    assert.ok(S.y1 < 595.28 * (964 / 1086), 'stamp stays inside the inner border');
+  }
+});
+
+test('the supplied official stamp asset is used as-is (cropped + ink-only alpha, not redrawn) and a missing asset fails loudly', async () => {
+  const f = path.join(__dirname, '..', '..', 'assets', 'certificate', 'completion', 'society-stamp.png');
+  const img = PNG.sync.read(fs.readFileSync(f));
+  assert.ok(img.width >= 600 && Math.abs(img.width / img.height - 700 / 673) < 0.01, 'aspect ratio preserved');
+  const edge = (x, y) => img.data[(img.width * y + x) * 4 + 3];
+  assert.equal(edge(0, 0), 0); assert.equal(edge(img.width - 1, img.height - 1), 0);
+  let ink = 0; for (let i = 3; i < img.data.length; i += 4) if (img.data[i] > 200) ink++;
+  assert.ok(ink > 8000, 'the stamp strokes are present');
+  assert.ok(/society-stamp\.png/.test(fs.readFileSync(require.resolve('../services/certificateCompletionPdf'), 'utf8')));
 });

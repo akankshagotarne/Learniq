@@ -80,7 +80,7 @@ test('PDF text: heading, name, three result boxes, number, date, signatories and
     CONTACT.website, CONTACT.email, CONTACT.social,
   ]) assert.ok(t.includes(expected), `missing: ${expected}`);
   for (const s of SIGNATORIES) { assert.ok(t.includes(s.name), s.name); assert.ok(t.includes(s.title), s.title); }
-  assert.deepEqual(SIGNATORIES.map((s) => `${s.name}|${s.title}`), ['Nikhil Kandangire|CMO', 'Kruti Kahane|CTO', 'Akanksha Gotarne|CEO', 'Prof. Mayur Raut|Founder & MD']);
+  assert.deepEqual(SIGNATORIES.map((s) => `${s.name}|${s.title}`), ['Akanksha Gotarne|CEO', 'Prof. Mayur Raut|Founder & MD']);
 });
 
 test('PDF text: the Participation certificate carries the same PROCTORED wording', { skip: !POPPLER }, async () => {
