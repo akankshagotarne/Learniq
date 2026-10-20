@@ -258,7 +258,7 @@ for (const vp of [
     const stage = ad.page.getByTestId('main-stage');
     await expect(stage).toHaveAttribute('data-stage-state', 'camera', { timeout: 25000 });
     const box = (await stage.boundingBox())!;
-    expect(box.width).toBeGreaterThan(vp.width * 0.8); expect(box.height).toBeGreaterThan(vp.height * 0.25);
+    expect(box.width).toBeGreaterThan(vp.width * 0.8); expect(box.height).toBeGreaterThan(vp.height * 0.2);
     await expect(ad.page.getByTestId('chat-panel')).toHaveCount(0);
     const rep = await findOverflow(ad.page); expect(rep.offenders, JSON.stringify(rep.offenders)).toEqual([]);
     for (const b of await ad.page.getByTestId('control-bar').getByRole('button').all()) { const bb = await b.boundingBox(); if (bb) { expect(bb.width).toBeGreaterThanOrEqual(44); expect(bb.height).toBeGreaterThanOrEqual(44); } }

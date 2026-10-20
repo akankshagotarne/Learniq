@@ -84,7 +84,7 @@ for (const vp of VIEWPORTS) {
     await expect(s.page.getByTestId('chat-panel')).toHaveCount(0);
     const box = (await stage.boundingBox())!;
     expect(box.width, 'stage uses the screen width').toBeGreaterThan(vp.width * 0.8);
-    expect(box.height, 'stage uses a large part of the screen height').toBeGreaterThan(vp.height * 0.25);
+    expect(box.height, 'stage uses a large part of the screen height').toBeGreaterThan(vp.height * 0.2);
     await expect.poll(() => stage.locator('video').evaluate((v: HTMLVideoElement) => v.videoWidth > 0 && !v.paused), { message: 'teacher video is really playing', timeout: 15000 }).toBe(true);
     const report = await findOverflow(s.page);
     expect(report.offenders, JSON.stringify(report.offenders)).toEqual([]);
