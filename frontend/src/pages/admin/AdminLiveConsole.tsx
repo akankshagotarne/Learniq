@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Eye, HelpCircle, Loader, Lock, RefreshCw, ScrollText, Settings, Shield, Square, Unlock, Users, WifiOff } from 'lucide-react';
+import { ArrowLeft, Eye, HelpCircle, Loader, Lock, RefreshCw, ScrollText, Settings, Shield, Square, Unlock, Users, Video, WifiOff } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
 import { useAdminConsole } from '../../features/live/useAdminConsole';
@@ -13,7 +13,7 @@ type Tab = 'people' | 'question' | 'settings' | 'audit';
 interface AuditRow { id: string; at: string; action: string; actorName: string; actorRole: string; targetName: string | null; outcome: string; reason: string | null }
 
 const ACTION_LABEL: Record<string, string> = {
-  CONSOLE_JOIN: 'Opened the console', CONSOLE_LEAVE: 'Left the console', MCQ_LAUNCH: 'Launched a question', MCQ_CLOSE: 'Closed the question',
+  CONSOLE_JOIN: 'Opened the console', CONSOLE_LEAVE: 'Left the console', MEETING_JOIN: 'Joined the live meeting as a moderator', MEETING_LEAVE: 'Left the live meeting', MCQ_LAUNCH: 'Launched a question', MCQ_CLOSE: 'Closed the question',
   PARTICIPANT_MUTE: 'Muted a participant', PARTICIPANT_PERMISSIONS: 'Changed a permission', PARTICIPANT_REMOVE: 'Removed a participant',
   ADMISSION_LOCK: 'Locked admission', ADMISSION_UNLOCK: 'Unlocked admission', SETTINGS_CHANGE: 'Changed meeting settings', MODE_CHANGE: 'Changed the visibility mode',
   SELECT_STUDENTS: 'Changed selected students', SPOTLIGHT: 'Changed the spotlight', MEETING_END: 'Ended the meeting', WAITING_APPROVE: 'Admitted a waiting student',
@@ -53,6 +53,8 @@ const AuditTrail: React.FC<{ code: string; refreshKey: number }> = ({ code, refr
 const AdminLiveConsole: React.FC = () => {
   const { code = '' } = useParams<{ code: string }>();
   const c = useAdminConsole(code);
+  const navigate = useNavigate();
+  const [joining, setJoining] = useState(false);
   const [tab, setTab] = useState<Tab>('people');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -92,7 +94,7 @@ const AdminLiveConsole: React.FC = () => {
   }
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'people', label: `People (${c.participants.filter((p) => !p.isHost).length})`, icon: <Users className="w-4 h-4" /> },
+    { id: 'people', label: `People (${c.participants.filter((p) => !p.isHost && !p.isAdmin).length})`, icon: <Users className="w-4 h-4" /> },
     { id: 'question', label: 'Live question', icon: <HelpCircle className="w-4 h-4" /> },
     { id: 'settings', label: 'Visibility', icon: <Settings className="w-4 h-4" /> },
     { id: 'audit', label: 'Activity log', icon: <ScrollText className="w-4 h-4" /> },
@@ -107,11 +109,12 @@ const AdminLiveConsole: React.FC = () => {
         <div className="flex flex-wrap items-start gap-3 justify-between">
           <div className="min-w-0"><p className="text-brand-primary text-xs font-semibold tracking-wide uppercase">Moderation console</p>
             <h1 className="font-heading font-bold text-xl text-text-primary break-words">{c.title || code}</h1>
-            <p className="text-xs text-text-secondary mt-1 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" />You are overseeing this class without joining it. You do not appear to participants and nothing is recorded from the class.</p>
+            <p className="text-xs text-text-secondary mt-1 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" />You are overseeing this class without joining it. You do not appear to participants and nothing is recorded from the class. To hear and see the class, use <b>Join Live Meeting</b>.</p>
             <p className="text-xs text-text-muted mt-1">{c.counts.hostPresent ? 'Teacher is in the class' : 'Teacher is not in the class'} · {c.counts.students} student{c.counts.students === 1 ? '' : 's'} · {c.counts.waiting} waiting · {summarize(c.config)}</p></div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => { if (joining) return; setJoining(true); navigate(`/admin/live/${encodeURIComponent(code)}/meeting`); }} disabled={!c.online || joining} aria-busy={joining} className="btn-primary min-h-[44px] text-sm inline-flex items-center gap-1.5 disabled:opacity-60" data-testid="join-live-meeting">{joining ? <><Loader className="w-4 h-4 animate-spin" />Joining…</> : <><Video className="w-4 h-4" />Join Live Meeting</>}</button>
             <button onClick={lockToggle} disabled={!c.online} className="btn-outline min-h-[44px] text-sm inline-flex items-center gap-1.5" data-testid="lock-toggle">{c.counts.locked ? <><Unlock className="w-4 h-4" />Unlock admission</> : <><Lock className="w-4 h-4" />Lock admission</>}</button>
-            <button onClick={async () => { const r = await c.refresh(); notify(r.ok ? 'Refreshed.' : (r.message || 'Could not refresh.'), !r.ok); }} className="btn-outline min-h-[44px] w-11 inline-flex items-center justify-center" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></button>
+            <button onClick={async () => { const r = await c.refresh(); notify(r.ok ? 'Refreshed.' : (r.message || 'Could not refresh.'), !r.ok); }} className="btn-outline min-h-[44px] text-sm inline-flex items-center gap-1.5" aria-label="Refresh" data-testid="console-refresh"><RefreshCw className="w-4 h-4" />Refresh</button>
             {confirmEnd
               ? <span className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 min-h-[44px] text-sm text-rose-700">End for everyone?
                 <button className="font-bold underline" onClick={end} disabled={ending} data-testid="console-confirm-end">{ending ? 'Ending…' : 'End'}</button><button className="underline" onClick={() => setConfirmEnd(false)}>Cancel</button></span>

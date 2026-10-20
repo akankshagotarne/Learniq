@@ -25,7 +25,7 @@ const TeacherLiveSessions: React.FC = () => {
   const [invited, setInvited] = useState<LiveSession[]>([]);
   const [editing, setEditing] = useState<{ id: string; title: string; cfg: MeetingConfig } | null>(null);
   const [savingCfg, setSavingCfg] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
+  const [form, setForm] = useState({ title: '', description: '', subject: 'Mathematics', scheduledAt: '' });
 
   useEffect(() => {
     fetchSessions();
@@ -49,14 +49,13 @@ const TeacherLiveSessions: React.FC = () => {
     try {
       const res = await api.post('/live-sessions', {
         ...form,
-        standard: parseInt(form.standard),
         scheduledAt: form.scheduledAt || new Date().toISOString(),
         meetingConfig: stripServerFields(meetingCfg),
       });
       toast.success('Live session created!');
       setSessions(prev => [res.data.session, ...prev]);
       setShowCreate(false);
-      setForm({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
+      setForm({ title: '', description: '', subject: 'Mathematics', scheduledAt: '' });
       setMeetingCfg(NEW_CONFIG());
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to create session');
@@ -135,19 +134,11 @@ const TeacherLiveSessions: React.FC = () => {
                     <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                       placeholder="What will you teach?" className="input-field" rows={3} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="input-label">Standard</label>
-                      <select value={form.standard} onChange={e => setForm(p => ({ ...p, standard: e.target.value }))} className="input-field">
-                        {Array.from({ length: 10 }, (_, i) => <option key={i+1} value={i+1}>Standard {i+1}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="input-label">Subject</label>
-                      <select value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} className="input-field">
-                        {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="input-label">Subject</label>
+                    <select value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} className="input-field">
+                      {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="input-label">Schedule Date & Time (optional)</label>
@@ -230,7 +221,7 @@ const TeacherLiveSessions: React.FC = () => {
                       </div>
                       <p className="text-text-secondary text-sm mb-3">{session.description}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-text-muted">
-                        <span className="font-medium text-text-secondary">{session.subject} • Std {session.standard}</span>
+                        <span className="font-medium text-text-secondary">{session.subject}</span>
                         {session.scheduledAt && <span><Clock className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{new Date(session.scheduledAt).toLocaleString('en-IN')}</span>}
                         <span><Users className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{(session as any).totalParticipants || 0} participants</span>
                         <span data-testid="audience-label" className="font-medium text-brand-primary">For: {audienceLabel((session as any).meetingConfig?.audience)}</span>

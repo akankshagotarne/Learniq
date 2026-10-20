@@ -63,12 +63,12 @@ class McqEngine {
 
   // ── channels ────────────────────────────────────────────────────────────────────────────────────
   channel(room) { return `session:${room.code}`; }
-  hostSockets(room) { return Object.values(room.participants).filter((p) => p.isHost).map((p) => p.socketId); }
+  hostSockets(room) { return Object.values(room.participants).filter((p) => p.isHost || p.isAdmin).map((p) => p.socketId); }
   toHosts(room, event, payload) {
     this.hostSockets(room).forEach((sid) => this.io.to(sid).emit(event, payload));
     this.io.to(`admin:${room.code}`).emit(event, payload);
   }
-  students(room) { return Object.values(room.participants).filter((p) => !p.isHost); }
+  students(room) { return Object.values(room.participants).filter((p) => !p.isHost && !p.isAdmin); }
 
   remainingMs(mcq) { return Math.max(0, mcq.closesAt - this.now()); }
 
@@ -133,7 +133,7 @@ class McqEngine {
   /** @returns ack payload: { ok, ... } - never throws for expected conditions. */
   async submit(room, participant, { mcqId, selectedOption }) {
     const mcq = room.mcq;
-    if (!participant || participant.isHost) return { ok: false, code: 'NOT_A_STUDENT', message: 'Only students in this class can answer.' };
+    if (!participant || participant.isHost || participant.isAdmin) return { ok: false, code: 'NOT_A_STUDENT', message: 'Only students in this class can answer.' };
     if (!mcq || String(mcqId) !== mcq.id) return { ok: false, code: 'STALE_QUESTION', message: 'This question has already ended.' };
     const uid = String(participant.userId);
     const mine = mcq.responses.get(uid);
@@ -248,7 +248,7 @@ class McqEngine {
   /** What a (re)connecting participant must know RIGHT NOW. Never contains the correct answer while the window is open (students). */
   stateFor(room, participant) {
     const mcq = room.mcq;
-    const isHost = !!(participant && participant.isHost);
+    const isHost = !!(participant && (participant.isHost || participant.isAdmin));
     if (!mcq || mcq.state === STATE.DONE) return { state: 'idle' };
     if (mcq.state === STATE.OPEN) {
       const out = { state: 'open', mcq: this.publicQuestion(mcq) };

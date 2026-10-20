@@ -42,6 +42,10 @@ for (const vp of [{ width: 1280, height: 800, label: 'desktop' }, { width: 390, 
     await page.getByPlaceholder('e.g., Trigonometry Masterclass').fill(`Audience class ${vp.label}`);
     const aud = page.getByTestId('audience-selector');
     await expect(aud).toBeVisible();
+    // the old standalone Standard dropdown is gone; Subject takes its row and nothing overflows
+    await expect(page.getByLabel('Standard', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Standard 10', { exact: true })).toHaveCount(0);
+    const subj = (await page.locator('select').filter({ hasText: 'Mathematics' }).first().boundingBox())!; expect(subj.x + subj.width).toBeLessThanOrEqual(vp.width + 1);
     await expect(aud.getByText('Who can join this meeting?')).toBeVisible();
     await expect(page.getByTestId('audience-summary')).toContainText('All students — all standards');
     await expect(page.getByTestId('audience-summary')).toContainText('Teachers: No teachers');

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AlertTriangle, Clock, Copy, Link2, Radio, RefreshCw, Search, Shield, Users } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertTriangle, Clock, Copy, Link2, Loader2, Radio, RefreshCw, Search, Shield, Users, Video } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
@@ -10,6 +10,7 @@ interface Row {
   id: string; sessionCode: string; title: string; subject?: string; standard?: number; standardLabel: string; status: 'scheduled' | 'live' | 'ended' | 'cancelled';
   scheduledAt?: string; startedAt?: string; endedAt?: string; host: { id: string; name: string }; course: { id: string; title: string } | null;
   visibilityMode: string; connectedStudents: number; waiting: number; hostPresent: boolean; activeMcq: { state: string; submitted: number } | null; consoles: number; stale: boolean;
+  adminsInMeeting?: number; audience?: { students: string; teachers: string; access: string };
 }
 const MODE_LABEL: Record<string, string> = { everyone: 'Everyone visible', host_only: 'Host only', host_and_selected: 'Host + selected', presentation: 'Presentation', spotlight: 'Spotlight' };
 
@@ -22,6 +23,8 @@ const AdminLiveSessions: React.FC = () => {
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [closing, setClosing] = useState<string | null>(null);
+  const [joining, setJoining] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => { const t = window.setTimeout(() => setDebounced(q.trim()), 300); return () => window.clearTimeout(t); }, [q]);
 
@@ -45,6 +48,7 @@ const AdminLiveSessions: React.FC = () => {
   const stale = rows.filter((r) => r.stale).length;
   const students = rows.reduce((n, r) => n + r.connectedStudents, 0);
 
+  const joinMeeting = (r: Row) => { if (joining) return; setJoining(r.sessionCode); navigate(`/admin/live/${encodeURIComponent(r.sessionCode)}/meeting`); };
   const copy = (code: string) => { navigator.clipboard?.writeText(`${window.location.origin}/live/${code}`); toast.success('Student link copied.'); };
   const markEnded = async (r: Row) => {
     setClosing(r.sessionCode);
@@ -61,7 +65,7 @@ const AdminLiveSessions: React.FC = () => {
           <div className="mb-5">
             <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Admin</p>
             <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Live Class Management</h1>
-            <p className="text-text-secondary text-sm mt-1">See every class that is running and open the moderation console without joining it.</p>
+            <p className="text-text-secondary text-sm mt-1">See every class that is running. Open the moderation console to manage it without joining, or join the live meeting itself as a moderator.</p>
           </div>
 
           <div className="grid grid-cols-3 gap-3 mb-5">
@@ -109,6 +113,8 @@ const AdminLiveSessions: React.FC = () => {
                         {r.status === 'live' && !r.stale && <span><Users className="w-3.5 h-3.5 inline mr-1" />{r.connectedStudents} connected{r.waiting ? ` · ${r.waiting} waiting` : ''}</span>}
                         <span>{MODE_LABEL[r.visibilityMode] || r.visibilityMode}</span>
                         {r.status === 'live' && !r.stale && <span>{r.hostPresent ? 'Teacher present' : 'Teacher away'}</span>}
+                        {r.audience && <span data-testid="audience-label">For: {r.audience.students}{r.audience.teachers && r.audience.teachers !== 'No teachers' ? ` + ${r.audience.teachers}` : ''}</span>}
+                        {r.adminsInMeeting ? <span className="text-sky-700 font-medium">{r.adminsInMeeting} admin{r.adminsInMeeting === 1 ? '' : 's'} in the meeting</span> : null}
                       </div>
                       <div className="mt-2 flex items-center gap-2 p-2 bg-surface-alt border border-border-subtle rounded-xl max-w-md">
                         <Link2 className="w-4 h-4 text-brand-primary flex-shrink-0" /><span className="text-brand-primary text-xs font-mono truncate">{window.location.origin}/live/{r.sessionCode}</span>
@@ -117,8 +123,11 @@ const AdminLiveSessions: React.FC = () => {
                     </div>
                     <div className="flex flex-wrap md:flex-col gap-2 md:flex-shrink-0">
                       {r.status === 'live' && (
-                        <Link to={`/admin/live/${encodeURIComponent(r.sessionCode)}`} className="btn-primary text-sm min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5" data-testid={`open-console-${r.sessionCode}`}><Shield className="w-4 h-4" />Open console</Link>
+                        <Link to={`/admin/live/${encodeURIComponent(r.sessionCode)}`} className="btn-outline text-sm min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5" data-testid={`open-console-${r.sessionCode}`}><Shield className="w-4 h-4" />Open console</Link>
                       )}
+                      {r.status === 'live' && (r.stale
+                        ? <button type="button" disabled title="Nobody is running this class right now, so there is nothing to join." className="btn-primary text-sm min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 opacity-50 cursor-not-allowed" data-testid={`join-meeting-${r.sessionCode}`}><Video className="w-4 h-4" />Join Live Meeting</button>
+                        : <button type="button" onClick={() => joinMeeting(r)} disabled={joining === r.sessionCode} aria-busy={joining === r.sessionCode} className="btn-primary text-sm min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 disabled:opacity-70" data-testid={`join-meeting-${r.sessionCode}`}>{joining === r.sessionCode ? <><Loader2 className="w-4 h-4 animate-spin" />Joining…</> : <><Video className="w-4 h-4" />Join Live Meeting</>}</button>)}
                       {r.stale && <button onClick={() => markEnded(r)} disabled={closing === r.sessionCode} className="min-h-[44px] px-4 rounded-xl border border-border-subtle bg-surface text-sm font-medium text-text-secondary" data-testid={`mark-ended-${r.sessionCode}`}>{closing === r.sessionCode ? 'Closing…' : 'Mark as ended'}</button>}
                     </div>
                   </div>

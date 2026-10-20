@@ -423,3 +423,14 @@ test('A21. old classes without a saved audience keep their historical behaviour'
   assert.equal(r.config.audienceLegacy, false);
   assert.equal((await a.c.wait('join-denied', (p) => p.code === 'AUDIENCE_DENIED')).code, 'AUDIENCE_DENIED', 'a waiting student outside the newly chosen audience is refused');
 });
+
+test('A22. creating a class needs no separate "standard": the audience alone decides who may join', async () => {
+  const t = await h.user('NoStd T', 'teacher');
+  const body = (audience) => ({ title: 'No standard', subject: 'Maths', meetingConfig: { audience } });
+  const all = await call('POST', '/live-sessions', t, body(aud({ mode: 'all' })));
+  assert.equal(all.status, 201);
+  const sel = await call('POST', '/live-sessions', t, body(aud({ mode: 'standards', standards: [8, 9] })));
+  assert.equal(sel.status, 201);
+  assert.equal(sel.json.session.standard, 8, 'the legacy label follows the audience');
+  assert.deepEqual(sel.json.session.meetingConfig.audience.students.standards, [8, 9]);
+});

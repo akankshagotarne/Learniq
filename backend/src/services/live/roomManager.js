@@ -3,8 +3,10 @@
  *
  * Authorization is decided by the CALLER's role in the room, never by what a client says it is:
  *   - host   : the teacher who owns the session (participant.isHost, set only from LiveSession.teacher)
- *   - admin  : an authenticated administrator who joined the Moderation Console (room.adminConsoles) - NOT a participant:
- *              no tile, no media, not counted as attendance
+ *   - admin  : an authenticated administrator. Two ways in, both decided by the server from the database:
+ *              (1) the Moderation Console (room.adminConsoles) - a shadow connection: no tile, no media, not a participant;
+ *              (2) "Join Live Meeting" - a real, labelled participant (participant.isAdmin, role 'admin') that can hear / see / speak.
+ *              Neither is ever a student: not counted in students(), never an attendance record, never ranked, never answers a question.
  * Every operation here receives an `actor` {id, name, role} that the socket layer has already verified, and returns
  * { ok: true, ... } or { ok: false, code, message }. Hosts and admins share these operations, so there is one implementation of each rule.
  */
@@ -12,7 +14,8 @@ const meeting = require('./meetingConfig');
 const audienceRules = require('./audience');
 const { McqEngine, McqError } = require('./mcqEngine');
 
-const publicRole = (p) => (p.isHost ? 'teacher' : p.role === 'teacher' ? 'teacher' : 'student');
+const publicRole = (p) => (p.isAdmin ? 'admin' : p.isHost ? 'teacher' : p.role === 'teacher' ? 'teacher' : 'student');
+const ADMIN_TARGET = { ok: false, code: 'NOT_ALLOWED', message: 'An administrator moderator cannot be changed from here.' };
 
 class RoomManager {
   constructor({ io, models, now = Date.now, engineOptions = {}, log = console }) {
@@ -62,7 +65,8 @@ class RoomManager {
   // ── views ──────────────────────────────────────────────────────────────────────────────────────
   participantOf(room, socketId) { return room.participants[socketId] || null; }
   host(room) { return room.hostSocketId ? room.participants[room.hostSocketId] || null : null; }
-  students(room) { return Object.values(room.participants).filter((p) => !p.isHost); }
+  students(room) { return Object.values(room.participants).filter((p) => !p.isHost && !p.isAdmin); }
+  admins(room) { return Object.values(room.participants).filter((p) => p.isAdmin); }
 
   permissionsOf(room, p) {
     const c = room.config;
@@ -75,7 +79,7 @@ class RoomManager {
 
   publicParticipant(room, p, forHost) {
     const out = {
-      socketId: p.socketId, userId: String(p.userId), name: p.name, role: publicRole(p), isHost: !!p.isHost, isTeacher: !!p.isHost,
+      socketId: p.socketId, userId: String(p.userId), name: p.name, role: publicRole(p), isHost: !!p.isHost, isTeacher: !!p.isHost, isAdmin: !!p.isAdmin,
       isCameraOn: !!p.isCameraOn, isMicOn: !!p.isMicOn, isScreenSharing: !!p.isScreenSharing, isPortrait: !!p.isPortrait, joinedAt: p.joinedAt,
     };
     if (forHost) Object.assign(out, { standard: p.standard ?? null, ...this.permissionsOf(room, p) });
@@ -85,21 +89,21 @@ class RoomManager {
   /** Roster as seen by one viewer: the host / admin see everyone; a student sees what the visibility mode lets them see. */
   rosterFor(room, viewer) {
     const all = Object.values(room.participants);
-    if (!viewer || viewer.isHost) return all.map((p) => this.publicParticipant(room, p, true));
-    const seen = all.filter((p) => p.socketId === viewer.socketId || p.isHost || room.config.mode === 'everyone' || meeting.canReceive(room.config, viewer, p));
+    if (!viewer || viewer.isHost || viewer.isAdmin) return all.map((p) => this.publicParticipant(room, p, true));
+    const seen = all.filter((p) => p.socketId === viewer.socketId || p.isHost || p.isAdmin || room.config.mode === 'everyone' || meeting.canReceive(room.config, viewer, p));
     return seen.map((p) => this.publicParticipant(room, p, false));
   }
   adminRoster(room) { return Object.values(room.participants).map((p) => this.publicParticipant(room, p, true)); }
 
   configFor(room, viewer) {
     const c = meeting.publicConfig(room.config);
-    if (viewer && viewer.isHost) return c;
+    if (viewer && (viewer.isHost || viewer.isAdmin)) return c;
     const { selectedUserIds, presenterUserIds, audience, ...rest } = c; // students do not get the lists, only their own flags (permissions)
     return { ...rest, audience: audienceRules.publicAudience(room.config) };
   }
 
   stage(room) { return meeting.stageFor(room.config, room.participants); }
-  counts(room) { return { students: this.students(room).length, waiting: Object.keys(room.waitingRoom).length, hostPresent: !!this.host(room), locked: !!room.config.locked }; }
+  counts(room) { return { students: this.students(room).length, admins: this.admins(room).length, waiting: Object.keys(room.waitingRoom).length, hostPresent: !!this.host(room), locked: !!room.config.locked }; }
 
   // ── broadcasting ───────────────────────────────────────────────────────────────────────────────
   toAdmins(room, event, payload) { this.io.to(`admin:${room.code}`).emit(event, payload); }
@@ -107,7 +111,7 @@ class RoomManager {
   /** Send `event` to everyone who may see `publisher`'s media (plus the host, the publisher itself and admin consoles). */
   toViewersOf(room, publisher, event, payload) {
     Object.values(room.participants).forEach((p) => {
-      if (p.socketId === publisher.socketId || p.isHost || meeting.canReceive(room.config, p, publisher)) this.io.to(p.socketId).emit(event, payload);
+      if (p.socketId === publisher.socketId || p.isHost || p.isAdmin || meeting.canReceive(room.config, p, publisher)) this.io.to(p.socketId).emit(event, payload);
     });
     this.toAdmins(room, event, payload);
   }
@@ -221,7 +225,7 @@ class RoomManager {
   evictIneligible(room) {
     let count = 0;
     Object.values(room.participants).forEach((p) => {
-      if (p.isHost || this.stillEligible(room, p)) return;
+      if (p.isHost || p.isAdmin || this.stillEligible(room, p)) return;
       delete room.participants[p.socketId];
       room.admitted.delete(String(p.userId));
       this.io.to(p.socketId).emit('removed-from-session', { code: 'AUDIENCE_CHANGED', message: 'This class is no longer open to your account.' });
@@ -259,6 +263,7 @@ class RoomManager {
       const p = this.findTarget(room, target);
       if (!p) return { ok: false, code: 'PARTICIPANT_GONE', message: 'That person has already left the class. Nothing was changed.' };
       if (p.isHost) return { ok: false, code: 'NOT_ALLOWED', message: 'The host cannot be muted from here.' };
+      if (p.isAdmin) return ADMIN_TARGET;
       if (p.isMicOn) {
         p.isMicOn = false;
         this.io.to(p.socketId).emit('force-media-off', { kind: 'mic', message: 'You were muted by the host.' });
@@ -275,6 +280,7 @@ class RoomManager {
       const p = this.findTarget(room, target);
       if (!p) return { ok: false, code: 'PARTICIPANT_GONE', message: 'That person has already left the class. Nothing was changed.' };
       if (p.isHost) return { ok: false, code: 'NOT_ALLOWED', message: 'The host\'s permissions cannot be changed.' };
+      if (p.isAdmin) return ADMIN_TARGET;
       p.blocks = p.blocks || {}; p.grants = p.grants || {};
       if (typeof mic === 'boolean') { p.blocks.mic = !mic; p.grants.mic = mic; }
       if (typeof camera === 'boolean') { p.blocks.camera = !camera; p.grants.camera = camera; }
@@ -293,6 +299,7 @@ class RoomManager {
       const p = this.findTarget(room, target);
       if (!p) return { ok: false, code: 'PARTICIPANT_GONE', message: 'That person has already left the class. Nothing was changed.' };
       if (p.isHost) return { ok: false, code: 'NOT_ALLOWED', message: 'The host cannot be removed.' };
+      if (p.isAdmin) return ADMIN_TARGET;
       delete room.participants[p.socketId];
       if (!allowRejoin) room.removed.set(String(p.userId), { at: this.now(), by: actor.id });
       room.admitted.delete(String(p.userId));
@@ -369,12 +376,12 @@ class RoomManager {
   buildJoined(room, p) {
     const isHost = !!p.isHost;
     return {
-      self: { socketId: p.socketId, userId: String(p.userId), name: p.name, isHost },
+      self: { socketId: p.socketId, userId: String(p.userId), name: p.name, isHost, isAdmin: !!p.isAdmin },
       session: { code: room.code, title: room.title },
       participants: this.rosterFor(room, p), counts: this.counts(room), config: this.configFor(room, p), stage: this.stage(room),
       permissions: this.permissionsOf(room, p), peers: this.planFor(room, p.socketId), mcq: this.engine.stateFor(room, p),
       scoreboard: require('./mcqEngine').buildSortedScoreboard(room.scoreboard),
-      waitingRoom: isHost ? Object.values(room.waitingRoom).map((w) => ({ socketId: w.socketId, userId: w.userId, name: w.name })) : undefined,
+      waitingRoom: (isHost || p.isAdmin) ? Object.values(room.waitingRoom).map((w) => ({ socketId: w.socketId, userId: w.userId, name: w.name })) : undefined,
       hostPresent: !!this.host(room), serverNow: this.now(),
     };
   }
@@ -385,7 +392,7 @@ class RoomManager {
     delete room.waitingRoom[info.socketId];
     const p = {
       socketId: info.socketId, userId: String(info.userId), name: info.name, role: info.role, standard: info.standard ?? null,
-      isHost: !!info.isHost, isCameraOn: false, isMicOn: false, isScreenSharing: false, isPortrait: false, joinedAt: this.now(), grants: {}, blocks: {},
+      isHost: !!info.isHost, isAdmin: !!info.isAdmin, isCameraOn: false, isMicOn: false, isScreenSharing: false, isPortrait: false, joinedAt: this.now(), grants: {}, blocks: {},
     };
     room.participants[p.socketId] = p;
     room.admitted.add(p.userId);
@@ -405,6 +412,7 @@ class RoomManager {
     const payload = { waitingRoom: Object.values(room.waitingRoom).map((w) => ({ socketId: w.socketId, userId: w.userId, name: w.name })) };
     const h = this.host(room);
     if (h) this.io.to(h.socketId).emit('waiting-room-update', payload);
+    this.admins(room).forEach((a) => this.io.to(a.socketId).emit('waiting-room-update', payload));
     this.toAdmins(room, 'waiting-room-update', payload);
   }
 

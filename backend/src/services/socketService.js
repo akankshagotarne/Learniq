@@ -3,8 +3,10 @@
  *
  * Roles inside a class are decided by the SERVER from the database, never from anything a client sends:
  *   host  - the teacher who owns the LiveSession (participant.isHost)
- *   admin - an administrator who joined the Administrative Moderation Console: a shadow connection with NO tile, NO media and NO
- *           attendance entry; every console action is re-authorised (role re-read from the DB) and written to the audit trail
+ *   admin - an administrator. EITHER in the Administrative Moderation Console (a shadow connection: no tile, no media, no attendance)
+ *           OR joined the meeting itself with "Join Live Meeting" (a real, labelled participant with moderator rights, still never
+ *           an attendance record, a student or a ranked answerer). Every privileged action is re-authorised (role re-read from the DB)
+ *           and written to the audit trail; the browser can never claim to be an admin
  *   student / other teachers - ordinary participants; they can never change settings, launch / close questions or moderate
  * Media is a browser WebRTC mesh; this file is the signalling layer, so it is also where the visibility mode is enforced
  * (see services/live/meetingConfig.js): offers / answers / ICE are only relayed between peers that may receive each other.
@@ -94,6 +96,11 @@ const setupSocket = (io, options = {}) => {
       if (!socket.user) return { error: { ok: false, code: 'AUTH_REQUIRED', message: 'Please sign in again.' } };
       const p = me(room);
       if (p && p.isHost && String(p.userId) === String(socket.user._id)) return { actor: { id: socket.user._id, name: socket.user.name, role: 'teacher' }, via: 'host' };
+      if (p && p.isAdmin && String(p.userId) === String(socket.user._id)) { // an administrator who joined the meeting: re-checked against the database on EVERY action
+        if (await adminStillValid(socket)) return { actor: { id: socket.user._id, name: socket.user.name, role: 'admin' }, via: 'admin' };
+        audit.record(models, console, { action: 'UNAUTHORIZED_ATTEMPT', actor: { id: socket.user._id, name: socket.user.name }, role: 'admin', room, outcome: 'REJECTED', reason: `${name}: admin access revoked`, detail: { event: name } });
+        return { error: { ok: false, code: 'NOT_AUTHORIZED', message: 'Your administrator access is no longer valid.' } };
+      }
       if (room.adminConsoles[socket.id]) {
         if (await adminStillValid(socket)) return { actor: { id: socket.user._id, name: socket.user.name, role: 'admin' }, via: 'admin' };
         return { error: { ok: false, code: 'NOT_AUTHORIZED', message: 'Your administrator access is no longer valid.' } };
@@ -178,6 +185,42 @@ const setupSocket = (io, options = {}) => {
       return p ? { userId: p.userId, name: p.name } : null;
     };
 
+    // ==================== ADMIN: JOIN THE MEETING AS A MODERATOR ====================
+    /** take this socket out of the room as an admin participant (leave button, console switch, disconnect). Never touches anyone else. */
+    const leaveAsAdminParticipant = (room, why) => {
+      const p = room && room.participants[socket.id];
+      if (!p || !p.isAdmin) return false;
+      manager.leave(room, socket.id);
+      socket.leave(`session:${room.code}`);
+      io.to(`session:${room.code}`).emit('moderator-left', { name: p.name, socketId: socket.id });
+      audit.record(models, console, { action: 'MEETING_LEAVE', actor: { id: socket.user._id, name: socket.user.name }, role: 'admin', room, detail: { why } });
+      return true;
+    };
+    const joinAsAdmin = async (sock, session, sessionCode, cb) => {
+      if (!(await adminStillValid(sock))) {
+        audit.record(models, console, { action: 'UNAUTHORIZED_ATTEMPT', actor: { id: sock.user._id, name: sock.user.name }, role: sock.user.role, session: { sessionCode }, outcome: 'REJECTED', reason: 'join-live-session as admin' });
+        sock.emit('join-denied', { message: 'Only administrators can join a class as a moderator.', code: 'NOT_AUTHORIZED' });
+        return reply(cb, { ok: false, code: 'NOT_AUTHORIZED', message: 'Only administrators can join a class as a moderator.' });
+      }
+      if (session.status !== 'live') {
+        const msg = session.status === 'scheduled' ? 'This class has not started yet.' : 'This class is not running.';
+        sock.emit('error', { message: msg });
+        return reply(cb, { ok: false, code: 'NOT_ACTIVE', message: msg });
+      }
+      const room = await manager.ensure(session);
+      const userId = String(sock.user._id);
+      const reused = !!(room.participants[sock.id] && room.participants[sock.id].isAdmin); // same connection joining again (reconnect / repeated click)
+      // one connection only: leaving the console on this socket, and replacing an older tab of the same admin (manager.admit -> replaceExisting)
+      if (room.adminConsoles[sock.id]) { delete room.adminConsoles[sock.id]; sock.leave(`admin:${room.code}`); }
+      sock.sessionCode = sessionCode;
+      manager.admit(room, { socketId: sock.id, userId, name: sock.user.name, role: 'admin', standard: null, isHost: false, isAdmin: true });
+      if (!reused) {
+        sock.to(`session:${room.code}`).emit('moderator-joined', { name: sock.user.name, socketId: sock.id, message: `${sock.user.name} (LearnIQ Admin) has joined the meeting as a moderator.` });
+        audit.record(models, console, { action: 'MEETING_JOIN', actor: { id: sock.user._id, name: sock.user.name }, role: 'admin', room });
+      }
+      return reply(cb, { ok: true, admin: true });
+    };
+
     // ==================== JOIN ====================
     socket.on('join-live-session', async (payload, cb) => {
       try {
@@ -187,9 +230,13 @@ const setupSocket = (io, options = {}) => {
         const session = await LiveSession.findOne({ sessionCode });
         if (!session) { socket.emit('error', { message: 'Session not found.' }); return reply(cb, { ok: false }); }
         if (session.status === 'ended' || session.status === 'cancelled') { socket.emit('session-ended', { message: 'This class has ended.', podium: [] }); return reply(cb, { ok: false, code: 'ENDED' }); }
-        if (socket.user.role === 'admin') { // administrators moderate from the console - they never appear as a participant
-          socket.emit('use-admin-console', { sessionCode, message: 'Administrators join live classes from the Administrative Moderation Console.' });
-          return reply(cb, { ok: false, code: 'USE_ADMIN_CONSOLE' });
+        if (socket.user.role === 'admin') {
+          // Only an explicit "Join Live Meeting" (asAdmin) enters the room; the role is re-read from the database, never taken from the client.
+          if (!(payload && payload.asAdmin === true)) { // the ordinary join page: administrators are sent to the console
+            socket.emit('use-admin-console', { sessionCode, message: 'Administrators join live classes from the Administrative Moderation Console.' });
+            return reply(cb, { ok: false, code: 'USE_ADMIN_CONSOLE' });
+          }
+          return joinAsAdmin(socket, session, sessionCode, cb);
         }
         const room = await manager.ensure(session);
         const userId = String(socket.user._id);
@@ -245,6 +292,18 @@ const setupSocket = (io, options = {}) => {
         socket.emit('error', { message: 'Could not join the class. Please try again.' });
         return reply(cb, { ok: false });
       }
+    });
+
+    // ==================== LEAVE (never ends the class; the host's "End class" is a separate action) ====================
+    socket.on('leave-live-session', (_p, cb) => {
+      const room = roomOf();
+      if (!room) return reply(cb, { ok: true });
+      if (!leaveAsAdminParticipant(room, 'left')) {
+        const p = me(room);
+        if (p || room.waitingRoom[socket.id]) { try { manager.leave(room, socket.id); } catch (e) { console.error('[Live] leave failed:', e && e.message); } socket.leave(`session:${room.code}`); }
+      }
+      socket.sessionCode = null;
+      return reply(cb, { ok: true });
     });
 
     // ==================== HOST CONTROLS (host sockets; admins use admin-action) ====================
@@ -305,8 +364,8 @@ const setupSocket = (io, options = {}) => {
       if (!meeting.canChat(room.config, p)) { socket.emit('permission-denied', { action: 'chat', message: room.config.chatMode === 'off' ? 'Chat is switched off for this class.' : 'Only the teacher can chat right now.' }); return reply(cb, { ok: false, code: 'CHAT_DISABLED' }); }
       if (!allow('chat', 6, 5000)) return reply(cb, { ok: false, code: 'RATE_LIMITED', message: 'You are sending messages too fast.' });
       try {
-        const chatMsg = await LiveChatMessage.create({ session: room.sessionId, sender: socket.user._id, senderName: socket.user.name, senderRole: p.isHost ? 'teacher' : socket.user.role, message });
-        const out = { _id: chatMsg._id, senderName: socket.user.name, senderRole: p.isHost ? 'teacher' : socket.user.role, message, createdAt: chatMsg.createdAt };
+        const chatMsg = await LiveChatMessage.create({ session: room.sessionId, sender: socket.user._id, senderName: socket.user.name, senderRole: p.isAdmin ? 'admin' : p.isHost ? 'teacher' : socket.user.role, message });
+        const out = { _id: chatMsg._id, senderName: socket.user.name, senderRole: p.isAdmin ? 'admin' : p.isHost ? 'teacher' : socket.user.role, message, createdAt: chatMsg.createdAt };
         io.to(`session:${room.code}`).emit('chat-message', out);
         manager.toAdmins(room, 'chat-message', out);
         return reply(cb, { ok: true });
@@ -366,7 +425,7 @@ const setupSocket = (io, options = {}) => {
     socket.on('request-permission', async ({ targetSocketId, type } = {}, cb) => {
       const room = roomOf(); if (!room || !['mic', 'camera'].includes(type)) return reply(cb, { ok: false });
       const auth = await resolveManager(room, 'request-permission'); if (auth.error) return reply(cb, auth.error);
-      const t = room.participants[str(targetSocketId, 60)]; if (!t || t.isHost) return reply(cb, { ok: false, code: 'PARTICIPANT_GONE' });
+      const t = room.participants[str(targetSocketId, 60)]; if (!t || t.isHost || t.isAdmin) return reply(cb, { ok: false, code: 'PARTICIPANT_GONE' });
       t.pending = { ...(t.pending || {}), [type]: true };
       io.to(t.socketId).emit('permission-request', { type, from: auth.actor.name, fromSocketId: socket.id });
       return reply(cb, { ok: true });
@@ -408,6 +467,7 @@ const setupSocket = (io, options = {}) => {
         if (!session) return reply(cb, { ok: false, code: 'NOT_FOUND', message: 'Class not found.' });
         if (session.status !== 'live') return reply(cb, { ok: false, code: 'NOT_ACTIVE', message: session.status === 'ended' || session.status === 'cancelled' ? 'This class has ended, so it cannot be moderated.' : 'This class has not started yet.' });
         const room = await manager.ensure(session);
+        leaveAsAdminParticipant(room, 'switched-to-console'); // one connection per admin: the in-room presence is released first
         socket.join(`admin:${room.code}`);
         socket.sessionCode = room.code;
         room.adminConsoles[socket.id] = { userId: String(socket.user._id), name: socket.user.name, joinedAt: manager.now() };
@@ -456,7 +516,7 @@ const setupSocket = (io, options = {}) => {
     });
     socket.on('submit-live-quiz', async ({ answers, timeTaken } = {}) => {
       const room = roomOf(); const p = me(room);
-      if (!socket.user || !room || !p || p.isHost || !room.activeQuizFull || !Array.isArray(answers)) return;
+      if (!socket.user || !room || !p || p.isHost || p.isAdmin || !room.activeQuizFull || !Array.isArray(answers)) return;
       try {
         const quiz = room.activeQuizFull;
         let score = 0;
@@ -483,6 +543,7 @@ const setupSocket = (io, options = {}) => {
     socket.on('disconnect', () => {
       const room = roomOf();
       if (!room) return;
+      if (room.participants[socket.id] && room.participants[socket.id].isAdmin) { leaveAsAdminParticipant(room, 'disconnected'); return; }
       try { manager.leave(room, socket.id); } catch (e) { console.error('[Live] leave failed:', e && e.message); }
     });
   });
