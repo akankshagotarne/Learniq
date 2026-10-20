@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { ConfirmDialog } from '../../components/admin/ProfileParts';
 import { adminProfilesApi } from '../../services/adminProfiles';
 import { olympiadErrorMessage } from '../../services/olympiad';
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import { NUMBERED_STANDARDS, standardLabel, standardShortLabel } from '../../constants/standards';
 
 const AdminStudents: React.FC = () => {
@@ -129,6 +130,7 @@ const AdminStudents: React.FC = () => {
               <option value="none">Not chosen yet</option>
             </select>
             <span className="text-text-secondary text-sm font-medium">{total} student{total !== 1 ? 's' : ''}</span>
+            <ExportToolbar section="students" params={{ search, standard: standardFilter }} disabled={loading} scopeLabel="all students matching the current search and standard filter" className="sm:ml-auto" />
           </div>
 
           {/* List */}

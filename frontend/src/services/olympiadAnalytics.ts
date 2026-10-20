@@ -2,7 +2,7 @@ import api from './api';
 import { AnalyticsQuery, AnalyticsResponse, ClearResult, StudentDetail } from '../types/olympiadAnalytics';
 
 /** Only meaningful values are sent; the server validates and allow-lists everything again. */
-const toParams = (q: Partial<AnalyticsQuery>) => {
+export const toParams = (q: Partial<AnalyticsQuery>) => {
   const p: Record<string, string | number> = {};
   Object.entries(q).forEach(([k, v]) => {
     if (v === undefined || v === null || v === '' || v === 'all') return;

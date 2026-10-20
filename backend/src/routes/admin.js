@@ -11,6 +11,24 @@ const examAccessCtrl = require('../controllers/examAccessController');
 
 const adminAuth = [protect, authorize('admin')];
 
+// PDF / Excel exports of student lists (one shared engine; see services/exports). Admin only, rate limited per admin.
+const rateLimit = require('express-rate-limit');
+const exportCtrl = require('../controllers/exportController');
+const exportLimit = rateLimit({
+  windowMs: 60 * 1000, max: Number(process.env.EXPORT_RATE_LIMIT_MAX) || 12, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => (req.user ? String(req.user._id) : req.ip),
+  message: { success: false, code: 'RATE_LIMITED', message: 'Too many export requests. Please wait a minute and try again.' },
+});
+router.get('/exports', ...adminAuth, exportCtrl.listSections);
+router.get('/exports/:section', ...adminAuth, exportLimit, exportCtrl.exportSection);
+
+// Live Class Management (dashboard data + audit trail). Real-time moderation runs over the moderation-console socket.
+const liveAdminCtrl = require('../controllers/adminLiveController');
+router.get('/live-classes', ...adminAuth, liveAdminCtrl.list);
+router.get('/live-classes/:code', ...adminAuth, liveAdminCtrl.detail);
+router.get('/live-classes/:code/audit', ...adminAuth, liveAdminCtrl.auditTrail);
+router.post('/live-classes/:code/mark-ended', ...adminAuth, liveAdminCtrl.markEnded);
+
 // Stats
 router.get('/stats', ...adminAuth, userCtrl.getAdminStats);
 

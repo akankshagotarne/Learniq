@@ -67,6 +67,7 @@ const AdminStudentProfile = lazy(() => import('./pages/admin/AdminStudentProfile
 const AdminTeacherProfile = lazy(() => import('./pages/admin/AdminTeacherProfile'));
 const AdminCourses = lazy(() => import('./pages/admin/AdminCourses'));
 const AdminLiveSessions = lazy(() => import('./pages/admin/AdminLiveSessions'));
+const AdminLiveConsole = lazy(() => import('./pages/admin/AdminLiveConsole'));
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
@@ -393,6 +394,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/live" element={
         <ProtectedRoute roles={['admin']}>
           <AdminLiveSessions />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/live/:code" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminLiveConsole />
         </ProtectedRoute>
       } />
       <Route path="/admin/payments" element={

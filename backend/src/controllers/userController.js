@@ -180,29 +180,38 @@ const getAdminStats = async (req, res) => {
   }
 };
 
+/** Shared by the list endpoint and the PDF / Excel exports, so an export always uses exactly the filters the list shows. */
+const buildUserFilter = (query = {}) => {
+  const { role, search, standard } = query;
+  const filter = {};
+  if (role) filter.role = role;
+  // ?standard=1..10 | others | none (no standard chosen yet)
+  if (standard !== undefined && standard !== '') {
+    if (String(standard).toLowerCase() === 'none') filter.currentStandard = null;
+    else {
+      const std = parseStudentStandard(standard);
+      if (std === null) return { error: { status: 400, code: 'INVALID_STANDARD', message: 'Unknown standard filter.' } };
+      filter.currentStandard = std;
+    }
+  }
+  if (search) {
+    const rx = String(search).slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // literal text, never a user-supplied pattern
+    filter.$or = [
+      { name: { $regex: rx, $options: 'i' } },
+      { email: { $regex: rx, $options: 'i' } },
+      { phone: { $regex: rx, $options: 'i' } },
+    ];
+  }
+  return { filter };
+};
+
 // GET /api/admin/users
 const getAllUsers = async (req, res) => {
   try {
-    const { role, search, standard, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (role) filter.role = role;
-    // ?standard=1..10 | others | none (no standard chosen yet)
-    if (standard !== undefined && standard !== '') {
-      if (String(standard).toLowerCase() === 'none') filter.currentStandard = null;
-      else {
-        const std = parseStudentStandard(standard);
-        if (std === null) return res.status(400).json({ success: false, code: 'INVALID_STANDARD', message: 'Unknown standard filter.' });
-        filter.currentStandard = std;
-      }
-    }
-    if (search) {
-      const rx = String(search).slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // literal text, never a user-supplied pattern
-      filter.$or = [
-        { name: { $regex: rx, $options: 'i' } },
-        { email: { $regex: rx, $options: 'i' } },
-        { phone: { $regex: rx, $options: 'i' } },
-      ];
-    }
+    const { page = 1, limit = 20 } = req.query;
+    const built = buildUserFilter(req.query);
+    if (built.error) return res.status(built.error.status).json({ success: false, code: built.error.code, message: built.error.message });
+    const { filter } = built;
 
     const users = await User.find(filter)
       .select('-password')
@@ -306,4 +315,4 @@ const deleteTeacherAdmin = async (req, res) => {
   }
 };
 
-module.exports = { getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin, deleteStudentAdmin, deleteTeacherAdmin };
+module.exports = { buildUserFilter, getStudents, getStudentDetail, getStudentProgress, getAdminStats, getAllUsers, updateUserAdmin, deleteStudentAdmin, deleteTeacherAdmin };

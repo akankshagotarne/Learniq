@@ -60,7 +60,7 @@ const adminNav: NavItem[] = [
   { label: 'Students', href: '/admin/students', icon: Users },
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
   { label: 'Courses', href: '/admin/courses', icon: BookOpen, courses: true },
-  { label: 'Live Sessions', href: '/admin/live', icon: Radio },
+  { label: 'Live Classes', href: '/admin/live', icon: Radio },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'Refer & Earn', href: '/admin/refer-earn', icon: Gift },
   { label: 'Olympiad', href: '/admin/olympiad', icon: Trophy, exact: true },

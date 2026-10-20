@@ -310,6 +310,13 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   if (m(/^\/teacher\/exams\/[^/]+$/)) return { success: true, exam: teacherExam };
   if (m(/^\/teacher\/exams\/[^/]+\/attempts$/)) return { success: true, exam: teacherExam, attempts: [{ _id: 'ta1', student: users.student, status: 'submitted', score: 16, totalMarks: 20, percentage: 80, timeTaken: 1500, submittedAt: iso(NOW - day), attemptNumber: 1, answers: [], integrityEvents: [] }], stats: { totalAttempts: 1, averageScore: 16, highestScore: 16, lowestScore: 16, passRate: 100 } };
   if (path === '/teacher/live-sessions') return { success: true, sessions: liveSessions };
+  if (path === '/admin/live-classes') return {
+    success: true, total: 2, page: 1, limit: 50, serverNow: NOW,
+    classes: liveSessions.map((s, i) => ({
+      id: s._id, sessionCode: s.sessionCode, title: s.title, subject: s.subject, standard: s.standard, standardLabel: 'Standard 10', status: s.status, scheduledAt: s.scheduledAt, startedAt: s.startedAt,
+      host: { id: users.teacher._id, name: users.teacher.name }, course: null, visibilityMode: i ? 'host_only' : 'everyone', connectedStudents: i ? 23 : 0, waiting: 0, hostPresent: !!i, activeMcq: null, consoles: 0, stale: false,
+    })),
+  };
   if (path === '/teacher/students') return { success: true, students: [] };
   if (path === '/teacher/doubts') return { success: true, doubts: [] };
 

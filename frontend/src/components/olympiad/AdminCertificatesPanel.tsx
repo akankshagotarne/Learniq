@@ -1,3 +1,4 @@
+import ExportToolbar from '../admin/ExportToolbar';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Award, Ban, Download, Eye, Loader2, RotateCcw, Search, ShieldCheck } from 'lucide-react';
@@ -163,6 +164,7 @@ const AdminCertificatesPanel: React.FC<{ examId?: string; exams: ExamOption[] }>
           <button onClick={clearFilters} className="flex items-center gap-1 text-xs font-semibold py-2 px-3 rounded-xl border border-border-subtle bg-surface-alt text-text-primary">
             <RotateCcw className="w-3.5 h-3.5" /> Clear
           </button>
+          <ExportToolbar section="certificates" params={{ search: debouncedSearch, standard, exam: examId || exam, grade, type, generation, status, from, to }} disabled={loading} scopeLabel="certificates matching the current filters" className="sm:ml-auto" />
         </div>
       </div>
 

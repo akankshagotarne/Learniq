@@ -1,3 +1,4 @@
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, CreditCard, IndianRupee, CheckCircle2, XCircle, Clock, Eye, Trash2, Undo2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -169,6 +170,7 @@ const AdminPayments: React.FC = () => {
               ))}
             </div>
             <span className="text-text-secondary text-sm font-medium">{filtered.length} transaction{filtered.length !== 1 ? 's' : ''}</span>
+            <ExportToolbar section="payments" params={{ view, status: statusFilter, search: search.trim() }} disabled={loading} scopeLabel="payments matching the current view, status and search" className="sm:ml-auto" />
           </div>
 
           {loading ? (

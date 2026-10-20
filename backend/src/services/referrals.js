@@ -377,9 +377,7 @@ const listTransactions = async (q) => {
   return { page, limit, total, transactions: rows.map(txRow) };
 };
 
-const listStudents = async (q) => {
-  const { page, limit, skip } = pageOf(q, 20);
-  const settings = credits.publicSettings(await credits.getSettings());
+const studentFilter = (q) => {
   const filter = { role: 'student', isActive: { $ne: false } };
   const s = clip(q.q);
   if (s) {
@@ -389,6 +387,12 @@ const listStudents = async (q) => {
     if (digits.length >= 4) filter.$or.push({ phoneNormalized: { $regex: esc(digits) } });
   }
   if (q.standard !== undefined && q.standard !== '' && q.standard !== 'all' && Number.isInteger(Number(q.standard))) filter.currentStandard = Number(q.standard);
+  return filter;
+};
+const listStudents = async (q) => {
+  const { page, limit, skip } = pageOf(q, 20);
+  const settings = credits.publicSettings(await credits.getSettings());
+  const filter = studentFilter(q);
   if (String(q.idsOnly) === '1') {
     const rows = await User.find(filter).sort({ name: 1 }).limit(settings.maxBulkSize);
     const total = await User.countDocuments(filter);
@@ -427,6 +431,20 @@ const exportReferralsCsv = async (q) => {
   return [csvLine(['Referral ID', 'Referrer', 'Referrer ID', 'Referral code', 'Referred student', 'Referred ID', 'Standard', 'Registered', 'Status', 'Reward status', 'Credits', 'Rewarded at']),
     ...rows.map((r) => csvLine([idStr(r), r.referrerName, idStr(r.referrer), r.codeUsed, r.referredName, idStr(r.referred), r.referredStandard ?? '', r.registeredAt, r.status, r.rewardStatus, r.rewardStatus === 'REWARDED' ? r.credits : 0, r.rewardedAt || '']))].join('\n');
 };
+
+/** Every referral matching the admin filters (all pages) - used by the PDF / Excel exports. */
+const referralExportRows = async (q) => {
+  const rows = await Referral.find(referralFilter(q)).sort({ registeredAt: -1 }).limit(EXPORT_CAP);
+  return rows.map(referralRow);
+};
+/** Every student the "Send credits" picker would list for these filters (all pages), with their current credit balance. */
+const studentExportRows = async (q) => {
+  const filter = studentFilter(q);
+  const rows = await User.find(filter).sort({ name: 1 }).limit(EXPORT_CAP);
+  const accounts = await CreditAccount.find({ student: { $in: rows.map((r) => r._id) } });
+  const bal = new Map(accounts.map((a) => [idStr(a.student), a.balance]));
+  return rows.map((u) => ({ name: u.name, email: u.email || '', phone: u.phone || '', standard: u.currentStandard ?? null, credits: bal.get(idStr(u)) || 0, status: u.isActive === false ? 'Inactive' : 'Active' }));
+};
 const exportTransactionsCsv = async (q) => {
   const rows = await CreditTransaction.find(txFilter(q)).sort({ createdAt: -1 }).limit(EXPORT_CAP);
   return [csvLine(['Transaction ID', 'Date', 'Student', 'Student ID', 'Type', 'Credits', 'Source', 'Reason', 'Exam', 'Referral ID', 'Batch ID', 'Performed by']),
@@ -454,5 +472,5 @@ const onStudentDeleted = async (studentId) => {
 module.exports = {
   generateCode, normalizeCode, getOrCreateProfile, validateCode, lookupOwner, attributeRegistration, rewardReferral, healPending,
   myOverview, myReferrals, myCredits, listReferrals, referralDetail, review, overview, listTransactions, listStudents, listBatches, getBatch,
-  exportReferralsCsv, exportTransactionsCsv, exportBatchCsv, onStudentDeleted, syncStandard, maskName, csvCell, mongoose,
+  exportReferralsCsv, referralExportRows, studentExportRows, exportTransactionsCsv, exportBatchCsv, onStudentDeleted, syncStandard, maskName, csvCell, mongoose,
 };
