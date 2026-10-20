@@ -10,6 +10,7 @@
     "seed:olympiad": "node src/seed/seedOlympiadAll.js",
     "seed:olympiad9": "node src/seed/seedOlympiad9.js",
     "seed:olympiad10": "node src/seed/seedOlympiad10.js",
+    "test:events": "node --test src/tests/olympiadEvents.test.js",
     "test:olympiad": "node --test src/tests/olympiad.test.js",
     "test:referrals": "node --test src/tests/referAndEarn.test.js",
     "test:exports": "node --test src/tests/adminExports.test.js",

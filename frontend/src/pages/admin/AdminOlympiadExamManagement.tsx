@@ -3,6 +3,9 @@ import toast from 'react-hot-toast';
 import { AlertTriangle, CalendarClock, Loader2, Pencil, RefreshCw, Search } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import { Modal } from '../../components/engineering/ui';
+import EventsPanel from '../../components/olympiad/EventsPanel';
+import EventSelector from '../../components/olympiad/EventSelector';
+import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import ProctoringSettings, { policyPayload } from '../../proctoring/ProctoringSettings';
 import { proctoringApi, errorMessage as proctoringError } from '../../proctoring/api';
 import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy } from '../../proctoring/types';
@@ -226,6 +229,8 @@ const EditDialog: React.FC<{ examId: string; onClose: () => void; onSaved: () =>
 
 // ───────────────────────── page ─────────────────────────
 const AdminOlympiadExamManagement: React.FC = () => {
+  const ev = useOlympiadEvent();
+  const eventId = ev.eventId;
   const [standard, setStandard] = useState('all'); const [status, setStatus] = useState('all'); const [examId, setExamId] = useState('all');
   const [searchInput, setSearchInput] = useState(''); const [search, setSearch] = useState('');
   const [data, setData] = useState<ManagementList | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
@@ -234,16 +239,18 @@ const AdminOlympiadExamManagement: React.FC = () => {
 
   useEffect(() => { const t = setTimeout(() => setSearch(searchInput.trim()), 300); return () => clearTimeout(t); }, [searchInput]);
   useEffect(() => {
+    if (ev.loading) return undefined;
     const ctrl = new AbortController(); let live = true;
     setLoading(true); setError('');
-    examManagementApi.list({ standard, status, search, examId }, ctrl.signal)
+    examManagementApi.list({ event: eventId, standard, status, search, examId }, ctrl.signal)
       .then(r => { if (live) setData(r); })
       .catch(err => { if (live && !ctrl.signal.aborted && err?.code !== 'ERR_CANCELED') setError(olympiadErrorMessage(err, 'Could not load the exams.')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; ctrl.abort(); };
-  }, [standard, status, search, examId, reloadKey]);
+  }, [eventId, ev.loading, standard, status, search, examId, reloadKey]);
+  useEffect(() => { setExamId('all'); }, [eventId]);
 
-  const reload = () => setReloadKey(k => k + 1);
+  const reload = () => { setReloadKey(k => k + 1); void ev.refresh(); };
   const exams = data?.exams || [];
   const options = (data?.options || []).filter(o => standard === 'all' || String(o.standard) === standard);
 
@@ -265,6 +272,10 @@ const AdminOlympiadExamManagement: React.FC = () => {
             <button type="button" onClick={reload} className="btn-secondary text-sm px-3 py-2 min-h-[40px] inline-flex items-center gap-2 self-start"><RefreshCw className="w-4 h-4" /> Refresh</button>
           </div>
 
+          <EventsPanel selectedId={eventId} onSelect={id => { ev.setEvent(id); void ev.refresh(); }} onChanged={reload} />
+
+          <h2 id="exam-list" className="font-heading font-bold text-lg text-text-primary mb-3">Exams of the selected event</h2>
+          <div className="mb-3 max-w-md"><EventSelector value={eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} /></div>
           <div className="card-soft p-4 rounded-2xl grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-5">
             <label className="block min-w-0"><span className={labelCls}>Standard</span>
               <select className={inputCls} value={standard} onChange={e => { setStandard(e.target.value); setExamId('all'); }} data-testid="flt-standard">

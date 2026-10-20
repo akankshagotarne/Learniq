@@ -238,6 +238,8 @@ const tickets = [
 
 const teacherExam = { ...examWithQuestions, attemptCount: 12, isPublished: true };
 
+export const mockEvent = { _id: 'evt1', name: 'LearnIQ Olympiad — 17 October 2026', examDate: '2026-10-17T00:00:00.000Z', examDateIST: '17 Oct 2026', status: 'completed', state: 'published', standards: [8, 10], isLegacy: true };
+
 type Json = Record<string, unknown> | unknown[];
 
 /** Returns the mock body for a request, or null to fall back to the generic empty response. */
@@ -247,6 +249,10 @@ const respond = (method: string, path: string, role: Role): Json | null => {
 
   if (path === '/auth/me') return me ? { success: true, user: me } : null;
   if (path === '/auth/login' && method === 'POST') return { success: true, token: 'test-token', user: users.student };
+
+  // ── Olympiad events (one event is always selected on the admin pages)
+  if (path === '/olympiad/admin/events/options') return { success: true, options: [mockEvent], defaultEventId: mockEvent._id };
+  if (path === '/olympiad/admin/events' && method === 'GET') return { success: true, events: [{ ...mockEvent, startDateIST: '17 Oct 2026, 9:00 AM IST', endDateIST: '17 Oct 2026, 9:00 PM IST', registration: 'closed', examCount: 10, state: 'published', students: 12, registrations: 12, submissions: 9 }], serverNow: new Date().toISOString() };
 
   // ── Olympiad
   if (path === '/olympiad/exams') return { success: true, exams: olympiadExams };

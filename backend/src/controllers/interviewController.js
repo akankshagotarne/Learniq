@@ -105,10 +105,10 @@ const adminCorrect = handler(async (req, res) => {
 
 // ── admin ────────────────────────────────────────────────────────────────────────────────────
 const adminStats = handler(async (req, res) => {
-  res.json({ success: true, stats: await svc.adminStats(), teachers: await svc.adminTeachers() });
+  res.json({ success: true, stats: await svc.adminStats(str(req.query.event, 30)), teachers: await svc.adminTeachers() });
 });
 
-const filtersOf = (q) => ({ q: str(q.q, 80), status: str(q.status, 30), standard: str(q.standard, 4), teacher: str(q.teacher, 30), from: str(q.from, 40), to: str(q.to, 40) });
+const filtersOf = (q) => ({ q: str(q.q, 80), status: str(q.status, 30), standard: str(q.standard, 4), teacher: str(q.teacher, 30), from: str(q.from, 40), to: str(q.to, 40), event: str(q.event, 30) });
 
 const adminList = handler(async (req, res) => {
   res.json({ success: true, interviews: await svc.adminList(filtersOf(req.query)) });

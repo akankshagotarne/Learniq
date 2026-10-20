@@ -115,6 +115,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
         <h3 className="font-heading font-bold text-base leading-snug text-text-primary group-hover:text-brand-primary transition-colors break-words">
           {exam.title}
         </h3>
+        {(exam as { eventName?: string }).eventName && <p className="text-[11px] font-semibold text-brand-primary mt-1" data-testid="exam-event-name">{(exam as { eventName?: string }).eventName}</p>}
         <p className="text-xs text-text-muted mt-1 flex items-start gap-1">
           <UserCheck className="w-3 h-3 mt-0.5 flex-shrink-0" aria-hidden="true" />
           <span className="min-w-0">{approval ? `Others · Mock test by ${exam.conductedBy || 'LearnIQ'}` : `Standard ${exam.standard} · Exam by ${exam.conductedBy || 'Nikhil Sir'}`}</span>

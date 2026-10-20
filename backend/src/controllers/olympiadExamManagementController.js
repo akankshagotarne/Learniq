@@ -4,6 +4,7 @@ const { OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt } = req
 const { OlympiadExamAudit } = require('../models/OlympiadExamAudit');
 const { resolvePolicy } = require('../services/proctoring/policy');
 const rules = require('../services/olympiadExamManagement');
+const eventsSvc = require('../services/olympiadEvents');
 
 /**
  * Admin > Olympiad Exam Management. The OlympiadExam document stays the single source of truth: student cards, the Start button,
@@ -44,7 +45,7 @@ const attemptCounts = async (exam, now) => {
 
 const view = async (exam, now = new Date(), { detail = false } = {}) => {
   const base = {
-    _id: idOf(exam._id), title: exam.title, standard: exam.standard,
+    _id: idOf(exam._id), title: exam.title, standard: exam.standard, eventId: exam.event ? idOf(exam.event) : null,
     status: rules.deriveStatus(exam, now),
     isPublished: exam.isPublished !== false, accessEnabled: exam.accessEnabled !== false,
     startDate: exam.startDate, endDate: exam.endDate,
@@ -80,6 +81,10 @@ const list = handler(async (req, res) => {
     if (!Number.isInteger(s) || s < 1 || s > 10) throw new ManagementError(400, 'Invalid standard.', 'INVALID_REQUEST');
     q.standard = s;
   }
+  if (req.query.event !== undefined && req.query.event !== '' && req.query.event !== 'all') {
+    if (typeof req.query.event !== 'string' || !/^[a-f0-9]{24}$/i.test(req.query.event)) throw new ManagementError(400, 'Invalid Olympiad event.', 'INVALID_REQUEST');
+    q.event = req.query.event; // exams of the selected event only (database filter)
+  }
   if (req.query.examId) {
     if (!mongoose.isValidObjectId(req.query.examId)) throw new ManagementError(400, 'Invalid exam.', 'INVALID_REQUEST');
     q._id = req.query.examId;
@@ -93,9 +98,11 @@ const list = handler(async (req, res) => {
     exams = exams.filter((e) => rules.deriveStatus(e, now) === status);
   }
   const out = [];
-  for (const e of exams) out.push({ ...(await view(e, now)), counts: await attemptCounts(e, now) });
-  // the dropdown options must not depend on the active filters
-  const all = (await OlympiadExam.find(NOT_ENGINEERING).sort({ standard: 1 })).map((e) => ({ _id: idOf(e._id), title: e.title, standard: e.standard }));
+  const labels = await eventsSvc.eventLabels(exams);
+  for (const e of exams) out.push({ ...(await view(e, now)), eventName: (labels.get(idOf(e.event)) || {}).eventName || null, counts: await attemptCounts(e, now) });
+  // the dropdown options must not depend on the active filters (but stay inside the selected event)
+  const optQ = { ...NOT_ENGINEERING, ...(q.event ? { event: q.event } : {}) };
+  const all = (await OlympiadExam.find(optQ).sort({ standard: 1 })).map((e) => ({ _id: idOf(e._id), title: e.title, standard: e.standard }));
   res.set('Cache-Control', 'no-store');
   res.json({ success: true, exams: out, options: all, serverNow: now.toISOString() });
 });
@@ -105,8 +112,9 @@ const detail = handler(async (req, res) => {
   const exam = await loadManaged(req.params.id);
   const recent = await OlympiadExamAudit.find({ exam: exam._id }).sort({ at: -1 }).limit(15);
   res.set('Cache-Control', 'no-store');
+  const label = (await eventsSvc.eventLabels([exam])).get(exam.event ? idOf(exam.event) : '') || {};
   res.json({
-    success: true, exam: await view(exam, new Date(), { detail: true }), serverNow: new Date().toISOString(),
+    success: true, exam: { ...(await view(exam, new Date(), { detail: true })), eventName: label.eventName || null }, serverNow: new Date().toISOString(),
     audit: recent.map((a) => ({ field: a.field, previous: a.previous, next: a.next, success: a.success, by: a.adminName, at: a.at, note: a.note })),
   });
 });

@@ -14,11 +14,15 @@ const handler = (fn) => async (req, res) => {
 const validId = (v) => typeof v === 'string' && mongoose.Types.ObjectId.isValid(v);
 const bad = (res, message) => res.status(400).json({ success: false, code: 'INVALID_INPUT', message });
 
+const eventOf = (v) => (typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v) ? v : undefined);
+
 const overview = handler(async (req, res) => {
-  const exams = await svc.interviewExams();
-  const schedules = await InterviewSchedule.find({});
+  const eventId = eventOf(req.query.event); // optional: the schedule of ONE Olympiad event
+  const exams = await svc.interviewExams(eventId);
+  const examIds = exams.map((e) => e._id);
+  const schedules = await InterviewSchedule.find(eventId ? { exam: { $in: examIds } } : {});
   const by = new Map(schedules.map((s) => [String(s.exam), s]));
-  const slots = await InterviewSlot.find({ status: 'SCHEDULED' }).sort('startAt');
+  const slots = await InterviewSlot.find({ status: 'SCHEDULED', ...(eventId ? { exam: { $in: examIds } } : {}) }).sort('startAt');
   const people = await User.find({ _id: { $in: [...new Set(slots.flatMap((s) => [String(s.student), s.teacher && String(s.teacher)].filter(Boolean)))] } });
   const name = new Map(people.map((u) => [String(u._id), u.name]));
   const teachers = (await User.find({ role: 'teacher', isApproved: true, isActive: true })).map((t) => ({ _id: String(t._id), name: t.name }));
@@ -42,7 +46,7 @@ const setSchedule = handler(async (req, res) => {
   const b = req.body || {};
   const examIds = b.examIds === 'all' ? 'all' : Array.isArray(b.examIds) && b.examIds.every(validId) ? b.examIds : null;
   if (!examIds) return bad(res, 'Please choose the examinations.');
-  const saved = await svc.setSchedule({ examIds, interviewDate: b.interviewDate, startTime: b.startTime, endTime: b.endTime, note: b.note }, req.user);
+  const saved = await svc.setSchedule({ examIds, eventId: eventOf(b.eventId), interviewDate: b.interviewDate, startTime: b.startTime, endTime: b.endTime, note: b.note }, req.user);
   res.json({ success: true, updated: saved.length });
 });
 

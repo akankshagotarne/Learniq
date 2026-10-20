@@ -199,7 +199,7 @@ export const interviewApi = {
   saveDraft: async (id: string, body: EvaluationPayload): Promise<EvaluationView> => (await api.put(`${base}/${id}/evaluation`, body)).data.evaluation,
   submitEvaluation: async (id: string, body: EvaluationPayload): Promise<{ interview: InterviewView; evaluation: EvaluationView; alreadySubmitted: boolean }> => (await api.post(`${base}/${id}/evaluation/submit`, body)).data,
   // admin
-  adminStats: async (): Promise<{ stats: AdminStats; teachers: AdminTeacher[] }> => (await api.get(`${base}/admin/stats`)).data,
+  adminStats: async (event?: string): Promise<{ stats: AdminStats; teachers: AdminTeacher[] }> => (await api.get(`${base}/admin/stats`, { params: event ? { event } : undefined })).data,
   adminList: async (params: Record<string, string | undefined>): Promise<AdminRow[]> => (await api.get(`${base}/admin/list`, { params })).data.interviews,
   adminDetail: async (id: string) => (await api.get(`${base}/admin/${id}`)).data.interview as InterviewView & { evaluation: EvaluationView | null; audit: { at: string; role: string; action: string; note: string | null }[]; stale: boolean },
   adminAssign: async (id: string, teacherId: string): Promise<InterviewView> => (await api.post(`${base}/admin/${id}/assign`, { teacherId })).data.interview,
@@ -208,8 +208,8 @@ export const interviewApi = {
   adminSetRequestsEnabled: async (requestsEnabled: boolean) => (await api.put(`${base}/admin/settings`, { requestsEnabled })).data.settings as { requestsEnabled: boolean },
   adminSetResultsMode: async (resultsMode: 'schedule' | 'published' | 'held') => (await api.put(`${base}/admin/settings`, { resultsMode })).data.settings as { requestsEnabled: boolean; resultsMode: 'schedule' | 'published' | 'held' },
   // admin: schedule + reminders
-  adminSchedule: async (): Promise<AdminScheduleData> => (await api.get(`${base}/admin/schedule`)).data,
-  adminSetSchedule: async (body: { examIds: string[] | 'all'; interviewDate: string; startTime?: string; endTime?: string; note?: string }): Promise<{ updated: number }> => (await api.put(`${base}/admin/schedule`, body)).data,
+  adminSchedule: async (event?: string): Promise<AdminScheduleData> => (await api.get(`${base}/admin/schedule`, { params: event ? { event } : undefined })).data,
+  adminSetSchedule: async (body: { eventId?: string; examIds: string[] | 'all'; interviewDate: string; startTime?: string; endTime?: string; note?: string }): Promise<{ updated: number }> => (await api.put(`${base}/admin/schedule`, body)).data,
   adminClearSchedule: async (examId: string): Promise<void> => { await api.delete(`${base}/admin/schedule/${examId}`); },
   adminSetSlot: async (body: { studentId: string; examId: string; startAt: string; durationMinutes?: number; teacherId?: string }): Promise<{ reminderQueued: boolean; reminderNote: string | null }> => (await api.put(`${base}/admin/slot`, body)).data,
   adminCancelSlot: async (slotId: string): Promise<void> => { await api.delete(`${base}/admin/slot/${slotId}`); },

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import EventSelector from '../../components/olympiad/EventSelector';
+import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Loader2, Trash2, Send } from 'lucide-react';
@@ -10,6 +12,7 @@ const fmt = (iso: string) => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/
 
 /** Admin: when the interviews happen (per exam, or per student with a teacher) and whether reminders really go out. All times are IST. */
 const AdminInterviewSchedule: React.FC = () => {
+  const ev = useOlympiadEvent();
   const [data, setData] = useState<AdminScheduleData | null>(null);
   const [rem, setRem] = useState<ReminderOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,10 +22,11 @@ const AdminInterviewSchedule: React.FC = () => {
   const [slotExam, setSlotExam] = useState(''); const [slotStudent, setSlotStudent] = useState(''); const [slotWhen, setSlotWhen] = useState(''); const [slotTeacher, setSlotTeacher] = useState(''); const [slotMin, setSlotMin] = useState('20');
 
   const load = useCallback(async () => {
-    try { const [d, r] = await Promise.all([interviewApi.adminSchedule(), interviewApi.adminReminders()]); setData(d); setRem(r); setError(null); }
+    if (ev.loading) return;
+    try { const [d, r] = await Promise.all([interviewApi.adminSchedule(ev.eventId || undefined), interviewApi.adminReminders()]); setData(d); setRem(r); setError(null); }
     catch (e) { setError(interviewErrorMessage(e, 'Could not load the schedule.')); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  }, [ev.eventId, ev.loading]);
+  useEffect(() => { setExamIds([]); setSlotExam(''); load(); }, [load]);
 
   const run = async (key: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(key);
@@ -38,7 +42,8 @@ const AdminInterviewSchedule: React.FC = () => {
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
           <Link to="/admin/interviews" className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-brand-primary mb-4"><ArrowLeft className="w-4 h-4" /> Interviews</Link>
           <h1 className="font-heading font-bold text-2xl text-text-primary">Interview schedule &amp; reminders</h1>
-          <p className="text-sm text-text-secondary mb-5">All times are Indian Standard Time (IST). Students see only what you set here.</p>
+          <p className="text-sm text-text-secondary mb-3">All times are Indian Standard Time (IST). Students see only what you set here. The schedule belongs to the selected Olympiad event.</p>
+          <div className="mb-5 max-w-md"><EventSelector value={ev.eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} /></div>
 
           {error && <div className="card-soft p-4 rounded-xl text-sm mb-4" role="alert">{error}</div>}
           {!data && !error && <div className="flex items-center gap-2 text-sm text-text-secondary"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>}
@@ -86,7 +91,7 @@ const AdminInterviewSchedule: React.FC = () => {
                   <label className="text-xs font-semibold text-text-secondary">Note<input className={input} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} /></label>
                 </div>
                 <button type="button" disabled={busy === 'sched' || !examIds.length || !date} data-testid="sched-save"
-                  onClick={() => run('sched', () => interviewApi.adminSetSchedule({ examIds, interviewDate: date, startTime: start || undefined, endTime: end || undefined, note: note || undefined }), 'Schedule saved.')}
+                  onClick={() => run('sched', () => interviewApi.adminSetSchedule({ eventId: ev.eventId || undefined, examIds, interviewDate: date, startTime: start || undefined, endTime: end || undefined, note: note || undefined }), 'Schedule saved.')}
                   className="mt-3 btn-primary min-h-[44px] px-5 text-sm disabled:opacity-50">{busy === 'sched' ? 'Saving…' : 'Save schedule'}</button>
                 <ul className="mt-4 divide-y divide-border-subtle text-sm" data-testid="sched-list">
                   {data.exams.filter((e) => e.schedule).map((e) => (

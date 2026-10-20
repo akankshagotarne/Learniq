@@ -235,7 +235,12 @@ const startServer = async () => {
         const fresh = await require('./models/Olympiad').OlympiadExam.find({ slug: { $in: exams.map((e) => e.slug) } }).select('standard title');
         fresh.forEach((e) => console.log(`🏆 Olympiad exam ready (Std ${e.standard}): ${e.title}`));
       })
-      .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message));
+      .catch((err) => console.error('⚠️  Olympiad auto-seed skipped:', err.message))
+      // Olympiad EVENTS: associate the original exams with their event (additive, idempotent, never changes dates / questions / student records).
+      // Anything not unambiguously part of the original Olympiad is only reported (see GET /api/olympiad/admin/events/migration-report). OLYMPIAD_EVENT_MIGRATION=off disables it.
+      .then(() => (String(process.env.OLYMPIAD_EVENT_MIGRATION || '').toLowerCase() === 'off' ? null : require('./services/olympiadEvents').migrateLegacy({ apply: true })))
+      .then((r) => { if (r && r.plan && r.plan.needsReview.length) console.warn(`⚠️  ${r.plan.needsReview.length} Olympiad exam(s) could not be associated with an event and need review (admin > Olympiad events migration report)`); })
+      .catch((err) => console.error('⚠️  Olympiad event migration skipped:', err.message));
     // Make sure the free BE Engineering mock test exists (creates it only when missing; never overwrites admin changes)
     require('./services/engineering').ensureEngineeringExam()
       .then(({ exam, created, questionsAdded }) => console.log(`🎓 Engineering mock test ready: ${exam.title}${created ? ' (created)' : ''}${questionsAdded ? ` (+${questionsAdded} questions)` : ''}`))

@@ -5,6 +5,7 @@ const { protect, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/olympiadController');
 const analytics = require('../controllers/olympiadAnalyticsController');
 const management = require('../controllers/olympiadExamManagementController');
+const events = require('../controllers/olympiadEventController');
 
 const perUser = (max, windowMs = 60 * 1000) =>
   rateLimit({
@@ -31,6 +32,18 @@ router.put('/admin/exams/:id/proctoring', ...adminAuth, perUser(30), ctrl.adminU
 router.put('/admin/exams/:id/teacher', ...adminAuth, ctrl.adminAssignTeacher);
 router.get('/admin/exams/:id/payments', ...adminAuth, ctrl.adminPayments);
 router.get('/admin/payments', ...adminAuth, ctrl.adminAllPayments);
+
+// Olympiad Events (admin only): the parent of the per-standard exams. Static paths first so ':id' never swallows them.
+router.get('/admin/events', ...adminAuth, perUser(120), events.list);
+router.get('/admin/events/options', ...adminAuth, perUser(120), events.options);
+router.get('/admin/events/migration-report', ...adminAuth, perUser(20), events.migrationReport);
+router.post('/admin/events', ...adminAuth, perUser(10), events.create);
+router.get('/admin/events/:id', ...adminAuth, perUser(120), events.detail);
+router.patch('/admin/events/:id', ...adminAuth, perUser(30), events.update);
+router.post('/admin/events/:id/publish', ...adminAuth, perUser(20), events.publish);
+router.post('/admin/events/:id/unpublish', ...adminAuth, perUser(20), events.unpublish);
+router.post('/admin/events/:id/cancel', ...adminAuth, perUser(20), events.cancel);
+router.delete('/admin/events/:id', ...adminAuth, perUser(20), events.remove);
 
 // Olympiad Exam Management (admin only; Olympiad exams only - Engineering has its own page)
 router.get('/admin/exam-management', ...adminAuth, perUser(120), management.list);
