@@ -9,6 +9,7 @@
  * { ok: true, ... } or { ok: false, code, message }. Hosts and admins share these operations, so there is one implementation of each rule.
  */
 const meeting = require('./meetingConfig');
+const audienceRules = require('./audience');
 const { McqEngine, McqError } = require('./mcqEngine');
 
 const publicRole = (p) => (p.isHost ? 'teacher' : p.role === 'teacher' ? 'teacher' : 'student');
@@ -93,8 +94,8 @@ class RoomManager {
   configFor(room, viewer) {
     const c = meeting.publicConfig(room.config);
     if (viewer && viewer.isHost) return c;
-    const { selectedUserIds, presenterUserIds, ...rest } = c; // students do not get the lists, only their own flags (permissions)
-    return rest;
+    const { selectedUserIds, presenterUserIds, audience, ...rest } = c; // students do not get the lists, only their own flags (permissions)
+    return { ...rest, audience: audienceRules.publicAudience(room.config) };
   }
 
   stage(room) { return meeting.stageFor(room.config, room.participants); }
@@ -179,6 +180,17 @@ class RoomManager {
       config.selectedUserIds = config.selectedUserIds.filter((id) => students.has(id));
       config.presenterUserIds = config.presenterUserIds.filter((id) => students.has(id));
       if (config.spotlightUserId && !present.has(String(config.spotlightUserId))) config.spotlightUserId = null;
+      // who may join: verify the chosen people against the database, stamp who changed it, and keep only people who are still allowed in
+      const audKey = (a) => JSON.stringify(a ? { s: a.students, t: a.teachers } : null);
+      const audienceChanged = patch && typeof patch === 'object' && patch.audience !== undefined && audKey(config.audience) !== audKey(room.config.audience);
+      if (audienceChanged) {
+        if (this.models.User) {
+          const v = await audienceRules.verifyPeople(this.models.User, config.audience, { ownerId: room.hostUserId });
+          if (!v.ok) return { ok: false, code: v.code, message: v.message };
+        }
+        const nowIso = new Date(this.now()).toISOString();
+        config.audience = { ...config.audience, createdBy: (room.config.audience && room.config.audience.createdBy) || String(actor.id), createdAt: (room.config.audience && room.config.audience.createdAt) || nowIso, updatedBy: String(actor.id), updatedAt: nowIso };
+      } else if (room.config.audience) config.audience = room.config.audience; // never let a patch rewrite the stamps
       const changed = JSON.stringify({ ...config, configVersion: 0 }) !== JSON.stringify({ ...room.config, configVersion: 0 });
       if (!changed) return { ok: true, unchanged: true, config: meeting.publicConfig(room.config) };
       config.configVersion = room.config.configVersion + 1;
@@ -191,9 +203,41 @@ class RoomManager {
       }
       room.previousConfig = previous;
       room.config = config;
+      const removedByAudience = audienceChanged ? this.evictIneligible(room) : 0;
       this.afterChange(room);
-      return { ok: true, config: meeting.publicConfig(config), stage: this.stage(room), configVersion: config.configVersion };
+      return { ok: true, config: meeting.publicConfig(config), stage: this.stage(room), configVersion: config.configVersion, audienceRemoved: removedByAudience };
     }
+  }
+
+  /** Is this connected / waiting person (identity recorded at join, from the database) still inside the class's audience? */
+  stillEligible(room, p) {
+    return audienceRules.check(room.config, { id: p.userId, role: p.role, currentStandard: p.standard, isActive: true, isApproved: true, approvalStatus: 'APPROVED' }, { ownerId: room.hostUserId }).ok;
+  }
+
+  /**
+   * After the host narrows the audience: only people who are no longer eligible are sent out (everybody else is left undisturbed).
+   * They are not put on the "removed" list, so they can come back if the audience is widened again. (call while holding the room mutex)
+   */
+  evictIneligible(room) {
+    let count = 0;
+    Object.values(room.participants).forEach((p) => {
+      if (p.isHost || this.stillEligible(room, p)) return;
+      delete room.participants[p.socketId];
+      room.admitted.delete(String(p.userId));
+      this.io.to(p.socketId).emit('removed-from-session', { code: 'AUDIENCE_CHANGED', message: 'This class is no longer open to your account.' });
+      const sock = this.io.sockets && this.io.sockets.sockets && this.io.sockets.sockets.get(p.socketId);
+      if (sock) { sock.leave(`session:${room.code}`); sock.sessionCode = null; }
+      this.clearSharer(room, p);
+      count += 1;
+    });
+    Object.values(room.waitingRoom).forEach((w) => {
+      if (this.stillEligible(room, w)) return;
+      delete room.waitingRoom[w.socketId];
+      this.io.to(w.socketId).emit('join-denied', { code: 'AUDIENCE_DENIED', message: audienceRules.DENIED_MESSAGE });
+      count += 1;
+    });
+    if (count) { this.hostWaitingUpdate(room); this.engine.emitProgress(room); }
+    return count;
   }
 
   /** "Return to the previous layout" */
@@ -278,6 +322,13 @@ class RoomManager {
     return this.run(room, async () => {
       const w = room.waitingRoom[socketId];
       if (!w) return { ok: false, code: 'NOT_WAITING', message: 'That person is no longer waiting.' };
+      // approval never widens the audience: an ineligible account cannot be let in just because the host clicks "Admit"
+      if (!this.stillEligible(room, w)) {
+        delete room.waitingRoom[socketId];
+        this.io.to(w.socketId).emit('join-denied', { code: 'AUDIENCE_DENIED', message: audienceRules.DENIED_MESSAGE });
+        this.hostWaitingUpdate(room);
+        return { ok: false, code: 'NOT_IN_AUDIENCE', message: `${w.name} is not in this class's audience, so they cannot be admitted.` };
+      }
       if (this.students(room).length >= room.maxParticipants) return { ok: false, code: 'CLASS_FULL', message: `The class is full (${room.maxParticipants} participants).` };
       return { ok: true, waiter: w };
     });

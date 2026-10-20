@@ -144,7 +144,7 @@ const AdminLiveConsole: React.FC = () => {
       </div>
 
       {settingsOpen && (
-        <MeetingSettingsPanel config={c.config} onApply={async (patch, v) => { const r = await c.updateConfig(patch, v); setAuditKey((k) => k + 1); return r as any; }}
+        <MeetingSettingsPanel showAudience={false} config={c.config} onApply={async (patch, v) => { const r = await c.updateConfig(patch, v); setAuditKey((k) => k + 1); return r as any; }}
           onRevert={async () => (await c.revertConfig()) as any} onClose={() => setSettingsOpen(false)} />
       )}
     </>,

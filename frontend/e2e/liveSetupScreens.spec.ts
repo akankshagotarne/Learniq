@@ -20,6 +20,9 @@ for (const width of [320, 360, 430]) {
     expect(posted.meetingConfig.mode).toBe('host_only');
     expect(posted.meetingConfig).not.toHaveProperty('configVersion');
     expect(posted.meetingConfig).not.toHaveProperty('selectedUserIds');
+    expect(posted.meetingConfig.audience.students.mode, 'a new class defaults to all students').toBe('all');
+    expect(posted.meetingConfig.audience.teachers.mode).toBe('none');
+    expect(posted.meetingConfig).not.toHaveProperty('audienceSummary');
   });
 }
 

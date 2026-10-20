@@ -77,7 +77,7 @@ export const ParticipantsPanel: React.FC<{
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary truncate flex items-center gap-1.5">{p.name}{isSelf && <span className="text-text-muted font-normal">(You)</span>}{p.isHost && <Crown className="w-3.5 h-3.5 text-amber-500" aria-label="Teacher" />}
                     {config.spotlightUserId === p.userId && <Pin className="w-3 h-3 text-brand-primary" aria-label="Spotlighted" />}{selected.has(p.userId) && <Star className="w-3 h-3 text-amber-500" aria-label="Selected" />}{presenters.has(p.userId) && <Presentation className="w-3 h-3 text-emerald-600" aria-label="Presenter" />}</p>
-                  <p className="text-[11px] text-text-muted">{p.isHost ? 'Teacher' : p.standard ? (p.standard === 99 ? 'Others' : `Standard ${p.standard}`) : 'Student'}</p>
+                  <p className="text-[11px] text-text-muted">{p.isHost ? 'Teacher' : p.role === 'teacher' ? 'Guest teacher (attendee)' : p.standard ? (p.standard === 99 ? 'Others' : `Standard ${p.standard}`) : 'Student'}</p>
                 </div>
                 {p.isMicOn ? <Mic className="w-4 h-4 text-emerald-600" aria-label="Microphone on" /> : <MicOff className="w-4 h-4 text-text-muted" aria-label="Microphone off" />}
                 {p.isCameraOn ? <Video className="w-4 h-4 text-emerald-600" aria-label="Camera on" /> : <VideoOff className="w-4 h-4 text-text-muted" aria-label="Camera off" />}

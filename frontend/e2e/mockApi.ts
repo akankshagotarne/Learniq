@@ -309,7 +309,9 @@ const respond = (method: string, path: string, role: Role): Json | null => {
   if (path === '/teacher/exams') return { success: true, exams: [teacherExam, { ...teacherExam, _id: 'ex-draft', title: 'Draft: Trigonometry Basics', isPublished: false, attemptCount: 0 }] };
   if (m(/^\/teacher\/exams\/[^/]+$/)) return { success: true, exam: teacherExam };
   if (m(/^\/teacher\/exams\/[^/]+\/attempts$/)) return { success: true, exam: teacherExam, attempts: [{ _id: 'ta1', student: users.student, status: 'submitted', score: 16, totalMarks: 20, percentage: 80, timeTaken: 1500, submittedAt: iso(NOW - day), attemptNumber: 1, answers: [], integrityEvents: [] }], stats: { totalAttempts: 1, averageScore: 16, highestScore: 16, lowestScore: 16, passRate: 100 } };
-  if (path === '/teacher/live-sessions') return { success: true, sessions: liveSessions };
+  if (path === '/teacher/live-sessions') return { success: true, sessions: liveSessions, invitedSessions: [] };
+  if (path === '/teacher/live-audience/standards') return { success: true, standards: [...Array.from({ length: 10 }, (_, i) => ({ value: i + 1, label: `Standard ${i + 1}`, studentCount: 3 })), { value: 99, label: 'Others', studentCount: 1 }] };
+  if (path.startsWith('/teacher/live-audience/')) return { success: true, students: [], teachers: [] };
   if (path === '/admin/live-classes') return {
     success: true, total: 2, page: 1, limit: 50, serverNow: NOW,
     classes: liveSessions.map((s, i) => ({

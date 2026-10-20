@@ -64,6 +64,7 @@ const matchCond = (v, cond) => {
     });
   }
   if (cond === null) return v == null; // MongoDB: { field: null } matches a missing field too
+  if (Array.isArray(v) && !Array.isArray(cond)) return v.some((x) => eq(x, cond)); // MongoDB: an array field matches a scalar it contains
   return eq(v, cond);
 };
 const matches = (doc, filter = {}) => Object.entries(filter).every(([k, c]) => {

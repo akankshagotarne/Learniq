@@ -155,6 +155,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
       } catch (err: any) {
         if (!alive) return;
         const d = err?.response?.data;
+        if (d?.code === 'AUDIENCE_DENIED') { setStatusMessage(d.message || 'This class is not open to your account.'); setStatus('denied'); return; }
         if (d?.code === 'USE_ADMIN_CONSOLE') { setConsoleUrl(d.consoleUrl || `/admin/live/${code}`); setStatus('use-console'); return; }
         setStatusMessage(d?.message || (err?.message === 'Network Error' ? 'We could not reach LearnIQ. Check your internet connection and try again.' : 'We could not open this class.'));
         setStatus('error');
@@ -204,7 +205,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     offs.push(on('waiting-room-update', (p: { waitingRoom: WaitingEntry[] }) => setWaiting(p.waitingRoom || [])));
 
     offs.push(on('join-denied', (p: any) => { setStatusMessage(p?.message || 'Your request to join was not accepted.'); setStatus(p?.code === 'REMOVED' ? 'removed' : 'denied'); }));
-    offs.push(on('removed-from-session', (p: any) => { setStatusMessage(p?.message || 'You were removed from this class by the host.'); setStatus('removed'); releaseAll(); }));
+    offs.push(on('removed-from-session', (p: any) => { setStatusMessage(p?.message || 'You were removed from this class by the host.'); setStatus(p?.code === 'AUDIENCE_CHANGED' ? 'denied' : 'removed'); releaseAll(); }));
     offs.push(on('replaced-by-new-connection', (p: any) => { setStatusMessage(p?.message || 'You joined this class from another tab or device.'); setStatus('replaced'); releaseAll(); }));
     offs.push(on('session-ended', (p: any) => { setPodium(p?.podium || []); setStatusMessage(p?.message || 'This class has ended.'); setStatus('ended'); releaseAll(); }));
     offs.push(on('error', (p: any) => { if (statusRef.current === 'joining' || statusRef.current === 'loading') { setStatusMessage(p?.message || 'Could not join the class.'); setStatus('error'); } }));

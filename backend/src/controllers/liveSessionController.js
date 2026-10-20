@@ -5,6 +5,25 @@ const User = require('../models/User');
 const { getPrimaryClientUrl } = require('../config/clientUrls');
 const meeting = require('../services/live/meetingConfig');
 const runtime = require('../services/live/runtime');
+const audienceRules = require('../services/live/audience');
+
+const isOwnerOrAdmin = (viewer, session) => !!viewer && (viewer.role === 'admin' || String(viewer._id) === String((session.teacher && session.teacher._id) || session.teacher));
+
+/**
+ * Validate the audience part of a settings write against the database and stamp who set it. Returns an error response body or null.
+ * `previous` is the stored config (to keep the creation stamp and to leave untouched audiences alone).
+ */
+const finishAudience = async (config, previous, actor, ownerId) => {
+  if (!config.audience) return null;
+  const prevAud = previous && previous.audience;
+  const key = (a) => JSON.stringify(a ? { s: a.students, t: a.teachers } : null);
+  if (prevAud && key(prevAud) === key(config.audience)) { config.audience = prevAud; return null; }
+  const v = await audienceRules.verifyPeople(User, config.audience, { ownerId });
+  if (!v.ok) return { code: v.code, message: v.message };
+  const nowIso = new Date().toISOString();
+  config.audience = { ...config.audience, createdBy: (prevAud && prevAud.createdBy) || String(actor._id), createdAt: (prevAud && prevAud.createdAt) || nowIso, updatedBy: String(actor._id), updatedAt: nowIso };
+  return null;
+};
 
 /** Students / the public never see who was selected or made a presenter - only the owner (and admins) do. */
 const scrub = (session, viewer) => {
@@ -14,7 +33,7 @@ const scrub = (session, viewer) => {
   const privileged = viewer && (viewer.role === 'admin' || String(viewer._id) === String(ownerId));
   if (obj.meetingConfig) {
     const cfg = meeting.normalize(obj.meetingConfig);
-    obj.meetingConfig = privileged ? meeting.publicConfig(cfg) : (({ selectedUserIds, presenterUserIds, ...rest }) => rest)(meeting.publicConfig(cfg));
+    obj.meetingConfig = privileged ? meeting.publicConfig(cfg) : (({ selectedUserIds, presenterUserIds, audience, ...rest }) => ({ ...rest, audience: audienceRules.publicAudience(cfg) }))(meeting.publicConfig(cfg));
   }
   return obj;
 };
@@ -24,9 +43,13 @@ const createSession = async (req, res) => {
   try {
     const { title, description, course, standard, subject, scheduledAt } = req.body;
     let meetingConfig;
-    if (req.body.meetingConfig !== undefined) {
-      const { config, errors } = meeting.sanitize(req.body.meetingConfig, meeting.DEFAULTS);
+    {
+      const { config, errors } = meeting.sanitize(req.body.meetingConfig === undefined ? {} : req.body.meetingConfig, meeting.DEFAULTS);
       if (errors.length) return res.status(400).json({ success: false, code: 'INVALID_SETTINGS', message: errors[0] });
+      // a NEW class always has an explicit audience (default: all students, no other teachers); a class never inherits an earlier class's audience
+      if (!config.audience) config.audience = { ...audienceRules.DEFAULT_AUDIENCE, students: { ...audienceRules.DEFAULT_AUDIENCE.students }, teachers: { ...audienceRules.DEFAULT_AUDIENCE.teachers } };
+      const bad = await finishAudience(config, null, req.user, req.user._id);
+      if (bad) return res.status(400).json({ success: false, code: bad.code, message: bad.message });
       // people can only be selected once they are in the class
       config.selectedUserIds = []; config.presenterUserIds = []; config.spotlightUserId = null; config.locked = false; config.configVersion = 0;
       meetingConfig = config;
@@ -58,14 +81,23 @@ const getSessions = async (req, res) => {
   try {
     const { standard, subject, status } = req.query;
     const filter = {};
-    if (standard) filter.standard = parseInt(standard);
     if (subject) filter.subject = subject;
     if (status) filter.status = status;
 
-    const sessions = await LiveSession.find(filter)
+    // `standard` narrows only OLDER classes (no saved audience); a class with an audience is listed by who it is for, not by its label
+    const rows = await LiveSession.find(filter)
       .populate('teacher', 'name avatar bio')
       .populate('course', 'title')
-      .sort({ scheduledAt: -1 });
+      .sort({ scheduledAt: -1 })
+      .limit(500);
+    const viewer = req.user || null;
+    const wantStd = standard ? parseInt(standard) : null;
+    const sessions = rows.filter((row) => {
+      const cfg = meeting.normalize(row.meetingConfig);
+      const ownerId = (row.teacher && row.teacher._id) || row.teacher;
+      if (audienceRules.isLegacy(cfg) && wantStd !== null && row.standard !== wantStd) return false;
+      return audienceRules.mayView(cfg, viewer, ownerId);
+    }).map((row) => scrub(row, viewer));
 
     res.json({ success: true, sessions });
   } catch (error) {
@@ -88,6 +120,10 @@ const getSession = async (req, res) => {
     }
 
     if (!session) return res.status(404).json({ success: false, message: 'Session not found.' });
+    // a class the viewer is not part of looks exactly like a class that does not exist (nothing private is disclosed)
+    if (!isOwnerOrAdmin(req.user, session) && !audienceRules.mayView(meeting.normalize(session.meetingConfig), req.user || null, (session.teacher && session.teacher._id) || session.teacher)) {
+      return res.status(404).json({ success: false, message: 'Session not found.' });
+    }
 
     const participants = await LiveParticipant.find({ session: session._id, leftAt: null })
       .populate('user', 'name avatar role');
@@ -155,6 +191,10 @@ const joinSession = async (req, res) => {
       return res.status(403).json({ success: false, code: 'USE_ADMIN_CONSOLE', message: 'Administrators join live classes from the Administrative Moderation Console.', consoleUrl: `/admin/live/${session.sessionCode}` });
     }
 
+    // WHO may join: checked from the signed-in account's own record (never from anything the request says), before any attendance is recorded
+    const verdict = audienceRules.check(meeting.normalize(session.meetingConfig), req.user, { ownerId: (session.teacher && session.teacher._id) || session.teacher });
+    if (!verdict.ok) return res.status(403).json({ success: false, code: 'AUDIENCE_DENIED', message: audienceRules.DENIED_MESSAGE });
+
     // Track participant
     const existing = await LiveParticipant.findOne({ session: session._id, user: req.user._id, leftAt: null });
     if (!existing) {
@@ -184,7 +224,17 @@ const getTeacherSessions = async (req, res) => {
       return { ...s.toObject(), totalParticipants };
     }));
 
-    res.json({ success: true, sessions: sessionsWithStats });
+    // classes of OTHER teachers this teacher has been invited to (an audience with all teachers, or this teacher selected)
+    const me = String(req.user._id);
+    const invitedRows = await LiveSession.find({
+      status: { $in: ['scheduled', 'live'] }, teacher: { $ne: req.user._id },
+      $or: [{ 'meetingConfig.audience.teachers.mode': 'all' }, { 'meetingConfig.audience.teachers.mode': 'selected', 'meetingConfig.audience.teachers.teacherIds': me }],
+    }).populate('teacher', 'name').sort({ scheduledAt: -1 }).limit(100);
+    const invitedSessions = invitedRows
+      .filter((row) => audienceRules.check(meeting.normalize(row.meetingConfig), req.user, { ownerId: (row.teacher && row.teacher._id) || row.teacher }).ok)
+      .map((row) => scrub(row, req.user));
+
+    res.json({ success: true, sessions: sessionsWithStats, invitedSessions });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
@@ -220,6 +270,8 @@ const updateMeetingConfig = async (req, res) => {
     const base = meeting.normalize(session.meetingConfig);
     const { config, errors } = meeting.sanitize(req.body.meetingConfig || {}, base);
     if (errors.length) return res.status(400).json({ success: false, code: 'INVALID_SETTINGS', message: errors[0] });
+    const bad = await finishAudience(config, base, req.user, req.user._id);
+    if (bad) return res.status(400).json({ success: false, code: bad.code, message: bad.message });
     config.selectedUserIds = []; config.presenterUserIds = []; config.spotlightUserId = null;
     config.configVersion = (base.configVersion || 0) + 1;
     await LiveSession.updateOne({ _id: session._id }, { $set: { meetingConfig: config } });
