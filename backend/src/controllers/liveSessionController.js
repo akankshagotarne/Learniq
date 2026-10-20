@@ -54,6 +54,12 @@ const createSession = async (req, res) => {
       config.selectedUserIds = []; config.presenterUserIds = []; config.spotlightUserId = null; config.locked = false; config.configVersion = 0;
       meetingConfig = config;
     }
+    // Who may join is decided ONLY by the audience. `standard` is kept as a legacy label: taken from the request if an older client sends it,
+    // otherwise from the first standard in the audience, otherwise 10 (never used to admit or refuse anyone for a class that has an audience).
+    const aud = meetingConfig && meetingConfig.audience;
+    const fromAudience = aud && aud.students && Array.isArray(aud.students.standards) && aud.students.standards.length ? aud.students.standards[0] : null;
+    const sent = parseInt(standard, 10);
+    const legacyStandard = Number.isInteger(sent) ? sent : (Number.isInteger(fromAudience) ? fromAudience : 10);
     const sessionCode = uuidv4().substring(0, 8).toUpperCase();
     const joinUrl = `${getPrimaryClientUrl()}/live/${sessionCode}`;
 
@@ -61,7 +67,7 @@ const createSession = async (req, res) => {
       title, description,
       teacher: req.user._id,
       course: course || null,
-      standard: parseInt(standard),
+      standard: legacyStandard,
       subject,
       sessionCode,
       joinUrl,
