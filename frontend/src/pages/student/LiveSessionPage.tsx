@@ -8,6 +8,8 @@ import { chooseStage, chatPresentation, thumbnailsFor } from '../../features/liv
 import { MainStage, StageBox, Tile } from '../../features/live/Stage';
 import { RemoteAudioPool } from '../../features/live/media';
 import { ChatPanel } from '../../features/live/ChatPanel';
+import { RoomBody, RoomFrame } from '../../features/live/RoomLayout';
+import { useLiveViewport } from '../../features/live/viewport';
 import { ControlBar } from '../../features/live/ControlBar';
 import { McqPopup, RankCard } from '../../features/live/McqPopup';
 import { HostMcqPanel } from '../../features/live/HostMcqPanel';
@@ -17,17 +19,6 @@ import { ScoreboardModal, PodiumScreen } from '../../features/live/Podium';
 import {
   BlockedScreen, ConnectionBanner, EndedScreen, HostAwayChip, JoiningScreen, MediaIssueBanner, UseConsoleScreen, WaitingApprovalScreen,
 } from '../../features/live/StatusScreens';
-
-/** viewport width, updated on resize / rotation (drives how the chat is presented) */
-const useWidth = () => {
-  const [w, setW] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth));
-  useEffect(() => {
-    const on = () => setW(window.innerWidth);
-    window.addEventListener('resize', on); window.addEventListener('orientationchange', on);
-    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on); };
-  }, []);
-  return w;
-};
 
 /**
  * Live class room - students and the teacher/host. The MAIN stage is always the teacher's camera or the active screen share (or the
@@ -39,8 +30,9 @@ const LiveSessionPage: React.FC = () => {
   const { user } = useAuth();
   const me = useMemo(() => (user ? { _id: String((user as any)._id || (user as any).id), name: (user as any).name as string, role: (user as any).role as string } : null), [user]);
   const room = useLiveRoom(code, me);
-  const width = useWidth();
-  const chatMode = chatPresentation(width);
+  const { width, landscape, frame } = useLiveViewport();
+  const chatMode = chatPresentation(width, landscape);
+  const [chatDraft, setChatDraft] = useState('');
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mcqPanelOpen, setMcqPanelOpen] = useState(false);
@@ -61,7 +53,13 @@ const LiveSessionPage: React.FC = () => {
   useEffect(() => {
     const meta = document.querySelector('meta[name="viewport"]');
     const prev = meta?.getAttribute('content') || null;
-    if (meta && prev && !prev.includes('viewport-fit')) meta.setAttribute('content', `${prev}, viewport-fit=cover`);
+    // viewport-fit: notched phones; interactive-widget: the on-screen keyboard resizes the page (Chrome/Android) so the chat composer stays above it
+    if (meta && prev) {
+      let next = prev;
+      if (!next.includes('viewport-fit')) next += ', viewport-fit=cover';
+      if (!next.includes('interactive-widget')) next += ', interactive-widget=resizes-content';
+      if (next !== prev) meta.setAttribute('content', next);
+    }
     return () => { if (meta && prev) meta.setAttribute('content', prev); };
   }, []);
 
@@ -106,17 +104,17 @@ const LiveSessionPage: React.FC = () => {
   // student popup: only while the question is open and this student's answer has NOT been acknowledged by the server
   const showMcqPopup = !room.isHost && room.mcq.phase === 'open' && !!room.mcq.question && !room.mcq.submitted;
   const chatOpen = room.chatOpen && room.config.chatMode !== 'off';
-  const chatDocked = chatOpen && chatMode === 'docked';
+  const stackedChat = chatOpen && chatMode === 'stacked';
   const selfP = room.participants.find((p) => p.socketId === selfSocketId);
   const manager = room.isHost ? room.host : undefined;
 
   const chatPanel = chatOpen && (
     <ChatPanel mode={chatMode} messages={room.messages} canChat={room.permissions.canChat} chatMode={room.config.chatMode} isHost={room.isHost}
-      onSend={room.sendChat} onClose={() => room.openChat(false)} onDelete={room.isHost ? room.host.deleteChat : undefined} />
+      onSend={room.sendChat} onClose={() => room.openChat(false)} onDelete={room.isHost ? room.host.deleteChat : undefined} draft={chatDraft} onDraftChange={setChatDraft} />
   );
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-[#0b0d1a] text-white overflow-hidden" style={{ height: '100dvh' }} data-testid="live-room">
+    <RoomFrame frame={frame}>
       {/* header */}
       <header className="flex-shrink-0 flex items-center gap-2 px-3 min-h-[48px] bg-surface text-text-primary border-b border-border-subtle pt-[env(safe-area-inset-top)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
         <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 text-rose-600 text-[11px] font-bold px-2 py-0.5"><Radio className="w-3 h-3" />LIVE</span>
@@ -130,44 +128,44 @@ const LiveSessionPage: React.FC = () => {
         <div className="flex-shrink-0 px-3 py-1 text-[11px] bg-brand-primary/10 text-brand-primary truncate" data-testid="mode-banner">{summarize(room.config)}</div>
       )}
 
-      {/* body: stage first, chat only when opened */}
-      <div className="flex-1 min-h-0 flex">
-        <main className="flex-1 min-w-0 min-h-0 flex flex-col gap-2 p-2 relative">
-          {!gallery ? (
-            <>
-              <StageBox><MainStage choice={choice} participants={room.participants} streams={room.remoteStreams} screens={room.remoteScreens} selfScreen={room.screenStream} selfCam={room.camStream} selfSocketId={selfSocketId} selfStream={room.localStream}
-                selfCamOn={room.isCamOn || room.isSharing} hostPresent={room.hostPresent} hostName={hostName} reconnecting={room.connection !== 'online'} isHost={room.isHost} sharing={room.isSharing} /></StageBox>
-              {thumbs.length > 0 && (
-                <div className="flex-shrink-0 flex gap-2 overflow-x-auto pb-1" data-testid="thumbnails" aria-label="Other participants">
-                  {thumbs.slice(0, 12).map((p) => (
-                    <div key={p.socketId} className="w-24 h-16 sm:w-28 sm:h-20 flex-shrink-0">
-                      <Tile p={p} compact stream={room.remoteStreams[p.socketId] || null} isSelf={p.socketId === selfSocketId} selfStream={room.camStream} selfCamOn={room.isCamOn} selfMicOn={room.isMicOn} className="w-full h-full" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-2 lg:grid-cols-3 gap-2 content-start" data-testid="gallery">
-              {room.participants.filter((p) => p.socketId === selfSocketId || room.isHost || room.peers.some((x) => x.socketId === p.socketId && x.receive)).map((p) => (
-                <div key={p.socketId} className="aspect-video">
-                  <Tile p={p} stream={room.remoteStreams[p.socketId] || null} isSelf={p.socketId === selfSocketId} selfStream={room.camStream} selfCamOn={room.isCamOn} selfMicOn={room.isMicOn} className="w-full h-full" />
-                </div>
-              ))}
+      {/* body: stage first; chat (when opened) takes its own space beside / under the stage - it never overlays the video */}
+      <RoomBody chatOpen={chatOpen} placement={chatMode} gallery={gallery}
+        chat={chatPanel}
+        stage={(
+          <>
+            {!gallery ? (
+              <>
+                <StageBox compact={stackedChat}><MainStage choice={choice} participants={room.participants} streams={room.remoteStreams} screens={room.remoteScreens} selfScreen={room.screenStream} selfCam={room.camStream} selfSocketId={selfSocketId} selfStream={room.localStream}
+                  selfCamOn={room.isCamOn || room.isSharing} hostPresent={room.hostPresent} hostName={hostName} reconnecting={room.connection !== 'online'} isHost={room.isHost} sharing={room.isSharing} /></StageBox>
+                {thumbs.length > 0 && (
+                  <div className={`flex-shrink-0 flex gap-2 overflow-x-auto pb-1 ${stackedChat ? 'hidden' : ''}`} data-testid="thumbnails" aria-label="Other participants">
+                    {thumbs.slice(0, 12).map((p) => (
+                      <div key={p.socketId} className="w-24 h-16 sm:w-28 sm:h-20 flex-shrink-0">
+                        <Tile p={p} compact stream={room.remoteStreams[p.socketId] || null} isSelf={p.socketId === selfSocketId} selfStream={room.camStream} selfCamOn={room.isCamOn} selfMicOn={room.isMicOn} className="w-full h-full" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-2 lg:grid-cols-3 gap-2 content-start" data-testid="gallery">
+                {room.participants.filter((p) => p.socketId === selfSocketId || room.isHost || room.peers.some((x) => x.socketId === p.socketId && x.receive)).map((p) => (
+                  <div key={p.socketId} className="aspect-video">
+                    <Tile p={p} stream={room.remoteStreams[p.socketId] || null} isSelf={p.socketId === selfSocketId} selfStream={room.camStream} selfCamOn={room.isCamOn} selfMicOn={room.isMicOn} className="w-full h-full" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* floating reactions */}
+            <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col-reverse gap-1" aria-hidden="true">
+              {room.reactions.slice(-4).map((r) => <span key={r.id} className="text-3xl animate-bounce">{r.emoji}</span>)}
             </div>
-          )}
 
-          {/* floating reactions */}
-          <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col-reverse gap-1" aria-hidden="true">
-            {room.reactions.slice(-4).map((r) => <span key={r.id} className="text-3xl animate-bounce">{r.emoji}</span>)}
-          </div>
-
-          {/* MCQ rank card: overlays the stage, fits any width */}
-          {room.rank && <RankCard rank={room.rank} selfUserId={room.self?.userId} myResult={room.mcq.result} />}
-        </main>
-
-        {chatDocked && chatPanel}
-      </div>
+            {/* MCQ rank card: overlays the stage, fits any width */}
+            {room.rank && <RankCard rank={room.rank} selfUserId={room.self?.userId} myResult={room.mcq.result} />}
+          </>
+        )} />
 
       <RemoteAudioPool streams={room.remoteStreams} />
 
@@ -192,9 +190,6 @@ const LiveSessionPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* chat as slide-over / bottom sheet (the panel brings its own backdrop and close button) */}
-      {chatOpen && chatMode !== 'docked' && chatPanel}
 
       {settingsOpen && room.isHost && (
         <MeetingSettingsPanel config={room.config} onApply={(patch, v) => room.host.updateConfig(patch, v) as any} onRevert={() => room.host.revertConfig() as any} onClose={() => setSettingsOpen(false)} />
@@ -222,7 +217,7 @@ const LiveSessionPage: React.FC = () => {
         onScoreboard={() => { room.getScoreboard(); setScoreboardOpen(true); }} onMcq={() => setMcqPanelOpen(true)} onSettings={() => setSettingsOpen(true)}
         onEnd={() => { room.host.end(); }} onLeave={goBack}
       />
-    </div>
+    </RoomFrame>
   );
 };
 

@@ -58,6 +58,13 @@ export const stageState = (choice: StageChoice, host: RoomParticipant | undefine
 };
 
 /** Tailwind-independent breakpoints used for the chat presentation */
-export const chatPresentation = (width: number): 'docked' | 'slideover' | 'sheet' => (width >= 1024 ? 'docked' : width >= 640 ? 'slideover' : 'sheet');
+/**
+ * How the class chat sits next to the stage. It NEVER floats over the video:
+ *  - 'docked'  - a column beside the stage: desktops / large screens (>= 1024 px) and phones / small tablets held sideways (landscape, >= 480 px wide)
+ *  - 'stacked' - in the page flow underneath the stage: phones and tablets held upright (the stage keeps the top, chat fills the rest)
+ * `landscape` is the orientation of the DEVICE, not of the current viewport, so the on-screen keyboard (which shortens the viewport) never flips the layout.
+ */
+export type ChatPlacement = 'docked' | 'stacked';
+export const chatPresentation = (width: number, landscape = false): ChatPlacement => (width >= 1024 || (landscape && width >= 480) ? 'docked' : 'stacked');
 
 export const initials = (name: string): string => (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('') || '?';
