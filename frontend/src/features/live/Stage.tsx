@@ -96,7 +96,14 @@ export const MainStage: React.FC<MainStageProps> = ({ choice, participants, stre
   );
 };
 
-/** The box the main stage lives in. A phone held upright gets a landscape (16:9) stage so the whole camera frame fits; wider / shorter screens fill the space. */
-export const StageBox: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:w-full max-lg:portrait:aspect-video" data-testid="stage-box">{children}</div>
+/**
+ * The box the main stage lives in. A phone held upright gets a landscape (16:9) stage so the whole camera frame fits; wider / shorter screens fill the space.
+ * `compact` is used while the class chat is stacked underneath: the stage keeps its 16:9 shape but is capped to a share of the VISIBLE height
+ * (--live-h, set by RoomFrame) so chat and composer always keep room - it shrinks further when the on-screen keyboard is open, and never disappears.
+ */
+export const StageBox: React.FC<{ children: React.ReactNode; compact?: boolean }> = ({ children, compact }) => (
+  compact
+    ? <div className="flex-none mx-auto" data-testid="stage-box" data-compact="true"
+        style={{ aspectRatio: '16 / 9', width: 'min(100%, calc(max(5rem, min(var(--live-h, 100dvh) * 0.4, var(--live-h, 100dvh) - 17rem)) * 16 / 9))' }}>{children}</div>
+    : <div className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:w-full max-lg:portrait:aspect-video" data-testid="stage-box">{children}</div>
 );

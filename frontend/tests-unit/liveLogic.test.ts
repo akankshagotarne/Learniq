@@ -57,9 +57,11 @@ test('stage state explains what is missing instead of showing a blank box', () =
   assert.equal(stageState({ kind: 'none', socketId: null }, undefined, false, false), 'host-away');
   assert.equal(stageState({ kind: 'screen', socketId: 'H' }, host, true, true), 'screen');
 });
-test('chat is docked only on wide screens; a slide-over on tablets; a bottom sheet on phones', () => {
-  for (const w of [320, 360, 375, 390, 430, 639]) assert.equal(chatPresentation(w), 'sheet');
-  for (const w of [640, 768, 1023]) assert.equal(chatPresentation(w), 'slideover');
-  for (const w of [1024, 1280, 1920]) assert.equal(chatPresentation(w), 'docked');
+test('chat is docked beside the stage on wide / landscape screens and stacked under it on phones and tablets held upright - never an overlay', () => {
+  for (const w of [320, 360, 375, 390, 430, 639, 768, 1023]) assert.equal(chatPresentation(w, false), 'stacked');       // portrait phones + tablets
+  for (const w of [1024, 1280, 1920]) { assert.equal(chatPresentation(w, false), 'docked'); assert.equal(chatPresentation(w, true), 'docked'); }
+  for (const w of [480, 568, 667, 844, 915, 1023]) assert.equal(chatPresentation(w, true), 'docked');                       // phones / small tablets held sideways
+  assert.equal(chatPresentation(360, true), 'stacked');                                                                      // too narrow to sit beside the video
+  assert.equal(chatPresentation(390), 'stacked');                                                                            // default = portrait
 });
 test('initials', () => { assert.equal(initials('Akanksha Mahendra Gotarne'), 'AM'); assert.equal(initials('  '), '?'); assert.equal(initials('priya'), 'P'); });

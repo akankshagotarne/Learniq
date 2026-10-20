@@ -1,23 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Crown, MessageSquare, Send, Trash2, X } from 'lucide-react';
 import type { ChatItem } from './types';
+import type { ChatPlacement } from './logic';
 
-export type ChatMode = 'docked' | 'slideover' | 'sheet';
+export type ChatMode = ChatPlacement;
 
 /**
- * Class chat - always SECONDARY. Closed until the user opens it; then a docked column (large screens), a slide-over (tablets) or a bottom
- * sheet (phones). It never sits on top of the stage by default and never takes a fixed share of a phone screen.
+ * Class chat - always SECONDARY and never an overlay. Closed until the user opens it; then it takes its OWN space in the room layout
+ * (RoomBody): a column beside the stage on wide / landscape screens, or the area underneath the stage on phones held upright.
+ * The message list is the only scroll region; header and composer never move. The draft lives in the parent so closing the panel keeps it.
  */
 export const ChatPanel: React.FC<{
   mode: ChatMode; messages: ChatItem[]; canChat: boolean; chatMode: 'everyone' | 'host_only' | 'off'; isHost: boolean;
   onSend: (text: string) => Promise<{ ok: boolean }>; onClose: () => void; onDelete?: (id: string) => void;
-}> = ({ mode, messages, canChat, chatMode, isHost, onSend, onClose, onDelete }) => {
-  const [text, setText] = useState('');
+  draft?: string; onDraftChange?: (text: string) => void;
+}> = ({ mode, messages, canChat, chatMode, isHost, onSend, onClose, onDelete, draft, onDraftChange }) => {
+  const [localText, setLocalText] = useState('');
+  const text = draft ?? localText;
+  const setText = onDraftChange ?? setLocalText;
   const [sending, setSending] = useState(false);
-  const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
-  useEffect(() => { if (mode !== 'sheet') input.current?.focus(); }, [mode]);
+  // newest message in view - scrolls the LIST only (scrollIntoView would also scroll the page / the room)
+  useEffect(() => { const el = list.current; if (el) el.scrollTop = el.scrollHeight; }, [messages.length, mode]);
+  // keyboard focus on open only where there is a hardware pointer; on touch screens the keyboard opens when the student taps the field
+  useEffect(() => { if (mode === 'docked' && typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches) input.current?.focus(); }, [mode]);
 
   const submit = async () => {
     const t = text.trim(); if (!t || sending) return;
@@ -28,20 +35,21 @@ export const ChatPanel: React.FC<{
   };
 
   const shell = mode === 'docked'
-    ? 'relative w-80 flex-shrink-0 border-l border-border-subtle'
-    : mode === 'slideover'
-      ? 'fixed top-0 right-0 bottom-0 z-40 w-[22rem] max-w-[90vw] shadow-2xl border-l border-border-subtle pt-[env(safe-area-inset-top)]'
-      : 'fixed inset-x-0 bottom-0 z-40 h-[72dvh] max-h-[560px] rounded-t-2xl shadow-2xl border-t border-border-subtle';
+    ? 'relative w-[min(20rem,42vw)] lg:w-80 flex-shrink-0 border-l border-border-subtle'
+    : 'relative flex-1 min-h-0 w-full rounded-t-2xl border-t border-border-subtle';
   return (
     <>
-      {mode !== 'docked' && <button aria-label="Close chat" onClick={onClose} className="fixed inset-0 z-30 bg-black/40 cursor-default" tabIndex={-1} />}
-      <aside data-testid="chat-panel" data-chat-mode={mode} aria-label="Class chat" className={`${shell} bg-surface flex flex-col min-h-0`}>
-        <div className="flex items-center justify-between px-3 h-12 border-b border-border-subtle flex-shrink-0">
+      <aside data-testid="chat-panel" data-chat-mode={mode} aria-label="Class chat" className={`${shell} bg-surface text-text-primary flex flex-col min-h-0 overflow-hidden`}>
+        <div className="flex items-center justify-between px-3 h-11 sm:h-12 border-b border-border-subtle flex-shrink-0">
           <div className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-brand-primary" /><h2 className="font-heading text-sm font-semibold text-text-primary">Class chat</h2></div>
           <button onClick={onClose} aria-label="Close chat" className="w-11 h-11 -mr-2 inline-flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2" role="log" aria-live="polite">
-          {messages.length === 0 && <p className="text-center text-text-muted text-xs py-8">No messages yet.</p>}
+        <div ref={list} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-3 space-y-2" role="log" aria-live="polite" data-testid="chat-messages">
+          {messages.length === 0 && (
+            <div className="h-full min-h-[3.5rem] flex flex-col items-center justify-center gap-1 text-center text-text-muted" data-testid="chat-empty">
+              <MessageSquare className="w-5 h-5 opacity-60" aria-hidden="true" /><p className="text-xs">No messages yet. Start the conversation.</p>
+            </div>
+          )}
           {messages.map((m, i) => (
             <div key={m._id || i} className={`${m.senderRole === 'teacher' || m.senderRole === 'admin' ? 'bg-brand-primary/10 border-brand-primary/20' : 'bg-surface-alt border-border-subtle'} border rounded-xl p-2.5`}>
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -54,9 +62,8 @@ export const ChatPanel: React.FC<{
               <p className="text-text-secondary text-xs leading-relaxed break-words">{m.message}</p>
             </div>
           ))}
-          <div ref={end} />
         </div>
-        <div className="p-3 border-t border-border-subtle pb-[max(0.75rem,env(safe-area-inset-bottom))] flex-shrink-0">
+        <div className="px-3 py-2 border-t border-border-subtle flex-shrink-0" data-testid="chat-composer">
           {canChat ? (
             <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex gap-2">
               <input ref={input} value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" aria-label="Message" enterKeyHint="send"
