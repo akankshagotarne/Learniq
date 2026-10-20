@@ -12,7 +12,7 @@ const { startLive } = require('./liveHarness');
   const app = express();
   app.use(cors());
   app.use(express.json());
-  const h = await startLive({ port, app, windowMs: Number(process.argv[3]) || 15000, rankingMs: Number(process.argv[4]) || 5000 });
+  const h = await startLive({ sessionStatus: 'scheduled', port, app, windowMs: Number(process.argv[3]) || 15000, rankingMs: Number(process.argv[4]) || 5000 });
 
   // controllers are loaded AFTER the harness has swapped in the in-memory models
   const { protect, authorize } = require('../../middleware/auth');

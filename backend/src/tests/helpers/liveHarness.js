@@ -19,7 +19,7 @@ const { createFakeDb, FakeModel } = require('./fakeDb');
 const startLive = async (opts = {}) => {
   const fake = createFakeDb();
   const registry = fake.registry;
-  const LiveSession = new FakeModel('LiveSession', { registry, refs: { teacher: 'User', course: 'Course' }, defaults: () => ({ status: 'live', maxParticipants: 50, activeQuiz: null }) });
+  const LiveSession = new FakeModel('LiveSession', { registry, refs: { teacher: 'User', course: 'Course' }, defaults: () => ({ status: opts.sessionStatus || 'live', maxParticipants: 50, activeQuiz: null }) });
   const LiveParticipant = new FakeModel('LiveParticipant', { registry, refs: { user: 'User' } });
   const LiveChatMessage = new FakeModel('LiveChatMessage', { registry, defaults: () => ({ isDeleted: false }) });
   const LiveMcq = new FakeModel('LiveMcq', {

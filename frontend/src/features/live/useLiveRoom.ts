@@ -155,6 +155,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
       } catch (err: any) {
         if (!alive) return;
         const d = err?.response?.data;
+        if (d?.code === 'AUDIENCE_DENIED') { setStatusMessage(d.message || 'This class is not open to your account.'); setStatus('denied'); return; }
         if (d?.code === 'USE_ADMIN_CONSOLE') { setConsoleUrl(d.consoleUrl || `/admin/live/${code}`); setStatus('use-console'); return; }
         setStatusMessage(d?.message || (err?.message === 'Network Error' ? 'We could not reach LearnIQ. Check your internet connection and try again.' : 'We could not open this class.'));
         setStatus('error');
