@@ -1,4 +1,5 @@
 /** Wire types shared by the live-class client code. They mirror services/live/* on the server (the server is the authority). */
+import type { Audience } from './audience';
 
 export type VisibilityMode = 'everyone' | 'host_only' | 'host_and_selected' | 'presentation' | 'spotlight';
 export type PublishRule = 'everyone' | 'host_and_selected' | 'host_only';
@@ -20,6 +21,10 @@ export interface MeetingConfig {
   locked: boolean;
   configVersion: number;
   info?: { label: string; hint: string };
+  /** who may join (owner / host only gets the ids; students only the kind). Missing = an older class with its original open behaviour. */
+  audience?: Audience;
+  audienceLegacy?: boolean;
+  audienceSummary?: { students: string; teachers: string; access: string };
 }
 
 export const DEFAULT_CONFIG: MeetingConfig = {

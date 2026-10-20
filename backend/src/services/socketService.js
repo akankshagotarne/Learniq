@@ -15,7 +15,9 @@ const { Quiz, QuizAttempt } = require('../models/Quiz');
 const LiveMcq = require('../models/LiveMcq');
 const LiveMcqResponse = require('../models/LiveMcqResponse');
 const { LiveAdminAudit } = require('../models/LiveAdminAudit');
+const User = require('../models/User');
 const meeting = require('./live/meetingConfig');
+const audienceRules = require('./live/audience');
 const { RoomManager } = require('./live/roomManager');
 const { buildSortedScoreboard } = require('./live/mcqEngine');
 const runtime = require('./live/runtime');
@@ -36,7 +38,7 @@ const reply = (cb, payload) => { if (typeof cb === 'function') { try { cb(payloa
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 const setupSocket = (io, options = {}) => {
-  const models = { LiveSession, LiveChatMessage, LiveMcq, LiveMcqResponse, LiveAdminAudit };
+  const models = { LiveSession, LiveChatMessage, LiveMcq, LiveMcqResponse, LiveAdminAudit, User };
   const manager = new RoomManager({ io, models, ...options });
   runtime.set(manager);
 
@@ -208,6 +210,18 @@ const setupSocket = (io, options = {}) => {
           return reply(cb, { ok: true });
         }
 
+        // WHO may join: re-read the account from the database (role, active, approval, standard) and check it against the class audience on
+        // every join AND every reconnect - the browser's claims and an earlier admission never count
+        const fresh = await User.findById(userId).select('role isActive isApproved approvalStatus currentStandard').lean();
+        const eligible = audienceRules.check(room.config, fresh && { ...fresh, id: userId }, { ownerId: room.hostUserId });
+        if (!eligible.ok) {
+          if (room.admitted.has(userId)) room.admitted.delete(userId);
+          manager.replaceExisting(room, userId, socket.id);
+          socket.emit('join-denied', { message: audienceRules.DENIED_MESSAGE, code: 'AUDIENCE_DENIED' });
+          socket.sessionCode = null;
+          return reply(cb, { ok: false, code: 'AUDIENCE_DENIED', message: audienceRules.DENIED_MESSAGE });
+        }
+        info.standard = Number.isInteger(fresh.currentStandard) ? fresh.currentStandard : null; info.role = fresh.role;
         const rm = room.removed.get(userId);
         if (rm) { socket.emit('join-denied', { message: 'You were removed from this class by the host.', code: 'REMOVED' }); socket.sessionCode = null; return reply(cb, { ok: false, code: 'REMOVED' }); }
         const already = room.admitted.has(userId);

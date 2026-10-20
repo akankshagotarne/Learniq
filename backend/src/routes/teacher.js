@@ -54,6 +54,13 @@ router.post('/live-sessions/:id/end', ...teacherAuth, liveCtrl.endSession);
 router.get('/live-sessions/:id/participants', ...teacherAuth, liveCtrl.getParticipants);
 router.put('/live-sessions/:id/meeting-config', ...teacherAuth, liveCtrl.updateMeetingConfig);
 
+// Live-class audience selector lookups (narrow: names + standards only)
+const audienceCtrl = require('../controllers/liveAudienceController');
+router.get('/live-audience/standards', ...teacherAuth, audienceCtrl.standards);
+router.get('/live-audience/students', ...teacherAuth, audienceCtrl.searchStudents);
+router.get('/live-audience/teachers', ...teacherAuth, audienceCtrl.searchTeachers);
+router.post('/live-audience/resolve', ...teacherAuth, audienceCtrl.resolve);
+
 // Students
 router.get('/students', ...teacherAuth, userCtrl.getStudents);
 router.get('/students/:id', ...teacherAuth, userCtrl.getStudentDetail);

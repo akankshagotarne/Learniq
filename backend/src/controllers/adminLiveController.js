@@ -9,6 +9,7 @@ const LiveMcq = require('../models/LiveMcq');
 const { LiveAdminAudit } = require('../models/LiveAdminAudit');
 const runtime = require('../services/live/runtime');
 const audit = require('../services/live/audit');
+const audienceRules = require('../services/live/audience');
 const meeting = require('../services/live/meetingConfig');
 
 const CODE_RE = /^[A-Za-z0-9_-]{3,40}$/;
@@ -41,7 +42,7 @@ const rowOf = (s, manager) => {
     status: o.status, scheduledAt: o.scheduledAt, startedAt: o.startedAt, endedAt: o.endedAt,
     host: o.teacher && o.teacher._id ? { id: String(o.teacher._id), name: o.teacher.name } : { id: String(o.teacher || ''), name: '' },
     course: o.course && o.course.title ? { id: String(o.course._id), title: o.course.title } : null,
-    visibilityMode: cfg.mode, connectedStudents: live ? live.students : 0, waiting: live ? live.waiting : 0, hostPresent: live ? live.hostPresent : false,
+    visibilityMode: cfg.mode, audience: audienceRules.summarize(cfg), connectedStudents: live ? live.students : 0, waiting: live ? live.waiting : 0, hostPresent: live ? live.hostPresent : false,
     activeMcq: live ? live.mcq : null, consoles: live ? live.consoles : 0,
     // a class marked live in the database that has no room in memory (the server restarted, or the host never came back) is "stale"
     stale: o.status === 'live' && !live,

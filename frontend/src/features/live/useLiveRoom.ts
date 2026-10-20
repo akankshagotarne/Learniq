@@ -204,7 +204,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     offs.push(on('waiting-room-update', (p: { waitingRoom: WaitingEntry[] }) => setWaiting(p.waitingRoom || [])));
 
     offs.push(on('join-denied', (p: any) => { setStatusMessage(p?.message || 'Your request to join was not accepted.'); setStatus(p?.code === 'REMOVED' ? 'removed' : 'denied'); }));
-    offs.push(on('removed-from-session', (p: any) => { setStatusMessage(p?.message || 'You were removed from this class by the host.'); setStatus('removed'); releaseAll(); }));
+    offs.push(on('removed-from-session', (p: any) => { setStatusMessage(p?.message || 'You were removed from this class by the host.'); setStatus(p?.code === 'AUDIENCE_CHANGED' ? 'denied' : 'removed'); releaseAll(); }));
     offs.push(on('replaced-by-new-connection', (p: any) => { setStatusMessage(p?.message || 'You joined this class from another tab or device.'); setStatus('replaced'); releaseAll(); }));
     offs.push(on('session-ended', (p: any) => { setPodium(p?.podium || []); setStatusMessage(p?.message || 'This class has ended.'); setStatus('ended'); releaseAll(); }));
     offs.push(on('error', (p: any) => { if (statusRef.current === 'joining' || statusRef.current === 'loading') { setStatusMessage(p?.message || 'Could not join the class.'); setStatus('error'); } }));

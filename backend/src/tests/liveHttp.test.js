@@ -55,7 +55,8 @@ test('H1. a class can be created with meeting settings; invalid settings are ref
   assert.equal(bad.json.code, 'INVALID_SETTINGS');
   const plain = await call('POST', '/live-sessions', t, body);
   assert.equal(plain.status, 201);
-  assert.equal(plain.json.session.meetingConfig, undefined, 'old-style classes keep working with the defaults');
+  assert.deepEqual(plain.json.session.meetingConfig.audience.students.mode, 'all', 'a new class is open to all students by default');
+  assert.equal(plain.json.session.meetingConfig.audience.teachers.mode, 'none', 'and to no other teachers');
   const asStudent = await call('POST', '/live-sessions', await h.user('A Student', 'student'), body);
   assert.equal(asStudent.status, 403);
 });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MeetingSettingsForm, summarize } from '../../features/live/MeetingSettings';
 import { DEFAULT_CONFIG, type MeetingConfig } from '../../features/live/types';
+import { DEFAULT_AUDIENCE, audienceLabel, clone, validateAudience } from '../../features/live/audience';
 import { Link } from 'react-router-dom';
 import { Radio, Plus, Copy, CheckCircle, Play, Square, Clock, Users, Link2 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
@@ -11,7 +12,8 @@ import toast from 'react-hot-toast';
 import { ALL_SUBJECTS } from '../../constants/olympiadSubjects';
 
 /** the server owns selection / spotlight / presenters / version; only the host's chosen settings are sent */
-const stripServerFields = (c: MeetingConfig) => { const { selectedUserIds, presenterUserIds, spotlightUserId, locked, configVersion, ...rest } = c as any; return rest; };
+const stripServerFields = (c: MeetingConfig) => { const { selectedUserIds, presenterUserIds, spotlightUserId, locked, configVersion, info, audienceLegacy, audienceSummary, ...rest } = c as any; return rest; };
+const NEW_CONFIG = (): MeetingConfig => ({ ...DEFAULT_CONFIG, audience: clone(DEFAULT_AUDIENCE) });
 
 const TeacherLiveSessions: React.FC = () => {
   const { user } = useAuth();
@@ -19,7 +21,8 @@ const TeacherLiveSessions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [meetingCfg, setMeetingCfg] = useState<MeetingConfig>(DEFAULT_CONFIG);
+  const [meetingCfg, setMeetingCfg] = useState<MeetingConfig>(NEW_CONFIG);
+  const [invited, setInvited] = useState<LiveSession[]>([]);
   const [editing, setEditing] = useState<{ id: string; title: string; cfg: MeetingConfig } | null>(null);
   const [savingCfg, setSavingCfg] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
@@ -33,12 +36,15 @@ const TeacherLiveSessions: React.FC = () => {
     try {
       const res = await api.get('/teacher/live-sessions');
       setSessions(res.data.sessions || []);
+      setInvited(res.data.invitedSessions || []);
     } catch {}
     setLoading(false);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const problem = validateAudience(meetingCfg.audience);
+    if (problem) { toast.error(problem); return; }
     setCreating(true);
     try {
       const res = await api.post('/live-sessions', {
@@ -51,7 +57,7 @@ const TeacherLiveSessions: React.FC = () => {
       setSessions(prev => [res.data.session, ...prev]);
       setShowCreate(false);
       setForm({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
-      setMeetingCfg(DEFAULT_CONFIG);
+      setMeetingCfg(NEW_CONFIG());
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to create session');
     } finally {
@@ -61,6 +67,8 @@ const TeacherLiveSessions: React.FC = () => {
 
   const saveCfg = async () => {
     if (!editing) return;
+    const problem = validateAudience(editing.cfg.audience);
+    if (problem) { toast.error(problem); return; }
     setSavingCfg(true);
     try {
       const res = await api.put(`/teacher/live-sessions/${editing.id}/meeting-config`, { meetingConfig: stripServerFields(editing.cfg) });
@@ -114,7 +122,7 @@ const TeacherLiveSessions: React.FC = () => {
           {/* Create Modal */}
           {showCreate && (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div role="dialog" aria-modal="true" aria-label="Create live session" className="bg-surface border border-border-subtle rounded-2xl shadow-xl p-5 sm:p-6 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto animate-slide-up">
+              <div role="dialog" aria-modal="true" aria-label="Create live session" className="bg-surface border border-border-subtle rounded-2xl shadow-xl p-5 sm:p-6 w-full max-w-md sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto animate-slide-up">
                 <h2 className="text-text-primary font-bold text-xl mb-5 font-heading">Create Live Session</h2>
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
@@ -151,7 +159,7 @@ const TeacherLiveSessions: React.FC = () => {
                     <p className="text-xs text-text-muted mt-2">{summarize(meetingCfg)}. You can change this later, even during the class.</p>
                   </fieldset>
                   <div className="flex gap-3 pt-2">
-                    <button type="submit" disabled={creating} className="btn-primary flex-1">
+                    <button type="submit" disabled={creating || !!validateAudience(meetingCfg.audience)} className="btn-primary flex-1">
                       {creating ? 'Creating...' : 'Create Session'}
                     </button>
                     <button type="button" onClick={() => setShowCreate(false)} className="btn-outline flex-1">Cancel</button>
@@ -168,11 +176,29 @@ const TeacherLiveSessions: React.FC = () => {
                 <p className="text-text-secondary text-xs mb-4 truncate">{editing.title}</p>
                 <MeetingSettingsForm value={editing.cfg} onChange={patch => setEditing(e => e && ({ ...e, cfg: { ...e.cfg, ...patch } }))} idPrefix="edit" />
                 <div className="flex gap-3 pt-4">
-                  <button onClick={saveCfg} disabled={savingCfg} className="btn-primary flex-1 min-h-[48px]">{savingCfg ? 'Saving...' : 'Save settings'}</button>
+                  <button onClick={saveCfg} disabled={savingCfg || !!validateAudience(editing.cfg.audience)} className="btn-primary flex-1 min-h-[48px]">{savingCfg ? 'Saving...' : 'Save settings'}</button>
                   <button onClick={() => setEditing(null)} className="btn-outline flex-1 min-h-[48px]">Cancel</button>
                 </div>
               </div>
             </div>
+          )}
+
+          {invited.length > 0 && (
+            <section className="mb-8" aria-label="Classes you are invited to" data-testid="invited-sessions">
+              <h2 className="font-heading font-semibold text-text-primary mb-3">Invited as a participant</h2>
+              <div className="space-y-3">
+                {invited.map(s => (
+                  <div key={s._id} className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-text-primary break-words">{s.title} {s.status === 'live' && <span className="badge-live ml-1">LIVE</span>}</p>
+                      <p className="text-xs text-text-muted">Hosted by {(s.teacher as any)?.name || 'another teacher'} · {s.subject}{s.scheduledAt ? ` · ${new Date(s.scheduledAt).toLocaleString('en-IN')}` : ''}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">You join as an attendee; the host controls the class.</p>
+                    </div>
+                    {s.status === 'live' ? <Link to={`/live/${s.sessionCode}`} className="btn-primary text-sm py-2 px-4 min-h-[44px] inline-flex items-center justify-center gap-1.5"><Radio className="w-4 h-4" /> Join</Link> : <span className="text-xs text-text-muted">Not started yet</span>}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Sessions List */}
@@ -207,6 +233,7 @@ const TeacherLiveSessions: React.FC = () => {
                         <span className="font-medium text-text-secondary">{session.subject} • Std {session.standard}</span>
                         {session.scheduledAt && <span><Clock className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{new Date(session.scheduledAt).toLocaleString('en-IN')}</span>}
                         <span><Users className="w-3.5 h-3.5 inline mr-1 text-text-muted" />{(session as any).totalParticipants || 0} participants</span>
+                        <span data-testid="audience-label" className="font-medium text-brand-primary">For: {audienceLabel((session as any).meetingConfig?.audience)}</span>
                       </div>
 
                       {/* Join URL */}

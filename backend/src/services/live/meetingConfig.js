@@ -7,6 +7,7 @@
  * server has control: (1) the signalling layer refuses offers / answers / ICE between peers that may not receive each other
  * (planPeers), (2) per-peer send/receive instructions, (3) server-validated camera / mic / screen state, (4) per-viewer filtered rosters.
  */
+const audienceRules = require('./audience');
 const MODES = ['everyone', 'host_only', 'host_and_selected', 'presentation', 'spotlight'];
 const LAYOUTS = ['speaker', 'gallery'];
 const PUBLISH = ['everyone', 'host_and_selected', 'host_only'];
@@ -79,6 +80,14 @@ const sanitize = (patch = {}, base = DEFAULTS) => {
     if (src.spotlightUserId === null || src.spotlightUserId === '') out.spotlightUserId = null;
     else if (OBJECT_ID.test(String(src.spotlightUserId))) out.spotlightUserId = String(src.spotlightUserId);
     else errors.push('The spotlight participant is not valid.');
+  }
+  // who may JOIN (separate from what participants see): validated structurally here, against the database where it is saved
+  if (src.audience !== undefined) {
+    const r = audienceRules.sanitizeAudience(src.audience, audienceRules.normalizeAudience(out.audience) || audienceRules.DEFAULT_AUDIENCE);
+    if (r.errors.length) errors.push(r.errors[0]); else out.audience = r.audience;
+  } else if (out.audience !== undefined) {
+    const a = audienceRules.normalizeAudience(out.audience);
+    if (a) out.audience = a; else delete out.audience;           // a malformed stored value behaves like an older class (never locks everyone out)
   }
   // visibility between students is DEFINED by the mode where the mode says so
   if (out.mode === 'everyone') out.studentsSeeEachOther = true;
@@ -170,7 +179,7 @@ const stageFor = (cfg, participants) => {
 };
 
 /** Public config (what clients may see). */
-const publicConfig = (cfg) => ({ ...cfg, info: MODE_INFO[cfg.mode] });
+const publicConfig = (cfg) => ({ ...cfg, info: MODE_INFO[cfg.mode], audienceLegacy: audienceRules.isLegacy(cfg), audienceSummary: audienceRules.summarize(cfg) });
 
 module.exports = {
   MODES, LAYOUTS, PUBLISH, CHAT, SCREEN, MODE_INFO, DEFAULTS, sanitize, normalize,

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ChevronDown, Eye, Info } from 'lucide-react';
 import { DEFAULT_CONFIG, MeetingConfig, VISIBILITY_MODES } from './types';
+import AudienceSelector from './AudienceSelector';
+import { summarizeAudience, validateAudience } from './audience';
 
 type Patch = Partial<MeetingConfig>;
 const who = (label: string, value: string, onChange: (v: any) => void, options: [string, string][], id: string, hint?: string) => (
@@ -27,12 +29,17 @@ export const summarize = (c: MeetingConfig): string => {
 };
 
 /** The Meeting Setup / Participant Visibility form. Basic choices first, "Advanced" is expandable. Used when creating a class and live in the class. */
-export const MeetingSettingsForm: React.FC<{ value: MeetingConfig; onChange: (patch: Patch) => void; disabled?: boolean; idPrefix?: string }> = ({ value, onChange, disabled, idPrefix = 'ms' }) => {
+export const MeetingSettingsForm: React.FC<{ value: MeetingConfig; onChange: (patch: Patch) => void; disabled?: boolean; idPrefix?: string; showAudience?: boolean }> = ({ value, onChange, disabled, idPrefix = 'ms', showAudience = true }) => {
   const [advanced, setAdvanced] = useState(false);
   const cfg = { ...DEFAULT_CONFIG, ...value };
   const modeDefinesVisibility = cfg.mode === 'everyone' || cfg.mode === 'host_only';
   return (
     <div className="space-y-4" data-testid="meeting-settings">
+      {showAudience ? (
+        <AudienceSelector value={cfg.audience} onChange={(audience) => onChange({ audience })} disabled={disabled} idPrefix={`${idPrefix}-aud`} />
+      ) : (
+        <p className="text-xs text-text-secondary bg-surface-alt border border-border-subtle rounded-xl px-3 py-2" data-testid="audience-readonly"><span className="font-semibold text-text-primary">Who can join:</span> {summarizeAudience(cfg.audience).students}; {summarizeAudience(cfg.audience).teachers}. Only the host edits this.</p>
+      )}
       <fieldset disabled={disabled} className="space-y-2">
         <legend className="flex items-center gap-1.5 text-sm font-semibold text-text-primary mb-1"><Eye className="w-4 h-4 text-brand-primary" />Who can see whom</legend>
         {VISIBILITY_MODES.map((m) => {
@@ -76,8 +83,8 @@ export const MeetingSettingsForm: React.FC<{ value: MeetingConfig; onChange: (pa
 /** In-meeting settings (host): edit a draft, apply it in one step; a conflicting change made by someone else is shown, never overwritten silently. */
 export const MeetingSettingsPanel: React.FC<{
   config: MeetingConfig; onApply: (patch: Partial<MeetingConfig>, expectedVersion: number) => Promise<{ ok: boolean; code?: string; message?: string; config?: MeetingConfig }>;
-  onRevert: () => Promise<{ ok: boolean; message?: string }>; onClose: () => void;
-}> = ({ config, onApply, onRevert, onClose }) => {
+  onRevert: () => Promise<{ ok: boolean; message?: string }>; onClose: () => void; showAudience?: boolean;
+}> = ({ config, onApply, onRevert, onClose, showAudience = true }) => {
   const [draft, setDraft] = useState<MeetingConfig>(config);
   const [base, setBase] = useState(config.configVersion);
   const [busy, setBusy] = useState(false);
@@ -97,8 +104,11 @@ export const MeetingSettingsPanel: React.FC<{
     return () => window.clearTimeout(t);
   }, [config, base]);
   const apply = async () => {
+    const problem = showAudience ? validateAudience(draft.audience) : null;
+    if (problem) { setMsg({ text: problem, bad: true }); return; }
     setBusy(true); setMsg(null); working.current = true;
-    const { info, selectedUserIds, presenterUserIds, spotlightUserId, locked, configVersion, ...patch } = draft as any;
+    const { info, selectedUserIds, presenterUserIds, spotlightUserId, locked, configVersion, audienceLegacy, audienceSummary, ...patch } = draft as any;
+    if (!showAudience) delete patch.audience;
     const r = await onApply(patch, base);
     working.current = false; setBusy(false);
     if (r.ok) { if (r.config) { setDraft(r.config); setBase(r.config.configVersion); } setMsg({ text: 'Settings applied for everyone in the class.', bad: false }); }
@@ -109,10 +119,10 @@ export const MeetingSettingsPanel: React.FC<{
       <div role="dialog" aria-modal="true" aria-label="Meeting settings" className="w-full sm:max-w-xl max-h-[100dvh] sm:max-h-[92dvh] overflow-y-auto bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border-subtle pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="sticky top-0 z-10 flex items-center justify-between px-4 h-14 bg-surface border-b border-border-subtle"><h2 className="font-heading font-bold text-text-primary">Meeting settings</h2><button aria-label="Close settings" onClick={onClose} className="w-11 h-11 -mr-2 inline-flex items-center justify-center text-text-muted">✕</button></div>
         <div className="p-4 space-y-4">
-          <MeetingSettingsForm value={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} disabled={busy} idPrefix="live" />
+          <MeetingSettingsForm value={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} disabled={busy} idPrefix="live" showAudience={showAudience} />
           {msg && <p role={msg.bad ? 'alert' : 'status'} className={`text-xs rounded-xl px-3 py-2 border ${msg.bad ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>{msg.text}</p>}
           <div className="flex gap-2">
-            <button onClick={apply} disabled={busy} className="btn-primary flex-1 min-h-[48px]" data-testid="settings-apply">{busy ? 'Applying…' : 'Apply to class'}</button>
+            <button onClick={apply} disabled={busy || (showAudience && !!validateAudience(draft.audience))} className="btn-primary flex-1 min-h-[48px]" data-testid="settings-apply">{busy ? 'Applying…' : 'Apply to class'}</button>
             <button onClick={async () => { setBusy(true); working.current = true; const r: any = await onRevert(); working.current = false; setBusy(false); if (r.ok && r.config) { setDraft(r.config); setBase(r.config.configVersion); } setMsg(r.ok ? { text: 'Went back to the previous layout.', bad: false } : { text: r.message || 'Nothing to go back to.', bad: true }); }} disabled={busy} className="btn-outline min-h-[48px]">Previous layout</button>
           </div>
         </div>
