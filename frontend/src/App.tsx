@@ -401,6 +401,12 @@ const AppRoutes: React.FC = () => (
           <AdminLiveConsole />
         </ProtectedRoute>
       } />
+      {/* "Join Live Meeting": the administrator enters the real room as a labelled moderator (same screen as students / teachers) */}
+      <Route path="/admin/live/:code/meeting" element={
+        <ProtectedRoute roles={['admin']}>
+          <LiveSessionPage adminMode />
+        </ProtectedRoute>
+      } />
       <Route path="/admin/payments" element={
         <ProtectedRoute roles={['admin']}>
           <AdminPayments />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Crown, Lock, MicOff, Mic, Pin, PinOff, Presentation, UserCheck, UserX, Video, VideoOff, X, Bell, Star, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Crown, ShieldCheck, Lock, MicOff, Mic, Pin, PinOff, Presentation, UserCheck, UserX, Video, VideoOff, X, Bell, Star, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Avatar } from './Stage';
 import type { Ack, MeetingConfig, RoomParticipant, WaitingEntry } from './types';
 
@@ -42,7 +42,7 @@ export const ParticipantsPanel: React.FC<{
     return r;
   };
   const list = participants.filter((p) => showSelf || p.socketId !== selfSocketId);
-  const students = list.filter((p) => !p.isHost).length;
+  const students = list.filter((p) => !p.isHost && !p.isAdmin).length;
 
   const body = (
     <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain" data-testid="participants-panel">
@@ -75,15 +75,15 @@ export const ParticipantsPanel: React.FC<{
               <div className="flex items-center gap-2.5">
                 <Avatar name={p.name} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary truncate flex items-center gap-1.5">{p.name}{isSelf && <span className="text-text-muted font-normal">(You)</span>}{p.isHost && <Crown className="w-3.5 h-3.5 text-amber-500" aria-label="Teacher" />}
+                  <p className="text-sm font-medium text-text-primary truncate flex items-center gap-1.5">{p.name}{isSelf && <span className="text-text-muted font-normal">(You)</span>}{p.isHost && <Crown className="w-3.5 h-3.5 text-amber-500" aria-label="Teacher" />}{p.isAdmin && <ShieldCheck className="w-3.5 h-3.5 text-sky-600" aria-label="Admin moderator" />}
                     {config.spotlightUserId === p.userId && <Pin className="w-3 h-3 text-brand-primary" aria-label="Spotlighted" />}{selected.has(p.userId) && <Star className="w-3 h-3 text-amber-500" aria-label="Selected" />}{presenters.has(p.userId) && <Presentation className="w-3 h-3 text-emerald-600" aria-label="Presenter" />}</p>
-                  <p className="text-[11px] text-text-muted">{p.isHost ? 'Teacher' : p.role === 'teacher' ? 'Guest teacher (attendee)' : p.standard ? (p.standard === 99 ? 'Others' : `Standard ${p.standard}`) : 'Student'}</p>
+                  <p className="text-[11px] text-text-muted" data-testid={p.isAdmin ? 'role-admin' : undefined}>{p.isAdmin ? 'Admin Moderator' : p.isHost ? 'Teacher' : p.role === 'teacher' ? 'Guest teacher (attendee)' : p.standard ? (p.standard === 99 ? 'Others' : `Standard ${p.standard}`) : 'Student'}</p>
                 </div>
                 {p.isMicOn ? <Mic className="w-4 h-4 text-emerald-600" aria-label="Microphone on" /> : <MicOff className="w-4 h-4 text-text-muted" aria-label="Microphone off" />}
                 {p.isCameraOn ? <Video className="w-4 h-4 text-emerald-600" aria-label="Camera on" /> : <VideoOff className="w-4 h-4 text-text-muted" aria-label="Camera off" />}
-                {manager && !p.isHost && !isSelf && <IconBtn label={`Actions for ${p.name}`} onClick={() => { setOpen(expanded ? null : p.socketId); setConfirm(null); }} active={expanded}><MoreHorizontal className="w-4 h-4" /></IconBtn>}
+                {manager && !p.isHost && !p.isAdmin && !isSelf && <IconBtn label={`Actions for ${p.name}`} onClick={() => { setOpen(expanded ? null : p.socketId); setConfirm(null); }} active={expanded}><MoreHorizontal className="w-4 h-4" /></IconBtn>}
               </div>
-              {manager && expanded && !p.isHost && (
+              {manager && expanded && !p.isHost && !p.isAdmin && (
                 <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`actions-${p.socketId}`}>
                   {p.isMicOn && <IconBtn label="Mute now" onClick={() => run(`m${p.socketId}`, () => manager.mute(p.socketId), `${p.name} muted`)}><MicOff className="w-4 h-4" /></IconBtn>}
                   <IconBtn label={p.micBlocked ? 'Allow microphone' : 'Block microphone'} active={p.micBlocked} onClick={() => run(`mb${p.socketId}`, () => manager.permission(p.socketId, { mic: !!p.micBlocked }), p.micBlocked ? 'Microphone allowed' : 'Microphone blocked')}><Mic className="w-4 h-4" /></IconBtn>

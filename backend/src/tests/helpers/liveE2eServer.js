@@ -42,6 +42,7 @@ const { startLive } = require('./liveHarness');
   app.get('/api/admin/live-classes/:code', ...adminAuth, adminLive.detail);
   app.get('/api/admin/live-classes/:code/audit', ...adminAuth, adminLive.auditTrail);
   app.post('/api/admin/live-classes/:code/mark-ended', ...adminAuth, adminLive.markEnded);
+  app.post('/api/admin/live-classes/:code/join', ...adminAuth, adminLive.joinMeeting);
 
   const mk = async (role, name, extra = {}) => { const u = await h.user(name, role, extra); return { id: String(u._id), name, token: u.token }; };
   const teacher = await mk('teacher', 'Nikhil Kandangire');

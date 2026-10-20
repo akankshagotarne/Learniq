@@ -14,10 +14,10 @@ const Btn: React.FC<{ onClick: () => void; children: React.ReactNode; secondary?
   <button onClick={onClick} className={`${secondary ? 'btn-outline' : 'btn-primary'} min-h-[44px] w-full mt-3 text-sm`}>{children}</button>
 );
 
-export const JoiningScreen: React.FC<{ title?: string; step: 'loading' | 'joining' }> = ({ title, step }) => (
+export const JoiningScreen: React.FC<{ title?: string; step: 'loading' | 'joining'; admin?: boolean }> = ({ title, step, admin }) => (
   <Shell testId="screen-joining">
     <Icon><Loader className="w-7 h-7 animate-spin" /></Icon>
-    <h1 className="font-heading text-lg font-bold text-text-primary">{step === 'loading' ? 'Opening your class…' : 'Joining the classroom…'}</h1>
+    <h1 className="font-heading text-lg font-bold text-text-primary">{step === 'loading' ? (admin ? 'Checking your administrator access…' : 'Opening your class…') : (admin ? 'Joining the live meeting as a moderator…' : 'Joining the classroom…')}</h1>
     {title && <p className="text-text-secondary text-sm mt-1">{title}</p>}
     <p className="text-text-muted text-xs mt-3" role="status">Checking your account and connecting securely.</p>
   </Shell>

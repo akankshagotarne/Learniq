@@ -104,8 +104,11 @@ const isSelected = (cfg, p) => cfg.selectedUserIds.includes(String(p.userId));
 const isPresenter = (cfg, p) => cfg.presenterUserIds.includes(String(p.userId));
 const isSpotlit = (cfg, p) => cfg.mode === 'spotlight' && cfg.spotlightUserId && String(cfg.spotlightUserId) === String(p.userId);
 
+/** the host, or an administrator moderator who joined the class (flag set only by the server after re-checking the account's role) */
+const isPrivileged = (p) => !!(p && (p.isHost || p.isAdmin));
+
 const canPublishVideo = (cfg, p) => {
-  if (p.isHost) return true;
+  if (isPrivileged(p)) return true;
   if (p.blocks && p.blocks.camera) return false;
   if (p.grants && p.grants.camera) return true;
   if (cfg.videoPublish === 'everyone') return true;
@@ -113,20 +116,22 @@ const canPublishVideo = (cfg, p) => {
   return false;
 };
 const canPublishAudio = (cfg, p) => {
-  if (p.isHost) return true;
+  if (isPrivileged(p)) return true;
   if (p.blocks && p.blocks.mic) return false;
   if (p.grants && p.grants.mic) return true;
   if (cfg.audioPublish === 'everyone') return cfg.studentSelfUnmute;
   if (cfg.audioPublish === 'host_and_selected') return isSelected(cfg, p);
   return false;
 };
-const canShareScreen = (cfg, p) => p.isHost || (cfg.screenShare === 'host_and_presenters' && isPresenter(cfg, p));
-const canChat = (cfg, p) => cfg.chatMode === 'everyone' || (cfg.chatMode === 'host_only' && p.isHost);
+const canShareScreen = (cfg, p) => isPrivileged(p) || (cfg.screenShare === 'host_and_presenters' && isPresenter(cfg, p));
+const canChat = (cfg, p) => cfg.chatMode === 'everyone' || (cfg.chatMode === 'host_only' && isPrivileged(p));
 
 /** May `viewer` receive `publisher`'s audio / video? (the one rule the signalling layer enforces) */
 const canReceive = (cfg, viewer, publisher) => {
   if (viewer.socketId === publisher.socketId) return false;
-  if (publisher.isHost || viewer.isHost) return true;
+  // the host and an administrator moderator see / hear everyone who may publish (moderator view); everyone else sees the moderator.
+  // Student-to-student visibility is NOT affected: this only adds links that involve the moderator.
+  if (isPrivileged(publisher) || isPrivileged(viewer)) return true;
   if (publisher.isScreenSharing) return true;               // a shared screen is for the whole class
   if (isSpotlit(cfg, publisher)) return true;
   switch (cfg.mode) {
@@ -167,7 +172,7 @@ const stageFor = (cfg, participants) => {
   const host = list.find((p) => p.isHost && !p.isAdminConsole) || null;
   const sharer = list.find((p) => p.isScreenSharing && (p.isHost || canShareScreen(cfg, p))) || null;
   const spot = cfg.mode === 'spotlight' && cfg.spotlightUserId ? list.find((p) => String(p.userId) === String(cfg.spotlightUserId)) || null : null;
-  const featured = cfg.mode === 'host_and_selected' ? list.filter((p) => !p.isHost && isSelected(cfg, p)).map((p) => p.socketId) : [];
+  const featured = cfg.mode === 'host_and_selected' ? list.filter((p) => !isPrivileged(p) && isSelected(cfg, p)).map((p) => p.socketId) : [];
   return {
     mode: cfg.mode,
     layout: cfg.mode === 'presentation' ? 'speaker' : cfg.layout,
@@ -184,5 +189,5 @@ const publicConfig = (cfg) => ({ ...cfg, info: MODE_INFO[cfg.mode], audienceLega
 module.exports = {
   MODES, LAYOUTS, PUBLISH, CHAT, SCREEN, MODE_INFO, DEFAULTS, sanitize, normalize,
   canPublishVideo, canPublishAudio, canShareScreen, canChat, canReceive, mayConnect, planPeers, stageFor, publicConfig,
-  isSelected, isPresenter, isSpotlit,
+  isSelected, isPresenter, isSpotlit, isPrivileged,
 };

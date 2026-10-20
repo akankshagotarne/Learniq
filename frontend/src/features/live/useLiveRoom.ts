@@ -41,15 +41,16 @@ export interface HostMcqUi {
 
 const asAck = (r: any): Ack => (r && typeof r === 'object' ? r : { ok: false, code: 'TIMEOUT', message: 'The server did not answer. Please try again.' });
 
-export function useLiveRoom(code: string | undefined, user: { _id: string; name: string; role: string } | null) {
+export function useLiveRoom(code: string | undefined, user: { _id: string; name: string; role: string } | null, opts: { asAdmin?: boolean } = {}) {
   const socket = getSocket();
+  const asAdmin = !!opts.asAdmin;
   const userId = user ? user._id : null;
   const [status, setStatus] = useState<RoomStatus>('loading');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [connection, setConnection] = useState<Connection>('online'); // the first connection attempt is not an "offline" state; trouble is reported by connect_error / disconnect
   const [sessionInfo, setSessionInfo] = useState<{ title: string; subject?: string; standard?: number; ownerId?: string } | null>(null);
   const [consoleUrl, setConsoleUrl] = useState<string | null>(null);
-  const [self, setSelf] = useState<{ socketId: string; userId: string; isHost: boolean } | null>(null);
+  const [self, setSelf] = useState<{ socketId: string; userId: string; isHost: boolean; isAdmin?: boolean } | null>(null);
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [counts, setCounts] = useState({ students: 0, waiting: 0, hostPresent: false, locked: false });
   const [config, setConfig] = useState<MeetingConfig>(DEFAULT_CONFIG);
@@ -94,6 +95,9 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
   const selfRef = useRef(self); selfRef.current = self;
 
   const isHost = !!self?.isHost;
+  const isAdmin = !!self?.isAdmin;
+  const isManager = isHost || isAdmin; // the teacher, or an administrator moderator: the server decides which, from the database
+  const codeRef = useRef(code); codeRef.current = code;
 
   // ── mesh <-> local tracks ─────────────────────────────────────────────────────────────────────
   const pushTracks = useCallback(() => {
@@ -137,7 +141,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
   }, [showRank]);
 
   // ── joining ──────────────────────────────────────────────────────────────────────────────────
-  const emitJoin = useCallback(() => { if (code) socket.emit('join-live-session', { sessionCode: code }); }, [code, socket]);
+  const emitJoin = useCallback(() => { if (code) socket.emit('join-live-session', asAdmin ? { sessionCode: code, asAdmin: true } : { sessionCode: code }); }, [code, socket, asAdmin]);
 
   useEffect(() => {
     if (!code || !userId) return undefined;
@@ -145,7 +149,9 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     setStatus('loading');
     (async () => {
       try {
-        const res = await api.post(`/live-sessions/${code}/join`);
+        // "Join Live Meeting" (admin): the admin endpoint checks the account is an administrator; no attendance is created. The SAME room is then
+        // entered over the live socket, where the role is verified again.
+        const res = await api.post(asAdmin ? `/admin/live-classes/${encodeURIComponent(code)}/join` : `/live-sessions/${code}/join`);
         if (!alive) return;
         const s = res.data.session || {};
         setSessionInfo({ title: s.title, subject: s.subject, standard: s.standard, ownerId: String(s.teacher?._id || s.teacher || '') });
@@ -156,13 +162,14 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
         if (!alive) return;
         const d = err?.response?.data;
         if (d?.code === 'AUDIENCE_DENIED') { setStatusMessage(d.message || 'This class is not open to your account.'); setStatus('denied'); return; }
+        if (asAdmin && d?.code === 'ENDED') { setStatusMessage(d.message || 'This class has ended.'); setStatus('ended'); return; }
         if (d?.code === 'USE_ADMIN_CONSOLE') { setConsoleUrl(d.consoleUrl || `/admin/live/${code}`); setStatus('use-console'); return; }
         setStatusMessage(d?.message || (err?.message === 'Network Error' ? 'We could not reach LearnIQ. Check your internet connection and try again.' : 'We could not open this class.'));
         setStatus('error');
       }
     })();
     return () => { alive = false; };
-  }, [code, userId, emitJoin]); // keyed by the user's id: a new object with the same id must NOT restart the join
+  }, [code, userId, emitJoin, asAdmin]); // keyed by the user's id: a new object with the same id must NOT restart the join
 
   // ── socket events ────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -179,6 +186,10 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     offs.push(on('connect_error', () => setConnection('reconnecting')));
     offs.push(on('use-admin-console', (p: any) => { setConsoleUrl(`/admin/live/${p?.sessionCode || code}`); setStatus('use-console'); }));
 
+    // everybody is told when an administrator moderator comes or goes (no covert participation)
+    offs.push(on('moderator-joined', (p: any) => window.dispatchEvent(new CustomEvent('live-toast', { detail: { message: p?.message || 'LearnIQ Admin has joined the meeting as a moderator.' } }))));
+    offs.push(on('moderator-left', (p: any) => window.dispatchEvent(new CustomEvent('live-toast', { detail: { message: `${p?.name || 'LearnIQ Admin'} (LearnIQ Admin) left the meeting.` } }))));
+
     offs.push(on('waiting-for-approval', (p: any) => { setHostPresent(!!p?.hostPresent); setStatus('waiting-approval'); }));
     offs.push(on('joined', (p: JoinedPayload) => {
       joinedOnce.current = true;
@@ -186,7 +197,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
       setPeers(p.peers || []); setHostPresent(p.hostPresent); setScoreboard(p.scoreboard || []); if (p.waitingRoom) setWaiting(p.waitingRoom);
       setSessionInfo((s) => ({ ...(s || { title: p.session.title }), title: p.session.title || s?.title || '' }));
       setStatus('live');
-      applyMcqState(p.mcq, p.self.isHost);
+      applyMcqState(p.mcq, p.self.isHost || !!p.self.isAdmin);
       if (!meshRef.current) {
         meshRef.current = new LiveMesh(socket as any, setRemoteStreams);
         pushTracks();
@@ -245,7 +256,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
       setMcq({ phase: 'open', question: q, deadline: deadlineFrom(q.remainingMs), submitted: false, selectedOption: null, answerTimeMs: null, submitting: false, error: null, result: null });
       setHostMcq((h) => ({ ...h, results: null, progress: null, correctIndex: null, launching: false }));
     }));
-    offs.push(on('mcq-state', (s: McqServerState) => applyMcqState(s, !!selfRef.current?.isHost)));
+    offs.push(on('mcq-state', (s: McqServerState) => applyMcqState(s, !!(selfRef.current?.isHost || selfRef.current?.isAdmin))));
     offs.push(on('mcq-answer-locked', (p: { mcqId: string; selectedOption: number; answerTimeMs?: number }) => {
       setMcq((m) => (m.question && m.question.mcqId === p.mcqId ? { ...m, submitted: true, submitting: false, selectedOption: p.selectedOption, answerTimeMs: p.answerTimeMs ?? m.answerTimeMs, error: null } : m));
     }));
@@ -266,7 +277,11 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
   }, [code, userId, socket]);
 
   // leaving the page releases the camera / microphone / screen and the peer connections
-  useEffect(() => () => { releaseAll(); }, [releaseAll]);
+  useEffect(() => () => {
+    // navigating away from a joined class is a LEAVE (the server removes this connection; it never ends the class)
+    if (joinedOnce.current && ['live'].includes(statusRef.current)) { try { socket.emit('leave-live-session', { sessionCode: codeRef.current }); } catch { /* socket gone */ } }
+    releaseAll();
+  }, [releaseAll, socket]);
 
   // ── requests (every one is acknowledged by the server) ───────────────────────────────────────
   const request = useCallback((event: string, payload: any = {}): Promise<Ack> => new Promise((resolve) => {
@@ -409,11 +424,14 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     if (granted) { if (r.type === 'camera') toggleCamera(true); else toggleMic(true); }
   }, [permRequest, socket, code, toggleCamera, toggleMic]);
 
-  const leave = useCallback(() => { releaseAll(); }, [releaseAll]);
+  const leave = useCallback(() => {
+    if (joinedOnce.current) { try { socket.emit('leave-live-session', { sessionCode: codeRef.current }); } catch { /* socket gone */ } joinedOnce.current = false; }
+    releaseAll();
+  }, [releaseAll, socket]);
   const retry = useCallback(() => { window.location.reload(); }, []);
 
   return {
-    status, statusMessage, connection, sessionInfo, consoleUrl, self, isHost, participants, counts, config, stage, permissions, peers, hostPresent, waiting,
+    status, statusMessage, connection, sessionInfo, consoleUrl, self, isHost, isAdmin, isManager, participants, counts, config, stage, permissions, peers, hostPresent, waiting,
     remoteStreams, localStream, camStream, localPortrait, messages, unread, chatOpen, openChat, scoreboard, podium, reactions, permRequest, answerPermRequest,
     isCamOn, isMicOn, isSharing, mediaIssue, toggleCamera, toggleMic, toggleScreen, sendChat, sendReaction,
     mcq, rank, selectOption, submitMcq, hostMcq, launchMcq, closeMcq, host, leave, retry, getScoreboard: () => socket.emit('get-scoreboard', { sessionCode: code }),
