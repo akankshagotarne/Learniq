@@ -8,7 +8,7 @@ import {
 import Sidebar from '../../components/layout/Sidebar';
 import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadExam } from '../../types/olympiad';
-import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
+import { useExamCheckout } from '../../components/olympiad/useExamCheckout';
 import { formatISTDateTime, formatRupees } from '../../utils/olympiadFormat';
 import EngineeringRequestForm from '../../components/olympiad/EngineeringRequestForm';
 
@@ -52,7 +52,7 @@ const OlympiadExamPage: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const { pay, payingId } = useOlympiadPayment(() => { load(); });
+  const { checkout, busyId: payingId, dialog: checkoutDialog } = useExamCheckout(() => { load(); });
 
   const start = async () => {
     if (!examId || starting) return;
@@ -243,7 +243,7 @@ const OlympiadExamPage: React.FC = () => {
         {exam.state === 'pay' && (
           <button
             type="button"
-            onClick={() => pay(exam)}
+            onClick={() => checkout(exam)}
             disabled={payingId === exam._id}
             className="btn-primary w-full sm:w-auto py-3 px-6 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-70"
           >
@@ -288,6 +288,7 @@ const OlympiadExamPage: React.FC = () => {
           <p className="text-xs text-text-muted">The Start button appears here after your request is approved.</p>
         )}
       </div>
+      {checkoutDialog}
     </Shell>
   );
 };

@@ -21,8 +21,12 @@ const grantSchema = new mongoose.Schema({
   registeredStandard: { type: Number },                    // the student's registered standard when granted (never changed by the grant)
   status: { type: String, enum: ['ACTIVE'], default: 'ACTIVE' },
   includesInterview: { type: Boolean, default: true },     // the exam + teacher-interview package, exactly like the paid one
-  reasonCode: { type: String, enum: REASON_CODES.grant, required: true },
+  // CREDIT_REDEMPTION: the entitlement was unlocked by the STUDENT redeeming one exam credit (services/credits.js). It is not a payment
+  // and not an administrator exception; admin-only reason codes (REASON_CODES.grant) are unchanged.
+  reasonCode: { type: String, enum: [...REASON_CODES.grant, 'CREDIT_REDEMPTION'], required: true },
   reasonNote: { type: String, trim: true, maxlength: 500 },
+  source: { type: String, enum: ['ADMIN', 'CREDIT'], default: 'ADMIN' },
+  creditTransaction: { type: mongoose.Schema.Types.ObjectId, ref: 'CreditTransaction' },
   grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   grantedByName: { type: String },
 }, { timestamps: true });

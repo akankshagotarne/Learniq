@@ -7,7 +7,7 @@ import { formatISTDateTime } from '../../utils/olympiadFormat';
 
 type Mode = { kind: 'grant'; row?: ExamAccessRow } | { kind: 'reset'; row: ExamAccessRow } | null;
 const STANDARDS = Array.from({ length: 10 }, (_, i) => i + 1);
-const PURCHASE_LABEL = { PAID: 'Paid (verified)', EXCEPTIONAL_ACCESS: 'Exceptional access (no payment)', NOT_PURCHASED: 'Not purchased' } as const;
+const PURCHASE_LABEL = { PAID: 'Paid (verified)', EXCEPTIONAL_ACCESS: 'Exceptional access (no payment)', CREDIT_USED: 'Unlocked with an exam credit', NOT_PURCHASED: 'Not purchased' } as const;
 const field = 'w-full min-h-[44px] rounded-xl border border-border-subtle bg-surface-alt px-3 text-sm text-text-primary';
 
 /** Admin-only: "Grant Exceptional Test Access" and "Reset Test Attempt" for one student. Two separate actions, each with its own confirmation. */
@@ -190,7 +190,7 @@ const ActionDialog: React.FC<{ mode: NonNullable<Mode>; student: ExamAccessOverv
             <select id={`${uid}-e`} className={field} value={examId} disabled={standard === '' || options.length === 0} onChange={(e) => setExamId(e.target.value)} data-testid="exam-select">
               <option value="">{standard === '' ? 'Select a Standard first' : options.length ? 'Choose an examination…' : 'No examination available'}</option>
               {options.map((o) => <option key={o.examId} value={o.examId} disabled={o.windowClosed || o.purchase !== 'NOT_PURCHASED'}>
-                {o.title}{o.purchase === 'PAID' ? ' — already paid' : o.purchase === 'EXCEPTIONAL_ACCESS' ? ' — access already granted' : o.windowClosed ? ' — window closed' : ''}
+                {o.title}{o.purchase === 'PAID' ? ' — already paid' : (o.purchase === 'EXCEPTIONAL_ACCESS' || o.purchase === 'CREDIT_USED') ? ' — access already granted' : o.windowClosed ? ' — window closed' : ''}
               </option>)}
             </select>
             {standard !== '' && options.length === 0 && <p className="text-xs text-[#E1447A] mt-1" role="alert" data-testid="no-exam-msg">No examination is configured for Standard {standard}, so access cannot be granted.</p>}

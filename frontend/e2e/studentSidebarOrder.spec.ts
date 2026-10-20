@@ -12,7 +12,7 @@ test('student sidebar: My Profile is second, directly under Dashboard and above 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/student');
   const order = await labels(page);
-  const want = ['Dashboard', 'My Profile', 'My Standard', 'Live Classes', 'Exams', 'Results & Certificates', 'Interview Results', 'Progress', 'Settings', 'Help & Support'];
+  const want = ['Dashboard', 'My Profile', 'My Standard', 'Live Classes', 'Exams', 'Results & Certificates', 'Refer & Earn', 'Interview Results', 'Progress', 'Settings', 'Help & Support'];
   const present = order.filter(l => want.includes(l));
   expect(present.slice(0, want.length)).toEqual(want);
   await page.getByRole('link', { name: 'My Profile' }).first().click();

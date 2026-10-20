@@ -1,24 +1,43 @@
-import React, { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle, Clock, Gift, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AffiliationLine, LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
+import { referralApi } from '../services/referrals';
 import { PASSWORD_HELP, PASSWORD_MIN_LENGTH, passwordProblem } from '../constants/passwordPolicy';
 
 const RegisterPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  // a shared link (/register?ref=CODE) pre-fills the optional referral code; the server validates it again
+  const [referralCode, setReferralCode] = useState(() => (searchParams.get('ref') || '').trim().toUpperCase().slice(0, 20));
+  const [refState, setRefState] = useState<{ status: 'idle' | 'checking' | 'valid' | 'invalid' | 'unknown'; message?: string }>({ status: 'idle' });
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', role: 'student', phone: '' });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Field-level problems reported by the server (email / phone already registered, invalid phone, ...)
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; phone?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; phone?: string; password?: string; referralCode?: string }>({});
   const [pendingMessage, setPendingMessage] = useState(''); // teacher request submitted: no login, wait for approval
   const submitting = useRef(false); // blocks a second request before React has re-rendered the disabled button
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const isTeacher = form.role === 'teacher';
+
+  // live check of the optional referral code (debounced). A failed check (e.g. offline) never blocks registration: the server decides.
+  useEffect(() => {
+    const code = referralCode.trim();
+    if (isTeacher || !code) { setRefState({ status: 'idle' }); return undefined; }
+    setRefState({ status: 'checking' });
+    let cancelled = false;
+    const t = setTimeout(() => {
+      referralApi.validate(code)
+        .then(r => { if (!cancelled) setRefState(r.valid ? { status: 'valid', message: r.message || 'Referral code applied.' } : { status: 'invalid', message: r.message || 'Referral code not found.' }); })
+        .catch(() => { if (!cancelled) setRefState({ status: 'unknown' }); });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [referralCode, isTeacher]);
   const passwordOk = form.password.length >= PASSWORD_MIN_LENGTH;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -36,10 +55,11 @@ const RegisterPage: React.FC = () => {
     setFieldErrors({});
 
     // quick checks so the user sees the problem next to the field; the server validates everything again and decides
-    const local: { name?: string; email?: string; phone?: string; password?: string } = {};
+    const local: { name?: string; email?: string; phone?: string; password?: string; referralCode?: string } = {};
     if (!form.name.trim()) local.name = 'Please enter your full name.';
     if (!isTeacher && !form.phone.trim()) local.phone = 'Please enter your phone number.';
     if (isTeacher && !form.email.trim()) local.email = 'Please enter your email address.';
+    if (!isTeacher && referralCode.trim() && refState.status === 'invalid') local.referralCode = refState.message || 'Referral code not found. Correct it or clear the field.';
     const pw = passwordProblem(form.password);
     if (pw) local.password = pw;
     if (Object.keys(local).length) { setFieldErrors(local); return; }
@@ -51,15 +71,15 @@ const RegisterPage: React.FC = () => {
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined });
+      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined });
       if (result.pendingApproval) { setPendingMessage(result.message); return; } // a teacher is NOT signed in
       toast.success('Account created successfully!');
       navigate('/student/standard');
     } catch (err: any) {
       const data = err.response?.data;
       const apiErrors: Array<{ field?: string; message?: string }> = Array.isArray(data?.errors) ? data.errors : [];
-      const next: { name?: string; email?: string; phone?: string; password?: string } = {};
-      const known = ['name', 'email', 'phone', 'password'];
+      const next: { name?: string; email?: string; phone?: string; password?: string; referralCode?: string } = {};
+      const known = ['name', 'email', 'phone', 'password', 'referralCode'];
       for (const fe of apiErrors) if (fe.field && known.includes(fe.field) && fe.message) next[fe.field as 'email'] = fe.message;
       if (!apiErrors.length && data?.field && known.includes(data.field) && data?.message) next[data.field as 'email'] = data.message;
       if (Object.keys(next).length) {
@@ -223,6 +243,25 @@ const RegisterPage: React.FC = () => {
                   onChange={handleChange} placeholder="Type the password again" className={inputCls()} />
               </div>
             </div>
+
+            {!isTeacher && (
+              <div>
+                <label htmlFor="reg-referral" className="text-xs font-semibold text-text-secondary block mb-1.5">Referral Code <span className="font-normal text-text-muted">Optional</span></label>
+                <div className="relative">
+                  <Gift className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                  <input id="reg-referral" name="referralCode" type="text" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={20} value={referralCode}
+                    onChange={e => { setReferralCode(e.target.value.toUpperCase().replace(/\s+/g, '')); setFieldErrors(prev => (prev.referralCode ? { ...prev, referralCode: undefined } : prev)); }}
+                    placeholder="Enter a friend's code" aria-invalid={refState.status === 'invalid' || !!fieldErrors.referralCode} aria-describedby="referral-status"
+                    className={`${inputCls(refState.status === 'invalid' || fieldErrors.referralCode ? 'bad' : undefined)} font-mono tracking-wider`} data-testid="referral-input" />
+                </div>
+                <div id="referral-status" aria-live="polite" data-testid="referral-status">
+                  {refState.status === 'checking' && <p className="flex items-center gap-1.5 text-text-muted text-xs mt-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Checking the code…</p>}
+                  {refState.status === 'valid' && <p className="flex items-center gap-1.5 text-accent-mint text-xs font-medium mt-1.5" data-testid="referral-valid"><CheckCircle className="w-3.5 h-3.5" aria-hidden /> {refState.message}</p>}
+                  {refState.status === 'invalid' && !fieldErrors.referralCode && <p className="flex items-start gap-1.5 text-[#E1447A] text-xs font-medium mt-1.5" data-testid="referral-invalid"><AlertCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" aria-hidden /> {refState.message}</p>}
+                </div>
+                {fieldError('referral', fieldErrors.referralCode)}
+              </div>
+            )}
 
             {isTeacher && (
               <div className="p-3 bg-[#FEF3C7] dark:bg-[#3D2C0C] border border-[#FDE68A] dark:border-[#FEF3C7]/20 rounded-xl">

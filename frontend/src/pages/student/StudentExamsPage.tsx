@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 import { olympiadTab } from '../../utils/examTabs';
 import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
-import { useOlympiadPayment } from '../../components/olympiad/useOlympiadPayment';
+import { useExamCheckout } from '../../components/olympiad/useExamCheckout';
 import { standardLabel } from '../../constants/standards';
 
 const getSubjectBadgeClass = (subject: string) => {
@@ -96,7 +96,7 @@ const StudentExamsPage: React.FC = () => {
     }
   };
 
-  const { pay, payingId } = useOlympiadPayment((examId) => {
+  const { checkout, busyId: payingId, dialog: checkoutDialog } = useExamCheckout((examId) => {
     navigate(`/student/olympiad/${examId}`);
   });
 
@@ -342,7 +342,7 @@ const StudentExamsPage: React.FC = () => {
                   key={o._id}
                   exam={o}
                   paying={payingId === o._id}
-                  onPay={pay}
+                  onPay={checkout}
                   interview={interviews[o._id]}
                   interviewBusy={interviewBusyId === o._id}
                   onStartInterview={startInterview}
@@ -494,6 +494,7 @@ const StudentExamsPage: React.FC = () => {
           )}
         </div>
       </main>
+      {checkoutDialog}
     </div>
   );
 };
