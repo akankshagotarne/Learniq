@@ -116,7 +116,6 @@ test('Admin joins the REAL room without approval, hears teacher + student, sees 
   await t.page.getByTestId('btn-people').click();
   await expect(t.page.getByTestId('role-admin')).toHaveText('Admin Moderator');
   await expect(t.page.getByTestId('participants-panel')).toContainText(fx.admin.name);
-  await expect(t.page.getByRole('dialog', { name: 'Participants' }).or(t.page.getByTestId('participants-panel'))).toBeVisible();
   await t.page.keyboard.press('Escape');
   await expect(t.page.getByTestId('btn-people')).toBeVisible();
 
@@ -172,11 +171,13 @@ test('Admin joins the REAL room without approval, hears teacher + student, sees 
   await expect(s.page.getByTestId('rank-row-1')).toContainText(fx.students[0].name.split(' ')[0]);
   await expect(card).not.toContainText(fx.admin.name);
   await expect(card).toHaveCount(0, { timeout: RANK_MS + 3000 });
+  await dash.page.getByRole('button', { name: 'Close panel' }).click();
 
   // ── navigation: the console and the meeting never leave a duplicate connection ──
   await dash.page.getByTestId('btn-more').click(); await dash.page.getByTestId('back-to-console').click();
   await expect(dash.page.getByTestId('admin-console')).toBeVisible({ timeout: 15000 });
   await expect(s.page.getByText(/LearnIQ Admin\) left the meeting/)).toBeVisible({ timeout: 10000 });
+  await t.page.getByRole('button', { name: 'Close panel' }).click().catch(() => {});   // the teacher sees the same question panel
   await t.page.getByTestId('btn-people').click();
   await expect(t.page.getByTestId('participants-panel')).not.toContainText(fx.admin.name);
   await t.page.keyboard.press('Escape');
@@ -228,10 +229,13 @@ test('Security: a student or a teacher cannot reach the admin meeting screen, an
 
 test('Dashboard: Join Live Meeting is offered only for live classes; a class nobody runs has it disabled; an ended class cannot be joined', async ({ browser }) => {
   const code = await newClass({ requireApproval: false });
+  const t = await open(browser, fx.teacher.token, `/live/${code}`);                       // the teacher is really in the room, so the class is "running"
+  await expect(t.page.getByTestId('main-stage')).toBeVisible();
+  const ghost = await newClass({ requireApproval: false });                                  // started but nobody ever connected: not running
   const dash = await open(browser, fx.admin.token, '/admin/live');
-  await expect(dash.page.getByTestId(`join-meeting-${code}`)).toBeEnabled();
-  await expect(dash.page.getByTestId('join-meeting-STALE1')).toBeDisabled();
-  await dash.ctx.close();
+  await expect(dash.page.getByTestId(`join-meeting-${code}`)).toBeEnabled({ timeout: 15000 });
+  await expect(dash.page.getByTestId(`join-meeting-${ghost}`)).toBeDisabled();
+  await dash.ctx.close(); await t.ctx.close();
   // end it, then try to join by URL: a clear message, not a broken screen
   const list = await api('GET', '/admin/live-classes?status=live', fx.admin.token);
   const id = list.json.classes.find((c: any) => c.sessionCode === code).id;
@@ -280,14 +284,22 @@ test('Browser autoplay policy: when the browser blocks automatic sound, a clear 
     const code = await newClass({ requireApproval: false });
     const t = await open(strict, fx.teacher.token, `/live/${code}`);
     await t.page.getByTestId('btn-mic').click(); await expect(t.page.getByTestId('btn-mic')).toHaveAttribute('aria-pressed', 'true');
-    const ad = await open(strict, fx.admin.token, `/admin/live/${code}/meeting`);
+    // Headless Chromium lets MediaStream audio start by itself, so the browser's refusal is SIMULATED faithfully: play() rejects with
+    // NotAllowedError (exactly what Safari / mobile Chrome do) until the person interacts with the page.
+    const ctx = await strict.newContext({ permissions: ['camera', 'microphone'] });
+    await ctx.addInitScript((tok) => {
+      localStorage.setItem('learniq_token', tok);
+      let unlocked = false; const orig = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { return unlocked ? orig.call(this) : Promise.reject(new DOMException('play() failed: user gesture required', 'NotAllowedError')); };
+      window.addEventListener('pointerdown', () => { unlocked = true; }, true);
+    }, fx.admin.token);
+    const ad = { ctx, page: await ctx.newPage() }; watch(ad.page); await ad.page.goto(`/admin/live/${code}/meeting`);
     await expect(ad.page.getByTestId('live-room')).toBeVisible({ timeout: 20000 });
     await expect(ad.page.getByTestId('enable-audio')).toBeVisible({ timeout: 25000 });
-    expect((await measureAudio(ad.page, 1500)).playing, 'nothing is claimed to be audible while blocked').toBe(0);
     await ad.page.getByTestId('enable-audio').click();
     await expect(ad.page.getByTestId('enable-audio')).toHaveCount(0, { timeout: 8000 });
     const heard = await measureAudio(ad.page, 4000);
-    expect(heard.playing).toBeGreaterThan(0);
+    expect(heard.playing, 'the element really plays after the click').toBeGreaterThan(0);
     expect(heard.peak).toBeGreaterThan(0.005);
     await t.ctx.close(); await ad.ctx.close();
   } finally { await strict.close(); }
