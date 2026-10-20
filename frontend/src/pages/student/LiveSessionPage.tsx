@@ -5,7 +5,7 @@ import { Users, Radio, Crown, X, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLiveRoom } from '../../features/live/useLiveRoom';
 import { chooseStage, chatPresentation, thumbnailsFor } from '../../features/live/logic';
-import { MainStage, Tile } from '../../features/live/Stage';
+import { MainStage, StageBox, Tile } from '../../features/live/Stage';
 import { RemoteAudioPool } from '../../features/live/media';
 import { ChatPanel } from '../../features/live/ChatPanel';
 import { ControlBar } from '../../features/live/ControlBar';
@@ -142,8 +142,8 @@ const LiveSessionPage: React.FC<{ adminMode?: boolean }> = ({ adminMode = false 
         <main className="flex-1 min-w-0 min-h-0 flex flex-col gap-2 p-2 relative">
           {!gallery ? (
             <>
-              <div className="flex-1 min-h-0"><MainStage choice={choice} participants={room.participants} streams={room.remoteStreams} selfSocketId={selfSocketId} selfStream={room.localStream}
-                selfCamOn={room.isCamOn || room.isSharing} hostPresent={room.hostPresent} hostName={hostName} reconnecting={room.connection !== 'online'} isHost={room.isHost} sharing={room.isSharing} /></div>
+              <StageBox><MainStage choice={choice} participants={room.participants} streams={room.remoteStreams} screens={room.remoteScreens} selfScreen={room.screenStream} selfCam={room.camStream} selfSocketId={selfSocketId} selfStream={room.localStream}
+                selfCamOn={room.isCamOn || room.isSharing} hostPresent={room.hostPresent} hostName={hostName} reconnecting={room.connection !== 'online'} isHost={room.isHost} sharing={room.isSharing} /></StageBox>
               {thumbs.length > 0 && (
                 <div className="flex-shrink-0 flex gap-2 overflow-x-auto pb-1" data-testid="thumbnails" aria-label="Other participants">
                   {thumbs.slice(0, 12).map((p) => (

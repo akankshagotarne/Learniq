@@ -60,6 +60,8 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
   const [hostPresent, setHostPresent] = useState(false);
   const [waiting, setWaiting] = useState<WaitingEntry[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [remoteScreens, setRemoteScreens] = useState<Record<string, MediaStream>>({});
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
@@ -104,8 +106,10 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     const screenTrack = screenRef.current?.getVideoTracks()[0] || null;
     const camTrack = camRef.current?.getVideoTracks()[0] || null;
     const micTrack = micRef.current?.getAudioTracks()[0] || null;
-    meshRef.current?.setLocal(screenTrack || camTrack, micTrack && micTrack.enabled ? micTrack : null);
+    // the camera and the screen go out in separate media sections, so both stay visible to students at the same time
+    meshRef.current?.setLocal(camTrack, micTrack && micTrack.enabled ? micTrack : null, screenTrack);
     setLocalStream(screenRef.current || camRef.current);
+    setScreenStream(screenRef.current);
     setCamStream(camRef.current);
   }, []);
 
@@ -115,7 +119,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
     stopStream(camRef); stopStream(screenRef); stopStream(micRef);
     setIsCamOn(false); setIsMicOn(false); setIsSharing(false); setLocalStream(null); setCamStream(null);
     meshRef.current?.close(); meshRef.current = null;
-    setRemoteStreams({});
+    setRemoteStreams({}); setRemoteScreens({}); setScreenStream(null);
   }, []);
 
   // ── MCQ helpers ───────────────────────────────────────────────────────────────────────────────
@@ -199,7 +203,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
       setStatus('live');
       applyMcqState(p.mcq, p.self.isHost || !!p.self.isAdmin);
       if (!meshRef.current) {
-        meshRef.current = new LiveMesh(socket as any, setRemoteStreams);
+        meshRef.current = new LiveMesh(socket as any, setRemoteStreams, undefined, undefined, setRemoteScreens);
         pushTracks();
       }
       meshRef.current.setPlan(p.peers || []);
@@ -432,7 +436,7 @@ export function useLiveRoom(code: string | undefined, user: { _id: string; name:
 
   return {
     status, statusMessage, connection, sessionInfo, consoleUrl, self, isHost, isAdmin, isManager, participants, counts, config, stage, permissions, peers, hostPresent, waiting,
-    remoteStreams, localStream, camStream, localPortrait, messages, unread, chatOpen, openChat, scoreboard, podium, reactions, permRequest, answerPermRequest,
+    remoteStreams, remoteScreens, screenStream, localStream, camStream, localPortrait, messages, unread, chatOpen, openChat, scoreboard, podium, reactions, permRequest, answerPermRequest,
     isCamOn, isMicOn, isSharing, mediaIssue, toggleCamera, toggleMic, toggleScreen, sendChat, sendReaction,
     mcq, rank, selectOption, submitMcq, hostMcq, launchMcq, closeMcq, host, leave, retry, getScoreboard: () => socket.emit('get-scoreboard', { sessionCode: code }),
   };
