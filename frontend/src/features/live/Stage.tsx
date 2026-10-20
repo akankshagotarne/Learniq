@@ -37,13 +37,21 @@ export const Tile: React.FC<TileProps> = ({ p, stream, isSelf, selfStream, selfC
 
 interface MainStageProps {
   choice: StageChoice; participants: RoomParticipant[]; streams: Record<string, MediaStream>; selfSocketId?: string; selfStream: MediaStream | null;
+  /** screen-share streams of other people, and our own screen / camera (the camera and the screen are separate streams) */
+  screens?: Record<string, MediaStream>; selfScreen?: MediaStream | null; selfCam?: MediaStream | null;
   selfCamOn: boolean; hostPresent: boolean; hostName?: string; hostMissingStream?: boolean; reconnecting: boolean; isHost: boolean; sharing: boolean;
 }
 /** The MAIN stage: the shared screen, else the spotlit person, else the teacher's camera - never the chat, never an arbitrary tile. */
-export const MainStage: React.FC<MainStageProps> = ({ choice, participants, streams, selfSocketId, selfStream, selfCamOn, hostPresent, hostName = 'the teacher', reconnecting, isHost, sharing }) => {
+export const MainStage: React.FC<MainStageProps> = ({ choice, participants, streams, screens = {}, selfScreen = null, selfCam = null, selfSocketId, selfStream, selfCamOn, hostPresent, hostName = 'the teacher', reconnecting, isHost, sharing }) => {
   const target = participants.find((p) => p.socketId === choice.socketId);
   const isSelfTarget = !!target && target.socketId === selfSocketId;
-  const stream = isSelfTarget ? selfStream : (choice.socketId ? streams[choice.socketId] || null : null);
+  const isScreen = choice.kind === 'screen';
+  // the shared screen and the camera are different streams: the stage shows the screen, the picture-in-picture shows the camera
+  const stream = isScreen
+    ? (isSelfTarget ? selfScreen || selfStream : (choice.socketId ? screens[choice.socketId] || null : null))
+    : (isSelfTarget ? selfStream : (choice.socketId ? streams[choice.socketId] || null : null));
+  const pipStream = isScreen && target ? (isSelfTarget ? selfCam : streams[target.socketId] || null) : null;
+  const pipCamOn = !!target && (isSelfTarget ? selfCamOn : target.isCameraOn);
   const hostP = participants.find((p) => p.isHost);
   const state = stageState(choice, hostP, !!stream, hostPresent);
   const label = choice.kind === 'screen' ? `${target?.isHost ? 'Teacher' : target?.name || 'Someone'} is sharing their screen` : choice.kind === 'spotlight' ? `${target?.name} (spotlight)` : target?.name || hostName;
@@ -51,7 +59,7 @@ export const MainStage: React.FC<MainStageProps> = ({ choice, participants, stre
   return (
     <div data-testid="main-stage" data-stage-kind={choice.kind} data-stage-state={state} className="relative w-full h-full min-h-0 rounded-2xl overflow-hidden bg-[#0d0f1f] border border-white/10">
       {stream && (state === 'screen' || state === 'camera') && (
-        <StreamVideo stream={stream} muted={isSelfTarget || true} contain={choice.kind === 'screen'} mirror={isSelfTarget && choice.kind !== 'screen'} isPortrait={target?.isPortrait} className="absolute inset-0 w-full h-full" label={label} />
+        <StreamVideo stream={stream} muted={isSelfTarget || true} contain mirror={isSelfTarget && choice.kind !== 'screen'} isPortrait={target?.isPortrait} className="absolute inset-0 w-full h-full" label={label} />
       )}
 
       {state !== 'screen' && state !== 'camera' && (
@@ -59,6 +67,16 @@ export const MainStage: React.FC<MainStageProps> = ({ choice, participants, stre
           {state === 'host-away' && (<><Radio className="w-9 h-9 text-white/50" /><p className="font-heading font-semibold text-base">{isHost ? 'Your class is ready' : 'Waiting for the teacher to start'}</p><p className="text-sm text-white/60 max-w-xs">{isHost ? 'Students will appear as they join.' : "You're in the class. The teacher's video will appear here as soon as they join."}</p></>)}
           {state === 'connecting' && (<><Loader className="w-9 h-9 animate-spin text-white/60" /><p className="font-semibold text-base">{reconnecting ? 'Reconnecting…' : `Connecting to ${hostName}…`}</p><p className="text-sm text-white/60">This usually takes a few seconds.</p></>)}
           {state === 'camera-off' && (<>{target && <Avatar name={target.name} size="xl" />}<p className="font-semibold text-base flex items-center gap-2"><VideoOff className="w-4 h-4" />{target?.name || hostName}&apos;s camera is off</p><p className="text-sm text-white/60">You can still hear the class{target && !target.isMicOn ? ' when they unmute' : ''}.</p></>)}
+        </div>
+      )}
+
+      {state === 'screen' && target && (
+        <div data-testid="camera-pip" data-pip-live={pipCamOn && !!pipStream ? 'true' : 'false'}
+          className="absolute right-2 bottom-2 z-10 w-[30%] min-w-[84px] max-w-[132px] md:portrait:max-w-[220px] lg:max-w-[220px] aspect-video overflow-hidden rounded-lg bg-[#14162a] border border-white/25 shadow-lg">
+          {pipCamOn && pipStream
+            ? <StreamVideo stream={pipStream} muted contain mirror={isSelfTarget} isPortrait={target.isPortrait} className="absolute inset-0 w-full h-full" label={`${target.name} camera`} />
+            : <div className="absolute inset-0 flex items-center justify-center"><Avatar name={target.name} size="sm" /></div>}
+          {!pipCamOn && <span className="sr-only">{target.name}&apos;s camera is off</span>}
         </div>
       )}
 
@@ -76,3 +94,8 @@ export const MainStage: React.FC<MainStageProps> = ({ choice, participants, stre
     </div>
   );
 };
+
+/** The box the main stage lives in. A phone held upright gets a landscape (16:9) stage so the whole camera frame fits; wider / shorter screens fill the space. */
+export const StageBox: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:w-full max-lg:portrait:aspect-video" data-testid="stage-box">{children}</div>
+);
