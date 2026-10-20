@@ -74,6 +74,7 @@ const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
 const AdminOlympiadAnalytics = lazy(() => import('./pages/admin/AdminOlympiadAnalytics'));
+const AdminOlympiadResults = lazy(() => import('./pages/admin/AdminOlympiadResults'));
 const AdminOlympiadExamManagement = lazy(() => import('./pages/admin/AdminOlympiadExamManagement'));
 const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
 const AdminInterviewSchedule = lazy(() => import('./pages/admin/AdminInterviewSchedule'));
@@ -423,6 +424,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad/exam-management" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiadExamManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/olympiad/results" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminOlympiadResults />
         </ProtectedRoute>
       } />
       <Route path="/admin/olympiad/analytics" element={
