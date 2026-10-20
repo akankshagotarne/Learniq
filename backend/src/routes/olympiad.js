@@ -54,6 +54,8 @@ router.get('/exams', protect, ctrl.listExams);
 router.get('/completed', protect, ctrl.getCompleted);
 router.get('/exams/:id', protect, ctrl.getExam);
 
+router.get('/exams/:id/credit', protect, perUser(60), ctrl.getCreditInfo);
+router.post('/exams/:id/credit/redeem', protect, perUser(10), ctrl.redeemCredit);
 router.post('/exams/:id/payment/order', protect, perUser(20), ctrl.createOrder);
 router.post('/exams/:id/payment/verify', protect, perUser(30), ctrl.verifyPayment);
 router.get('/exams/:id/payment/status', protect, perUser(60), ctrl.getPaymentStatus);

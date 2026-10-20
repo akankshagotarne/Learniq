@@ -190,7 +190,9 @@ const overviewForStudent = async (studentId) => {
   if (!student || student.role !== 'student') throw new ExamAccessError(404, 'STUDENT_NOT_FOUND', 'Student not found.');
   const isStd = (e) => e.examType === 'olympiad' && e.accessMode !== 'approval' && e.standard >= 1 && e.standard <= 10;
   const allExams = (await OlympiadExam.find({ examType: 'olympiad' })).filter(isStd);
-  const grantedIds = new Set((await activeGrantExamIds(student._id)).map(String));
+  const activeGrants = await OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE' });
+  const grantedIds = new Set(activeGrants.map((g) => String(g.exam)));
+  const creditIds = new Set(activeGrants.filter((g) => g.source === 'CREDIT').map((g) => String(g.exam)));
   const attemptedIds = new Set((await OlympiadAttempt.find({ student: student._id })).map((a) => String(a.exam)));
   // rows: the registered standard's exams + any exam the student already holds an exception / attempt for (so it can be reset)
   const exams = allExams.filter((e) => e.standard === student.currentStandard || grantedIds.has(String(e._id)) || attemptedIds.has(String(e._id)));
@@ -214,8 +216,8 @@ const overviewForStudent = async (studentId) => {
     else if (closed) resetBlocked = 'The examination window has closed.';
     rows.push({
       examId: oid(exam._id), title: exam.title, standard: exam.standard, fee: exam.fee, windowClosed: closed,
-      purchase: payment ? { status: 'PAID', amount: payment.amount, at: payment.verifiedAt || payment.createdAt } : grant ? { status: 'EXCEPTIONAL_ACCESS' } : { status: 'NOT_PURCHASED' },
-      grant: grant ? { id: oid(grant), reasonCode: grant.reasonCode, includesInterview: grant.includesInterview, by: grant.grantedByName, at: grant.createdAt } : null,
+      purchase: payment ? { status: 'PAID', amount: payment.amount, at: payment.verifiedAt || payment.createdAt } : grant ? { status: grant.source === 'CREDIT' ? 'CREDIT_USED' : 'EXCEPTIONAL_ACCESS' } : { status: 'NOT_PURCHASED' },
+      grant: grant ? { id: oid(grant), source: grant.source || 'ADMIN', reasonCode: grant.reasonCode, includesInterview: grant.includesInterview, by: grant.grantedByName, at: grant.createdAt } : null,
       attempt: attempt ? { id: oid(attempt), status: attempt.status, startedAt: attempt.startedAt, submittedAt: attempt.submittedAt || null, submissionType: attempt.submissionType || null, score: attempt.score, totalMarks: attempt.totalMarks, percentage: attempt.percentage } : null,
       history: history.map((h) => ({ id: oid(h), originalAttempt: oid(h.originalAttempt), status: h.status, submissionType: h.submissionType || null, startedAt: h.startedAt, submittedAt: h.submittedAt || null, score: h.score, totalMarks: h.totalMarks, resetAt: h.resetAt, resetBy: h.resetByName, reasonCode: h.reasonCode, reasonNote: h.reasonNote || null, replacedByAttempt: h.replacedByAttempt ? oid(h.replacedByAttempt) : null })),
       canGrant: !payment && !grant && !closed,
@@ -228,7 +230,7 @@ const overviewForStudent = async (studentId) => {
   const paidIds = new Set((await OlympiadPayment.find({ student: student._id, status: 'SUCCESS' })).map((x) => String(x.exam)));
   const catalog = allExams.sort((a, b) => a.standard - b.standard || new Date(a.startDate) - new Date(b.startDate)).map((e) => ({
     examId: oid(e), title: e.title, standard: e.standard, fee: e.fee, windowClosed: now > e.endDate,
-    purchase: paidIds.has(String(e._id)) ? 'PAID' : grantedIds.has(String(e._id)) ? 'EXCEPTIONAL_ACCESS' : 'NOT_PURCHASED',
+    purchase: paidIds.has(String(e._id)) ? 'PAID' : grantedIds.has(String(e._id)) ? (creditIds.has(String(e._id)) ? 'CREDIT_USED' : 'EXCEPTIONAL_ACCESS') : 'NOT_PURCHASED',
   }));
   return {
     catalog,

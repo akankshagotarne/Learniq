@@ -1,7 +1,7 @@
 import api from './api';
 
 /** Admin-only exam exceptions. There is deliberately no student-side counterpart. */
-export type PurchaseStatus = 'PAID' | 'EXCEPTIONAL_ACCESS' | 'NOT_PURCHASED';
+export type PurchaseStatus = 'PAID' | 'EXCEPTIONAL_ACCESS' | 'CREDIT_USED' | 'NOT_PURCHASED';
 export interface ExamAccessAttempt {
   id: string; status: 'IN_PROGRESS' | 'COMPLETED'; startedAt: string; submittedAt: string | null; submissionType: string | null;
   score: number; totalMarks: number; percentage: number;

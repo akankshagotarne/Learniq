@@ -75,6 +75,7 @@ async function deleteStudentAccount(studentId) {
 
   // 4) finally the account itself (its login stops working immediately: protect() finds no user)
   await User.deleteOne({ _id: student._id, role: 'student' });
+  await require('./referrals').onStudentDeleted(student._id); // the ledger / referral records are kept for accounting; only the live code is retired
 
   return {
     name: student.name,

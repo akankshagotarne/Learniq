@@ -44,6 +44,7 @@ const AIInterviewResultPage = lazy(() => import('./pages/student/AIInterviewResu
 const StudentInterviewPage = lazy(() => import('./pages/student/StudentInterviewPage'));
 const StudentInterviewResultsPage = lazy(() => import('./pages/student/StudentInterviewResultsPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
+const ReferAndEarnPage = lazy(() => import('./pages/student/ReferAndEarnPage'));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
@@ -74,6 +75,7 @@ const AdminOlympiadExamManagement = lazy(() => import('./pages/admin/AdminOlympi
 const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
 const AdminInterviewSchedule = lazy(() => import('./pages/admin/AdminInterviewSchedule'));
 const AdminEngineering = lazy(() => import('./pages/admin/AdminEngineering'));
+const AdminReferEarn = lazy(() => import('./pages/admin/AdminReferEarn'));
 
 // Loading fallback
 const PageLoader: React.FC = () => (
@@ -260,6 +262,11 @@ const AppRoutes: React.FC = () => (
           <StudentCertificatesPage />
         </ProtectedRoute>
       } />
+      <Route path="/student/refer" element={
+        <ProtectedRoute roles={['student']}>
+          <ReferAndEarnPage />
+        </ProtectedRoute>
+      } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
 
       {/* Help & Support (student + teacher) */}
@@ -338,6 +345,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/teacher/quizzes" element={<Navigate to="/teacher/exams" replace />} />
 
       {/* Admin routes */}
+      <Route path="/admin/refer-earn" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminReferEarn />
+        </ProtectedRoute>
+      } />
       <Route path="/admin" element={
         <ProtectedRoute roles={['admin']}>
           <AdminDashboard />

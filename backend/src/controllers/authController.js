@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const referrals = require('../services/referrals');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
@@ -66,7 +67,7 @@ const sendAuthError = (res, e, fallback) => {
 // The role comes from the form but only ever 'student' or 'teacher' is accepted ('admin' cannot be requested here).
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body || {};
+    const { name, email, password, role, phone, referralCode } = req.body || {};
     const fail = (status, code, field, message) => res.status(status).json({ success: false, code, field, message, errors: field ? [{ field, code, message }] : undefined });
 
     if (typeof name !== 'string' || !name.trim()) return fail(400, 'NAME_REQUIRED', 'name', 'Please enter your full name.');
@@ -86,6 +87,15 @@ const register = async (req, res) => {
     if (phoneInfo.empty && validRole === 'student') return fail(400, 'PHONE_REQUIRED', 'phone', identity.MESSAGES.PHONE_REQUIRED);
     if (!phoneInfo.empty && !phoneInfo.valid) return fail(400, 'INVALID_PHONE', 'phone', identity.MESSAGES.INVALID_PHONE);
     const phoneNormalized = phoneInfo.valid ? phoneInfo.e164 : undefined;
+
+    // Optional referral code (students only). A code that was typed but is wrong is refused BEFORE the account exists so the student can fix it;
+    // a paused program never blocks a registration. Reward/attribution happens after the account is created and can never undo it.
+    const refInput = typeof referralCode === 'string' ? referralCode.trim() : '';
+    if (refInput) {
+      if (validRole !== 'student') return fail(400, 'REFERRAL_NOT_FOR_TEACHERS', 'referralCode', 'Referral codes can only be used when registering as a student.');
+      const check = await referrals.validateCode(refInput);
+      if (!check.valid && check.reason !== 'DISABLED') return fail(400, 'INVALID_REFERRAL_CODE', 'referralCode', check.message);
+    }
 
     // Friendly pre-check across ALL roles (one shared collection). The unique indexes below remain the final authority.
     const conflict = identity.conflictBody(await identity.findIdentityConflicts(User, { email: emailNormalized, phoneNormalized }));
@@ -122,6 +132,9 @@ const register = async (req, res) => {
         message: 'Your teacher registration request has been submitted successfully. Please wait for admin approval before logging in.',
       });
     }
+
+    // Referral attribution: only for the account that was JUST created; failures are logged inside and never affect the registration
+    if (refInput) await referrals.attributeRegistration({ newUser: user, code: refInput });
 
     // Welcome notification
     await Notification.create({
@@ -272,6 +285,7 @@ const updateStandard = async (req, res) => {
       return res.status(400).json({ success: false, code: 'INVALID_STANDARD', message: 'Please choose a standard from 1 to 10, or Others.' });
     }
     const user = await User.findByIdAndUpdate(req.user._id, { currentStandard: standard }, { new: true, runValidators: true });
+    await referrals.syncStandard(req.user._id, standard); // keeps the Refer & Earn standard snapshot current (never throws)
     res.json({ success: true, message: `${standardLabel(standard)} selected.`, user });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error.' });

@@ -8,6 +8,7 @@ const { getRazorpayInstance } = require('../services/razorpayClient');
 const certificates = require('../services/certificateService');
 const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
 const examAccess = require('../services/examAccess');
+const credits = require('../services/credits');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
 const { istDate, istTime, INTERVIEW_OPENS_AT } = require('../config/schedule');
@@ -522,6 +523,50 @@ const safeEqual = (a, b) => {
   const bb = Buffer.from(String(b));
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 };
+
+// ── Exam credits: "Use Exam Credit" as an alternative to paying (1 credit = 1 eligible paid exam; never a Razorpay payment) ──
+/** Why (if at all) the student cannot use a credit on this exam right now. Same rules as paying: eligibility, window, no attempt/entitlement. */
+const creditBlocker = async (user, exam) => {
+  if (isApprovalExam(exam) || !(exam.fee > 0)) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit is needed.' };
+  const [paid, attempt, grant] = await Promise.all([
+    OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS' }),
+    OlympiadAttempt.findOne({ student: user._id, exam: exam._id }),
+    examAccess.activeGrant(user._id, exam._id),
+  ]);
+  if (paid || grant) return { code: 'ALREADY_PAID', message: 'You can already start this examination. No credit is needed.' };
+  if (attempt) return { code: 'ALREADY_REGISTERED', message: 'You have already registered for this examination.' };
+  if (windowState(exam) === 'closed') return { code: 'CLOSED', message: 'Registration is closed.' };
+  return null;
+};
+
+// GET /api/olympiad/exams/:id/credit
+const getCreditInfo = handler(async (req, res) => {
+  const exam = await loadExam(req.params.id);
+  await assertCanAccessExam(req.user, exam);
+  const [balance, blocker, settings] = await Promise.all([credits.getBalance(req.user._id), creditBlocker(req.user, exam), credits.getSettings()]);
+  res.json({ success: true, balance, canUse: !blocker && balance >= 1, blockedReason: blocker ? blocker.code : balance < 1 ? 'NO_CREDITS' : null, message: blocker ? blocker.message : balance < 1 ? 'You have no exam credits.' : null, creditsPerExam: 1, enabled: settings.enabled !== false });
+});
+
+// POST /api/olympiad/exams/:id/credit/redeem
+const redeemCredit = handler(async (req, res) => {
+  const exam = await loadExam(req.params.id);
+  await assertCanAccessExam(req.user, exam);
+  const blocker = await creditBlocker(req.user, exam);
+  if (blocker) throw new ApiError(blocker.code === 'CLOSED' ? 403 : blocker.code === 'NO_PAYMENT_REQUIRED' ? 400 : 409, blocker.message, blocker.code);
+  assertWindowOpen(exam, 'register');
+  try {
+    const r = await credits.redeemForExam({ student: req.user, exam });
+    const balance = await credits.getBalance(req.user._id);
+    res.json({
+      success: true, charged: r.charged, alreadyUnlocked: r.alreadyUnlocked, balance,
+      message: r.alreadyUnlocked ? 'This examination is already unlocked for you.' : 'Exam credit used. Your examination is unlocked.',
+      state: await buildState(exam, req.user._id),
+    });
+  } catch (e) {
+    if (e instanceof credits.CreditError) throw new ApiError(e.status, e.message, e.code, e.extra || {});
+    throw e;
+  }
+});
 
 // POST /api/olympiad/exams/:id/payment/order
 const createOrder = handler(async (req, res) => {
@@ -1478,6 +1523,7 @@ const startOlympiadSweeper = (intervalMs = 60 * 1000) => {
 
 module.exports = {
   listExams, getExam, getCompleted,
+  getCreditInfo, redeemCredit,
   createOrder, verifyPayment, getPaymentStatus, razorpayWebhook,
   startExam, getAttempt, saveAnswers, submitExam, adminSetResults,
   getResult, getReview,
