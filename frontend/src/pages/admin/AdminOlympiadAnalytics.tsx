@@ -7,7 +7,8 @@ import {
 import Sidebar from '../../components/layout/Sidebar';
 import StudentDrawer from '../../components/olympiad/analytics/StudentDrawer';
 import { ExamBadge, FlagBadge } from '../../components/olympiad/analytics/labels';
-import { olympiadAnalyticsApi } from '../../services/olympiadAnalytics';
+import { olympiadAnalyticsApi, toParams } from '../../services/olympiadAnalytics';
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import { olympiadErrorMessage } from '../../services/olympiad';
 import { AnalyticsQuery, AnalyticsResponse, AnalyticsRow, AnalyticsSort, AnalyticsView } from '../../types/olympiadAnalytics';
 import { formatISTDate, formatISTDateTime } from '../../utils/olympiadFormat';
@@ -156,12 +157,13 @@ const AdminOlympiadAnalytics: React.FC = () => {
               </h1>
               <p className="text-text-secondary text-sm mt-1">See which students registered for the Olympiad and whether they have submitted their exam.</p>
             </div>
-            <div className="flex gap-2 self-start sm:self-auto">
+            <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+              <ExportToolbar section="olympiad-students" params={toParams(query)} disabled={loading || !data} scopeLabel="every student matching the current filters, search and tab" />
               <button onClick={() => setReloadKey(k => k + 1)} disabled={loading} className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-xl border border-border-subtle bg-surface-alt text-text-primary disabled:opacity-60" data-testid="refresh">
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden /> Refresh
               </button>
               <button onClick={() => void doExport()} disabled={exporting || !data || data.pagination.total === 0} className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-xl bg-brand-primary text-white disabled:opacity-50" data-testid="export">
-                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Download className="w-3.5 h-3.5" aria-hidden />} Export CSV
+                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Download className="w-3.5 h-3.5" aria-hidden />} CSV
               </button>
             </div>
           </div>

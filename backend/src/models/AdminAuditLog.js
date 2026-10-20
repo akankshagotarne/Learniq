@@ -8,10 +8,10 @@ const mongoose = require('mongoose');
  * and no copies of personal data (a changed email / phone is logged as the field name only).
  */
 const adminAuditLogSchema = new mongoose.Schema({
-  action: { type: String, required: true, enum: ['PAYMENT_REMOVED', 'PAYMENT_RESTORED', 'PROFILE_EDITED', 'PROFILE_PHOTO_CHANGED', 'PROFILE_PHOTO_REMOVED', 'TEACHER_DELETED', 'TEACHER_DELETE_BLOCKED', 'PASSWORD_SET_BY_ADMIN'] },
+  action: { type: String, required: true, enum: ['PAYMENT_REMOVED', 'PAYMENT_RESTORED', 'PROFILE_EDITED', 'PROFILE_PHOTO_CHANGED', 'PROFILE_PHOTO_REMOVED', 'TEACHER_DELETED', 'TEACHER_DELETE_BLOCKED', 'PASSWORD_SET_BY_ADMIN', 'STUDENT_LIST_EXPORTED'] },
   admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   adminName: { type: String, trim: true },
-  targetType: { type: String, required: true, enum: ['payment', 'student', 'teacher'] },
+  targetType: { type: String, required: true, enum: ['payment', 'student', 'teacher', 'export'] },
   target: { type: mongoose.Schema.Types.ObjectId, required: true },
   targetLabel: { type: String, trim: true, maxlength: 120 },      // e.g. the student's name or "Olympiad payment"
   changedFields: [{ type: String }],                              // field NAMES only

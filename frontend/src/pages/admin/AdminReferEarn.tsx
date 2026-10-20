@@ -1,3 +1,4 @@
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Gift, Users, BadgeCheck, Hourglass, ShieldQuestion, Ban, Ticket, Wallet, Download, Search, Loader2, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
@@ -210,6 +211,7 @@ const Referrals: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
         </div>
         <div className="flex flex-wrap gap-2 justify-between mt-3">
           <button onClick={reset} disabled={!dirty} className="text-xs font-semibold py-1.5 px-3 rounded-xl border border-border-subtle bg-surface-alt disabled:opacity-50" data-testid="ref-reset">Reset filters</button>
+          <ExportToolbar section="referrals" params={filters} disabled={loading} scopeLabel="referrals matching the current filters" />
           <button onClick={doExport} disabled={exporting} className="btn-outline inline-flex items-center gap-2 text-xs min-h-[36px]" data-testid="ref-export">{exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Download className="w-3.5 h-3.5" aria-hidden />} Export CSV</button>
         </div>
       </div>

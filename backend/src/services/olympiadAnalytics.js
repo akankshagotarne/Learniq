@@ -416,19 +416,26 @@ const csvLine = (cells) => cells.map(csvCell).join(',');
 const STATUS_LABEL = { SUBMITTED: 'Submitted', NOT_SUBMITTED: 'Not Submitted' };
 const VIEW_LABEL = { all: 'All Students', registered: 'Registered', submitted: 'Submitted', not_submitted: 'Not Submitted' };
 
-const exportCsv = async (query, now = new Date()) => {
+/** Every row matching the current filters / search / tab / sort (NOT one page) + a human description of those filters. */
+const exportRows = async (query) => {
   const f = parseFilters({ ...query, page: 1, limit: 100 });
   const data = await loadRegistrations(f);
   const { sorted: rows } = select(data, f);
   const range = (f.registeredFrom || f.registeredTo) ? `${query.registeredFrom || '…'} to ${query.registeredTo || '…'}` : null;
-  const filterText = [
-    `Exam: ${scopeLabel(f, data.examById)}`,
-    `Standard: ${f.standard === 'all' ? 'All' : f.standard}`,
-    `Participation: ${f.participation === 'all' ? 'All' : STATUS_LABEL[f.participation]}`,
-    `Tab: ${VIEW_LABEL[f.view]}`,
-    range ? `Registered: ${range}` : null,
-    f.search ? `Search: ${f.search}` : null,
-  ].filter(Boolean).join(' | ');
+  const filterList = [
+    { label: 'Exam', value: scopeLabel(f, data.examById) },
+    { label: 'Standard', value: f.standard === 'all' ? 'All' : f.standard },
+    { label: 'Participation', value: f.participation === 'all' ? 'All' : STATUS_LABEL[f.participation] },
+    { label: 'Tab', value: VIEW_LABEL[f.view] },
+    range ? { label: 'Registered', value: range } : null,
+    f.search ? { label: 'Search', value: f.search } : null,
+  ].filter(Boolean);
+  return { rows, filterList, truncated: !!data.truncated };
+};
+
+const exportCsv = async (query, now = new Date()) => {
+  const { rows, filterList } = await exportRows(query);
+  const filterText = filterList.map((x) => `${x.label}: ${x.value}`).join(' | ');
   const lines = [
     csvLine(['LearnIQ Olympiad — Student Registration & Submission Report']),
     csvLine([`Generated: ${istStamp(now)}`]),
@@ -444,6 +451,7 @@ const exportCsv = async (query, now = new Date()) => {
 };
 
 module.exports = {
+  exportRows,
   analytics, studentDetail, exportCsv, parseFilters, loadRegistrations, computeCards, csvCell, AnalyticsError,
   VIEWS, SORTS, PAGE_SIZES,
 };

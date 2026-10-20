@@ -1,3 +1,4 @@
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
@@ -105,6 +106,7 @@ const AdminInterviews: React.FC = () => {
               )}
               <button type="button" disabled={busy === 'recover'} onClick={() => run('recover', async () => { const r = await interviewApi.adminRecoverStale(); toast.success(`${r.recovered} stale interview(s) recovered.`); })} className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2"><Wrench className="w-4 h-4" /> Recover stale</button>
               <Link to="/admin/interview-schedule" className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2" data-testid="open-schedule"><CalendarClock className="w-4 h-4" /> Schedule &amp; reminders</Link>
+              <ExportToolbar section="interviews" params={filters} scopeLabel="interviews matching the current filters" />
               <button type="button" disabled={busy === 'csv'} onClick={exportCsv} className="min-h-[44px] px-4 rounded-xl bg-surface-alt border border-border-subtle text-sm font-semibold inline-flex items-center gap-2" data-testid="export-csv"><Download className="w-4 h-4" /> Export CSV</button>
               <button type="button" onClick={load} aria-label="Refresh" className="min-h-[44px] min-w-[44px] px-3 rounded-xl bg-surface-alt border border-border-subtle inline-flex items-center justify-center"><RefreshCw className="w-4 h-4" /></button>
             </div>

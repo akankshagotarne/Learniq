@@ -1,3 +1,4 @@
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -176,6 +177,7 @@ const Requests: React.FC<{ onChanged: () => void; reloadKey: number }> = ({ onCh
           className="text-xs font-semibold py-2 px-4 rounded-xl min-h-[40px] border border-[#16A34A]/40 text-[#16A34A] disabled:opacity-40">Approve selected ({selected.size})</button>
         <button type="button" disabled={busy || selected.size === 0} onClick={() => setRejecting([...selected])}
           className="text-xs font-semibold py-2 px-4 rounded-xl min-h-[40px] border border-[#E1447A]/40 text-[#E1447A] disabled:opacity-40">Reject selected ({selected.size})</button>
+        <ExportToolbar section="engineering-requests" params={{ status: status === 'ALL' ? undefined : status, search: search.trim() }} disabled={!data} scopeLabel="requests matching the current status and search" className="lg:ml-auto" />
       </div>
 
       {err ? <p className="text-sm text-[#E1447A]" role="alert">{err}</p> : !data ? <Spinner /> : rows.length === 0 ? (
@@ -312,7 +314,8 @@ const Results: React.FC<{ reloadKey: number }> = ({ reloadKey }) => {
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border min-h-[36px] ${status === id ? 'bg-brand-primary text-white border-transparent' : 'bg-surface-alt border-border-subtle text-text-secondary'}`}>{label}</button>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <ExportToolbar section="engineering-results" params={{ status, search: search.trim(), sort, dir }} disabled={!data} scopeLabel="results matching the current filter, search and sort" />
           <button type="button" onClick={() => setTick(t => t + 1)} className="p-2 rounded-xl border border-border-subtle bg-surface-alt min-h-[40px]" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></button>
           <button type="button" onClick={download} disabled={pdfBusy} data-testid="download-report" className="btn-primary text-xs py-2 px-4 rounded-xl min-h-[40px] flex items-center gap-2 disabled:opacity-70">
             {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download PDF report

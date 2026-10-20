@@ -1,3 +1,4 @@
+import ExportToolbar from '../admin/ExportToolbar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Loader2, Send, Download, RotateCcw, CheckSquare, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -171,6 +172,7 @@ const SendCredits: React.FC<{ settings: ReferralSettings | null; onChanged: () =
             <option value="all">All standards</option>{Array.from({ length: 10 }, (_, i) => i + 1).map(n => <option key={n} value={n}>Std {n}</option>)}<option value="99">Others</option>
           </select>
         </div>
+        <ExportToolbar section="referral-students" params={{ q: search, standard }} disabled={loading} scopeLabel="every student matching the search and standard filter" className="mb-3" />
         <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
           <span className="font-semibold text-text-primary" data-testid="selected-count">{selected.size} selected</span>
           <button onClick={togglePage} disabled={!rows.length} className="px-3 py-1.5 rounded-lg border border-border-subtle bg-surface disabled:opacity-50" data-testid="select-page">{allOnPage ? 'Unselect this page' : 'Select this page'}</button>

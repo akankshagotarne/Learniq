@@ -8,6 +8,7 @@ import {
   Trophy, Users, IndianRupee, CheckCircle2, XCircle, Clock, BarChart2, TrendingUp, TrendingDown, Target, RefreshCw,
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
+import ExportToolbar from '../../components/admin/ExportToolbar';
 import AdminCertificatesPanel from '../../components/olympiad/AdminCertificatesPanel';
 import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadAdminStats, OlympiadExam, OlympiadPaymentSummary } from '../../types/olympiad';
@@ -258,8 +259,9 @@ const AdminOlympiad: React.FC = () => {
                 </p>
               ))}
 
-              {/* Tabs */}
-              <div className="flex bg-surface-alt p-1 rounded-xl border border-border-subtle self-start mb-4 w-fit">
+              {/* Tabs + downloads (Results and Payments are student lists; Certificates has its own toolbar) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex bg-surface-alt p-1 rounded-xl border border-border-subtle self-start w-fit">
                 {(isAll ? (['payments', 'certificates'] as const) : (['results', 'payments', 'certificates'] as const)).map(t => (
                   <button
                     key={t}
@@ -269,6 +271,13 @@ const AdminOlympiad: React.FC = () => {
                     {t === 'results' ? `Results (${attempts.length})` : t === 'payments' ? `Payments (${payments.length})` : 'Certificates'}
                   </button>
                 ))}
+              </div>
+              {activeTab === 'results' && !isAll && (
+                <ExportToolbar section="olympiad-results" params={{ exam: selectedId }} disabled={detailLoading || detailError} scopeLabel={`results of ${exam?.title || 'this exam'}`} />
+              )}
+              {activeTab === 'payments' && (
+                <ExportToolbar section="olympiad-payments" params={{ exam: isAll ? undefined : selectedId, view }} disabled={detailLoading || detailError} scopeLabel={isAll ? 'payments of all standards' : `payments of ${exam?.title || 'this exam'}`} />
+              )}
               </div>
 
               {activeTab === 'certificates' ? (
