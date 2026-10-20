@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import ExportToolbar from '../../components/admin/ExportToolbar';
+import EventSelector from '../../components/olympiad/EventSelector';
+import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import AdminCertificatesPanel from '../../components/olympiad/AdminCertificatesPanel';
 import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
 import { OlympiadAdminStats, OlympiadExam, OlympiadPaymentSummary } from '../../types/olympiad';
@@ -33,6 +35,8 @@ const payLabel = (status: string) => (status === 'UNCONFIRMED' ? 'Not confirmed'
 const windowLabel: Record<string, string> = { upcoming: 'Upcoming', open: 'Open', closed: 'Closed' };
 
 const AdminOlympiad: React.FC = () => {
+  const ev = useOlympiadEvent();
+  const eventId = ev.eventId;
   const [exams, setExams] = useState<AdminExam[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [attempts, setAttempts] = useState<any[]>([]);
@@ -53,9 +57,10 @@ const AdminOlympiad: React.FC = () => {
   const [proctorSaving, setProctorSaving] = useState(false);
 
   const loadExams = useCallback(async () => {
+    if (ev.loading) return;
     setLoading(true);
     try {
-      const list = await olympiadApi.adminExams();
+      const list = await olympiadApi.adminExams(eventId || undefined);
       setExams(list);
       // default to All Standards so no standard's payments are hidden behind the first exam in the list
       setSelectedId(prev => (prev && (prev === ALL || list.some(e => e._id === prev)) ? prev : ALL));
@@ -64,7 +69,7 @@ const AdminOlympiad: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [eventId, ev.loading]);
 
   useEffect(() => { void loadExams(); }, [loadExams]);
 
@@ -92,7 +97,7 @@ const AdminOlympiad: React.FC = () => {
     setDetailError(false);
     setDetailLoading(true);
     const request = selectedId === ALL
-      ? olympiadApi.adminAllPayments('all', view).then(({ payments: p, summary: sum }) => { if (!cancelled) { setPayments(p); setSummary(sum); setHistoryCount(sum?.historyCount || 0); } })
+      ? olympiadApi.adminAllPayments('all', view, eventId || undefined).then(({ payments: p, summary: sum }) => { if (!cancelled) { setPayments(p); setSummary(sum); setHistoryCount(sum?.historyCount || 0); } })
       : Promise.all([olympiadApi.adminAttempts(selectedId), olympiadApi.adminPayments(selectedId, view)])
         .then(([a, p]) => { if (!cancelled) { setAttempts(a); setPayments(p.payments); setHistoryCount(p.historyCount); } });
     request
@@ -103,7 +108,7 @@ const AdminOlympiad: React.FC = () => {
       })
       .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedId, reloadKey, view]);
+  }, [selectedId, reloadKey, view, eventId]);
 
   const isAll = selectedId === ALL;
   const exam = isAll ? undefined : exams.find(e => e._id === selectedId);
@@ -146,18 +151,20 @@ const AdminOlympiad: React.FC = () => {
             </button>
           </div>
 
+          <div className="mb-5 max-w-md"><EventSelector value={eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} /></div>
+
           {loading ? (
             <div className="card-soft h-40 rounded-2xl animate-pulse bg-surface-alt" />
           ) : exams.length === 0 ? (
             <div className="card-soft p-10 text-center text-sm text-text-secondary">
-              <p className="mb-4">No Olympiad exams exist in the database yet.</p>
-              <button
+              <p className="mb-4">{eventId ? 'This Olympiad event has no exams.' : 'No Olympiad exams exist in the database yet.'}</p>
+              {!eventId && <button
                 onClick={() => void createExam()}
                 disabled={seeding}
                 className="btn-primary text-xs py-2.5 px-5 rounded-xl font-bold disabled:opacity-60"
               >
                 {seeding ? 'Creating…' : 'Create Olympiad Exams (Std 1–10)'}
-              </button>
+              </button>}
             </div>
           ) : (
             <>

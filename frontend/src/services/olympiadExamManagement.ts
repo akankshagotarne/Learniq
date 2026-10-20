@@ -4,6 +4,7 @@ import { ExamStatus } from '../utils/examSchedule';
 
 export interface ManagedExamCounts { registered: number; startedNotSubmitted: number; activeNow: number; submitted: number }
 export interface ManagedExam {
+  eventId?: string; eventName?: string;
   _id: string; title: string; standard: number; status: ExamStatus; isPublished: boolean; accessEnabled: boolean;
   startDate: string; endDate: string; startDateIST: string; endDateIST: string; durationMinutes: number;
   totalQuestions: number; totalMarks: number; updatedAt: string | null; updatedAtIST: string; counts?: ManagedExamCounts;
@@ -18,7 +19,7 @@ export interface SavePayload {
 export interface SaveResult { changed: string[]; summary?: string[]; runningAttemptsUnchanged?: number; exam: ManagedExam; message?: string }
 
 export const examManagementApi = {
-  list: async (params: { standard?: string; status?: string; search?: string; examId?: string }, signal?: AbortSignal): Promise<ManagementList> => {
+  list: async (params: { event?: string; standard?: string; status?: string; search?: string; examId?: string }, signal?: AbortSignal): Promise<ManagementList> => {
     const q = Object.fromEntries(Object.entries(params).filter(([, v]) => v && v !== 'all'));
     return (await api.get('/olympiad/admin/exam-management', { params: q, signal })).data;
   },

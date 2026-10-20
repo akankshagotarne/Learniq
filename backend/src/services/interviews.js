@@ -957,8 +957,17 @@ const detailFor = async (user, id) => {
 };
 
 // ── admin read models ────────────────────────────────────────────────────────────────────────
-const adminList = async ({ q, status, standard, teacher, from, to } = {}) => {
+/** Exam ids of one Olympiad event (null = no event filter). Interviews belong to an event through their exam; nothing is inferred from dates or names. */
+const examIdsForEvent = async (eventId) => {
+  if (!eventId) return null;
+  if (!isValidId(eventId)) return [];
+  return (await OlympiadExam.find({ event: eventId, examType: { $ne: 'engineering' } }).select('_id')).map((e) => oid(e._id));
+};
+
+const adminList = async ({ q, status, standard, teacher, from, to, event } = {}) => {
+  const eventExams = await examIdsForEvent(event);
   const filter = {};
+  if (eventExams) filter.exam = { $in: eventExams };
   if (status) filter.status = status;
   if (teacher && isValidId(teacher)) filter.teacher = teacher;
   if (from || to) {
@@ -1006,10 +1015,14 @@ const adminList = async ({ q, status, standard, teacher, from, to } = {}) => {
   return rows;
 };
 
-const adminStats = async () => {
-  const [eligible, all, teachers] = await Promise.all([
-    eligibleRows(), TeacherInterview.find({}), User.find({ role: 'teacher', isApproved: true }),
+const adminStats = async (event) => {
+  const eventExams = await examIdsForEvent(event);
+  const inEvent = (examRef) => !eventExams || eventExams.includes(oid(examRef));
+  const [eligibleAll, allAll, teachers] = await Promise.all([
+    eligibleRows(), TeacherInterview.find(eventExams ? { exam: { $in: eventExams } } : {}), User.find({ role: 'teacher', isApproved: true }),
   ]);
+  const eligible = eligibleAll.filter((r) => inEvent(r.exam._id || r.exam));
+  const all = allAll;
   const count = (...s) => all.filter((i) => s.includes(i.status)).length; // each interview has exactly ONE status → no double counting
   const busy = new Set(all.filter((i) => i.holdsTeacherSlot && i.teacher).map((i) => oid(i.teacher)));
   const stale = (await findStale()).length;

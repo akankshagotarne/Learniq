@@ -318,7 +318,7 @@ test('CSV export: title, IST time, filters, only the filtered records, no paymen
   assert.match(lines[1], /^Generated: .* IST$/);
   assert.match(lines[2], /Participation: Not Submitted/);
   const header = lines.findIndex((l) => l.startsWith('Student,Student ID'));
-  assert.equal(lines[header], 'Student,Student ID,Email,Mobile,Standard,Exam,Registered (IST),Exam status,Submitted (IST)');
+  assert.equal(lines[header], 'Student,Student ID,Email,Mobile,Standard,Exam,Olympiad event,Registered (IST),Exam status,Submitted (IST)');
   const body = lines.slice(header + 1).filter(Boolean);
   assert.equal(body.length, 6, 'Bhavna, Chetan, Farhan, Gauri (exam A), Hemant and the formula-name student');
   assert.equal(r.headers.get('x-record-count'), '6');

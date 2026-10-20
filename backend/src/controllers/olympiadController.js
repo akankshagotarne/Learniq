@@ -12,6 +12,7 @@ const credits = require('../services/credits');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
 const { istDate, istTime, INTERVIEW_OPENS_AT } = require('../config/schedule');
+const events = require('../services/olympiadEvents');
 
 /**
  * Paid Olympiad examination — all business rules live here on the server:
@@ -67,10 +68,25 @@ const windowState = (exam, now = new Date()) => {
   return 'open';
 };
 
+/**
+ * Olympiad EVENT rules for students, enforced on the server (the UI only mirrors them): an exam of a DRAFT event is invisible, a
+ * CANCELLED event accepts no new registration or start, and the event's own registration window applies to registering.
+ * The event comes from the exam record (never from an id supplied by the browser). Exams outside the event model are unaffected.
+ */
+const publicLabel = (l) => { if (!l) return {}; const { eventState, ...rest } = l; return rest; }; // the event id / name / date a student or admin card shows
+
+const eventGuard = async (exam, purpose = 'view', now = new Date()) => {
+  try { return await events.assertEventAvailable(exam, purpose, now); } catch (err) {
+    if (err instanceof events.EventError) throw new ApiError(err.status, err.message, err.code);
+    throw err;
+  }
+};
+
 const loadExam = async (id) => {
   if (!mongoose.isValidObjectId(id)) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
   const exam = await OlympiadExam.findOne({ _id: id, isPublished: true });
   if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
+  await eventGuard(exam, 'view');
   return exam;
 };
 
@@ -320,6 +336,7 @@ const completionFor = (attempt, exam) => ({
 
 const examPublic = (exam) => ({
   _id: exam._id,
+  eventId: exam.event ? String(exam.event) : null, // the Olympiad event this exam belongs to (the name is added by the list / detail endpoints)
   resultsReleaseAt: exam.resultsPublishedAt || exam.resultsPublishAt || null, // when the official results (and certificates) are released
   title: exam.title,
   slug: exam.slug,
@@ -394,6 +411,11 @@ const buildState = async (exam, userId, now = new Date()) => {
   const attempt = await expireIfNeeded(foundAttempt, now);
 
   const win = windowState(exam, now);
+  // the event's own registration window (only when the administrator configured one): it limits REGISTERING, never starting a paid exam
+  const evt = exam.event ? await events.eventOfExam(exam) : null;
+  const regBlock = evt && evt.state === 'published'
+    ? (evt.registrationOpensAt && now < new Date(evt.registrationOpensAt) ? 'not_open' : (evt.registrationClosesAt && now >= new Date(evt.registrationClosesAt) ? 'closed' : null))
+    : (evt && evt.state === 'cancelled' ? 'cancelled' : null);
   const paid = !!success || !!grant; // entitled to start (payment OR administrator exception); paymentStatus below stays the truth about payments
   let state; let message = null;
 
@@ -403,7 +425,10 @@ const buildState = async (exam, userId, now = new Date()) => {
     if (win === 'closed') { state = 'closed'; message = 'The examination is no longer available.'; }
     else if (win === 'upcoming') { state = 'upcoming'; message = opensOn(exam); } // paid (or authorised) in advance: scheduled, NOT startable until the exam day
     else state = 'ready';
-  } else if (win === 'upcoming') { state = 'pay'; message = `You can pay ₹${exam.fee} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
+  } else if (regBlock === 'cancelled') { state = 'closed'; message = 'This Olympiad event has been cancelled.'; }
+  else if (regBlock === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
+  else if (regBlock === 'not_open') { state = 'upcoming'; message = `Registration opens on ${istDate(evt.registrationOpensAt)} at ${istTime(evt.registrationOpensAt)} IST.`; }
+  else if (win === 'upcoming') { state = 'pay'; message = `You can pay ₹${exam.fee} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
   else if (win === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
   else state = 'pay';
 
@@ -435,10 +460,14 @@ const listExams = handler(async (req, res) => {
   if (req.user.currentStandard) conditions.push({ standard: req.user.currentStandard });
   if (grantedIds.length) conditions.push({ _id: { $in: grantedIds } });
   if (!conditions.length) return res.json({ success: true, exams: [], serverNow: now.toISOString() });
-  const exams = await OlympiadExam.find({ isPublished: true, $or: conditions }).sort({ startDate: 1 });
+  // exams of a draft / cancelled event are not offered to students (a student's finished attempts stay under /completed)
+  const found = await OlympiadExam.find({ isPublished: true, $or: conditions }).sort({ startDate: 1 });
+  const labels = await events.eventLabels(found); // one query, and none at all while no exam belongs to an event
+  const exams = found.filter((e) => { const l = labels.get(String(e.event)); return !l || l.eventState === 'published'; });
   const out = [];
   for (const exam of exams) {
-    out.push({ ...examPublic(exam), ...(await buildState(exam, req.user._id, now)) });
+    const { eventState, ...label } = labels.get(String(exam.event)) || {};
+    out.push({ ...examPublic(exam), ...label, ...(await buildState(exam, req.user._id, now)) });
   }
   res.json({ success: true, exams: out, serverNow: now.toISOString() });
 });
@@ -452,6 +481,7 @@ const getExam = handler(async (req, res) => {
     success: true,
     exam: {
       ...examPublic(exam),
+      ...publicLabel((await events.eventLabels([exam])).get(String(exam.event))),
       instructions: exam.instructions,
       ...(await buildState(exam, req.user._id, now)),
     },
@@ -466,10 +496,11 @@ const getCompleted = handler(async (req, res) => {
     .sort({ submittedAt: -1 })
     .populate('exam');
   const exams = [];
+  const labels = await events.eventLabels(attempts.map((a) => a.exam).filter(Boolean));
   for (const a of attempts) {
     if (!a.exam) continue;
     const done = await ensureEvaluated(a);
-    exams.push({ ...examPublic(a.exam), state: 'completed', result: studentResult(done, a.exam), completion: completionFor(done, a.exam), ...(await certificatePayloads(done)) });
+    exams.push({ ...examPublic(a.exam), ...publicLabel(labels.get(String(a.exam.event))), state: 'completed', result: studentResult(done, a.exam), completion: completionFor(done, a.exam), ...(await certificatePayloads(done)) });
   }
   res.json({ success: true, exams });
 });
@@ -554,6 +585,7 @@ const redeemCredit = handler(async (req, res) => {
   const blocker = await creditBlocker(req.user, exam);
   if (blocker) throw new ApiError(blocker.code === 'CLOSED' ? 403 : blocker.code === 'NO_PAYMENT_REQUIRED' ? 400 : 409, blocker.message, blocker.code);
   assertWindowOpen(exam, 'register');
+  await eventGuard(exam, 'register');
   try {
     const r = await credits.redeemForExam({ student: req.user, exam });
     const balance = await credits.getBalance(req.user._id);
@@ -584,6 +616,7 @@ const createOrder = handler(async (req, res) => {
   if (await examAccess.activeGrant(req.user._id, exam._id)) throw new ApiError(409, 'You can start this examination now. No payment is needed.', 'ALREADY_PAID');
 
   assertWindowOpen(exam, 'register');
+  await eventGuard(exam, 'register'); // cancelled event / the event's own registration window
 
   const razorpay = getRazorpayInstance();
   if (!razorpay) {
@@ -825,6 +858,7 @@ const startExam = handler(async (req, res) => {
     return res.json({ success: true, resumed: true, ...(await buildAttemptPayload(exam, attempt, now)) });
   }
 
+  await eventGuard(exam, 'start', now); // a cancelled event cannot be started (a running attempt above still resumes and finishes)
   assertWindowOpen(exam, 'start');
 
   let unlock; // what lets this student start: a verified payment (Olympiad) or an approved request (free engineering test)
@@ -1087,11 +1121,19 @@ const assertOlympiadManaged = (exam) => {
 };
 
 // GET /api/olympiad/admin/exams
+// optional ?event=<id>: the Olympiad event whose exams are wanted (validated; an unknown event simply has no exams)
+const eventFilter = (raw) => {
+  if (raw === undefined || raw === '' || raw === 'all') return {};
+  if (typeof raw !== 'string' || !/^[a-f0-9]{24}$/i.test(raw)) throw new ApiError(400, 'Invalid Olympiad event.', 'INVALID_EVENT');
+  return { event: raw };
+};
+
 const adminListExams = handler(async (req, res) => {
-  const exams = await OlympiadExam.find(NOT_ENGINEERING).sort({ standard: 1 }).populate('teacher', 'name email');
+  const exams = await OlympiadExam.find({ ...NOT_ENGINEERING, ...eventFilter(req.query.event) }).sort({ standard: 1 }).populate('teacher', 'name email');
+  const labels = await events.eventLabels(exams);
   const out = [];
   for (const exam of exams) {
-    out.push({ ...examPublic(exam), isPublished: exam.isPublished !== false, resultsPublishedAt: exam.resultsPublishedAt || null, resultsPublishAt: exam.resultsPublishAt || null, window: windowState(exam), stats: await examStats(exam) });
+    out.push({ ...examPublic(exam), ...publicLabel(labels.get(String(exam.event))), isPublished: exam.isPublished !== false, resultsPublishedAt: exam.resultsPublishedAt || null, resultsPublishAt: exam.resultsPublishAt || null, window: windowState(exam), stats: await examStats(exam) });
   }
   res.json({ success: true, exams: out });
 });
@@ -1475,7 +1517,12 @@ const adminAllPayments = handler(async (req, res) => {
     const n = typeof raw === 'string' && /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
     if (!Number.isInteger(n) || n < 1 || n > 10) throw new ApiError(400, 'Standard must be "all" or a number from 1 to 10.', 'INVALID_STANDARD');
     standard = n;
-    const ids = (await OlympiadExam.find({ standard: n }).select('_id')).map((e) => e._id);
+  }
+  // exam scope = standard AND (optional) Olympiad event, both resolved to exam ids from the database (payments are never matched by amount or name)
+  const evFilter = eventFilter(req.query.event);
+  if (standard !== 'all' || evFilter.event) {
+    const q = { ...(standard !== 'all' ? { standard } : {}), ...evFilter };
+    const ids = (await OlympiadExam.find(q).select('_id')).map((e) => e._id);
     examFilter = { exam: { $in: ids } };
   }
   const view = paymentView(req);
@@ -1485,7 +1532,7 @@ const adminAllPayments = handler(async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5000)
       .populate('student', 'name email')
-      .populate('exam', 'title standard'),
+      .populate('exam', 'title standard event'),
     OlympiadPayment.aggregate([
       { $match: filter },
       { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
@@ -1493,7 +1540,8 @@ const adminAllPayments = handler(async (req, res) => {
     OlympiadPayment.countDocuments({ ...examFilter, ...HIDDEN_PAYMENTS }),
   ]);
   res.set('Cache-Control', 'no-store'); // live financial figures
-  res.json({ success: true, standard, view, payments: payments.map((p) => toAdminPayment(p)), summary: { ...summarisePayments(grouped), historyCount } });
+  const labels = await events.eventLabels(payments.map((p) => p.exam).filter(Boolean));
+  res.json({ success: true, standard, event: evFilter.event || 'all', view, payments: payments.map((p) => ({ ...toAdminPayment(p), ...(p.exam && p.exam.event ? { eventId: String(p.exam.event), eventName: (labels.get(String(p.exam.event)) || {}).eventName || null } : { eventId: null, eventName: null }) })), summary: { ...summarisePayments(grouped), historyCount } });
 });
 
 // ──────────────────────────────────────────────

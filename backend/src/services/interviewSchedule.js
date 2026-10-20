@@ -47,11 +47,12 @@ const normalizeScheduleInput = (input, now = new Date()) => {
 };
 
 // ── general schedule ─────────────────────────────────────────────────────────────────────────
-const interviewExams = async () => (await OlympiadExam.find({ examType: 'olympiad' })).filter((e) => e.standard >= 1 && e.standard <= 10).sort((a, b) => a.standard - b.standard);
+// `eventId` (optional): only the exams of that Olympiad event - an interview schedule is never shared between events.
+const interviewExams = async (eventId) => (await OlympiadExam.find({ examType: 'olympiad', ...(eventId ? { event: eventId } : {}) })).filter((e) => e.standard >= 1 && e.standard <= 10).sort((a, b) => a.standard - b.standard);
 
-const setSchedule = async ({ examIds, ...input }, admin, now = new Date()) => {
+const setSchedule = async ({ examIds, eventId, ...input }, admin, now = new Date()) => {
   const data = normalizeScheduleInput(input, now);
-  const exams = await interviewExams();
+  const exams = await interviewExams(eventId);
   const wanted = examIds === 'all' ? exams : exams.filter((e) => (Array.isArray(examIds) ? examIds.map(String) : []).includes(oid(e)));
   if (!wanted.length) throw new ScheduleError(400, 'Please choose at least one examination.', 'NO_EXAM');
   const saved = [];

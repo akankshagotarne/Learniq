@@ -55,7 +55,7 @@ export const olympiadApi = {
   completed: async (): Promise<OlympiadExam[]> => (await api.get('/olympiad/completed')).data.exams || [],
 
   // admin
-  adminExams: async (): Promise<(OlympiadExam & { stats: OlympiadAdminStats })[]> => (await api.get('/olympiad/admin/exams')).data.exams || [],
+  adminExams: async (event?: string): Promise<(OlympiadExam & { stats: OlympiadAdminStats })[]> => (await api.get('/olympiad/admin/exams', { params: event ? { event } : undefined })).data.exams || [],
   adminSeed: async () => (await api.post('/olympiad/admin/seed')).data,
   adminSetResults: async (id: string, publish: boolean): Promise<{ resultsPublishedAt: string | null }> => (await api.post(`/olympiad/admin/exams/${id}/results`, { publish })).data,
   adminAttempts: async (id: string) => (await api.get(`/olympiad/admin/exams/${id}/attempts`)).data.attempts || [],
@@ -65,8 +65,8 @@ export const olympiadApi = {
     return { payments: data.payments || [], historyCount: data.historyCount || 0 };
   },
   /** Every Olympiad payment across all exams; pass a standard (1–10) to narrow, omit / 'all' for everything. */
-  adminAllPayments: async (standard: number | 'all' = 'all', view: 'active' | 'history' = 'active'): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
-    const { data } = await api.get('/olympiad/admin/payments', { params: { standard, view } });
+  adminAllPayments: async (standard: number | 'all' = 'all', view: 'active' | 'history' = 'active', event?: string): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
+    const { data } = await api.get('/olympiad/admin/payments', { params: { standard, view, ...(event ? { event } : {}) } });
     return { payments: data.payments || [], summary: data.summary };
   },
   // teacher

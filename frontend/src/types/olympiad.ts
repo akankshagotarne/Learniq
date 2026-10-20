@@ -155,6 +155,9 @@ export interface AdminCertificateList {
 
 export interface OlympiadExam {
   _id: string;
+  eventId?: string;
+  eventName?: string;
+  eventDate?: string;
   title: string;
   slug: string;
   description?: string;

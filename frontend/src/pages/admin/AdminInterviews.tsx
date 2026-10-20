@@ -1,5 +1,7 @@
 import ExportToolbar from '../../components/admin/ExportToolbar';
 import React, { useCallback, useEffect, useState } from 'react';
+import EventSelector from '../../components/olympiad/EventSelector';
+import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { CalendarClock, Download, Loader2, Power, RefreshCw, Search, Wrench } from 'lucide-react';
@@ -19,6 +21,7 @@ const TABS: { id: string; label: string; status: string }[] = [
 
 /** Admin "Interview Management": real counts, filters, assign / reassign waiting interviews, presence-only monitoring, history, CSV. */
 const AdminInterviews: React.FC = () => {
+  const ev = useOlympiadEvent();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [teachers, setTeachers] = useState<AdminTeacher[]>([]);
   const [rows, setRows] = useState<AdminRow[]>([]);
@@ -27,14 +30,15 @@ const AdminInterviews: React.FC = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
 
-  const filters = { q: q.trim() || undefined, status: status || undefined, standard: standard || undefined, teacher: teacher || undefined };
+  const filters = { q: q.trim() || undefined, status: status || undefined, standard: standard || undefined, teacher: teacher || undefined, event: ev.eventId || undefined };
   const load = useCallback(async () => {
+    if (ev.loading) return;
     try {
-      const [s, list] = await Promise.all([interviewApi.adminStats(), interviewApi.adminList(filters)]);
+      const [s, list] = await Promise.all([interviewApi.adminStats(ev.eventId || undefined), interviewApi.adminList(filters)]);
       setStats(s.stats); setTeachers(s.teachers); setRows(list); setError(null);
     } catch (e) { setError(interviewErrorMessage(e, 'Could not load interviews.')); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, standard, teacher]);
+  }, [q, status, standard, teacher, ev.eventId, ev.loading]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useInterviewLive(load, { pollMs: 10000 });
 
@@ -80,6 +84,7 @@ const AdminInterviews: React.FC = () => {
       <Sidebar />
       <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0 transition-all duration-300">
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+          <div className="mb-4 max-w-md"><EventSelector value={ev.eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} /></div>
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Interview Management</h1>

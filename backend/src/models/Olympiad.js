@@ -27,6 +27,9 @@ const olympiadExamSchema = new mongoose.Schema({
   // Optional link to the teacher account that conducts/reviews this exam.
   // Lets the teacher dashboard query Olympiad exams they are assigned to.
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true, sparse: true },
+  // The Olympiad EVENT (models/OlympiadEvent.js) this exam belongs to. Absent only on exams the legacy migration has not (or could not
+  // unambiguously) associated; registrations, attempts, payments, interviews and certificates belong to an event through their exam.
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadEvent', index: true },
   examType: { type: String, default: 'olympiad' }, // 'olympiad' (paid, Std 1-10) | 'engineering' (free, approval-based, "Others")
   category: { type: String, trim: true },          // e.g. 'BE Engineering'
   // Std 1-10, or 99 = "Others" (constants/standards.js). Only the Engineering mock test uses 99.

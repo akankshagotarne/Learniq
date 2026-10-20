@@ -7,6 +7,8 @@ import {
 import Sidebar from '../../components/layout/Sidebar';
 import StudentDrawer from '../../components/olympiad/analytics/StudentDrawer';
 import { ExamBadge, FlagBadge } from '../../components/olympiad/analytics/labels';
+import EventSelector from '../../components/olympiad/EventSelector';
+import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import { olympiadAnalyticsApi, toParams } from '../../services/olympiadAnalytics';
 import ExportToolbar from '../../components/admin/ExportToolbar';
 import { olympiadErrorMessage } from '../../services/olympiad';
@@ -85,7 +87,10 @@ const SortHeader: React.FC<{ label: string; field?: AnalyticsSort; q: AnalyticsQ
 };
 
 const AdminOlympiadAnalytics: React.FC = () => {
-  const [query, setQuery] = useState<AnalyticsQuery>(DEFAULT_QUERY);
+  const ev = useOlympiadEvent();
+  const [baseQuery, setQuery] = useState<AnalyticsQuery>(DEFAULT_QUERY);
+  // the event is always part of the query: analytics never mix events
+  const query = useMemo<AnalyticsQuery>(() => ({ ...baseQuery, event: ev.eventId }), [baseQuery, ev.eventId]);
   const [searchInput, setSearchInput] = useState('');
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +107,11 @@ const AdminOlympiadAnalytics: React.FC = () => {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  // switching event clears event-specific filters (the exam list differs) and returns to page 1
+  useEffect(() => { setQuery(q => (q.exam === 'all' && q.page === 1 ? q : { ...q, exam: 'all', page: 1 })); }, [ev.eventId]);
+
   useEffect(() => {
+    if (ev.loading || !ev.eventId) { if (!ev.loading) setLoading(false); return undefined; }
     const mine = ++seq.current;
     const ctrl = new AbortController();
     setLoading(true); setError(null);
@@ -121,8 +130,8 @@ const AdminOlympiadAnalytics: React.FC = () => {
   const onSort = (field: AnalyticsSort) => setQuery(q => ({ ...q, page: 1, sort: field, order: q.sort === field && q.order === 'desc' ? 'asc' : 'desc' }));
   const reset = () => { setSearchInput(''); setQuery(DEFAULT_QUERY); };
   const filtersDirty = useMemo(
-    () => JSON.stringify({ ...query, page: 1, limit: 25, sort: 'registered', order: 'desc' }) !== JSON.stringify(DEFAULT_QUERY),
-    [query],
+    () => JSON.stringify({ ...baseQuery, page: 1, limit: 25, sort: 'registered', order: 'desc' }) !== JSON.stringify(DEFAULT_QUERY),
+    [baseQuery],
   );
 
   const doExport = async () => {
@@ -167,6 +176,8 @@ const AdminOlympiadAnalytics: React.FC = () => {
               </button>
             </div>
           </div>
+
+          <div className="mb-4 max-w-md"><EventSelector value={ev.eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} /></div>
 
           {/* Filters */}
           <div className="card-soft rounded-card border border-border-subtle p-3.5 mb-4" data-testid="filters">

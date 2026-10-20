@@ -6,6 +6,7 @@ export type AnalyticsView = 'all' | 'registered' | 'submitted' | 'not_submitted'
 export type AnalyticsSort = 'name' | 'standard' | 'registered' | 'submissionDate';
 
 export interface AnalyticsQuery {
+  event?: string;          // Olympiad event id (always one event)
   exam: string;            // 'all' | exam id
   standard: string;        // 'all' | '1'..'10'
   participation: string;   // 'all' | ExamStatus

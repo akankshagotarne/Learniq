@@ -72,7 +72,10 @@ const parseFilters = (q = {}) => {
   const registeredFrom = istDay(q.registeredFrom, false);
   const registeredTo = istDay(q.registeredTo, true);
   if (registeredFrom && registeredTo && registeredFrom > registeredTo) throw new AnalyticsError(400, 'The start date must not be after the end date.', 'INVALID_DATE_RANGE');
+  const eventRaw = one(q.event);
+  if (eventRaw !== undefined && eventRaw !== '' && eventRaw !== 'all' && !OID_RE.test(String(eventRaw))) throw new AnalyticsError(400, 'Invalid Olympiad event.', 'INVALID_EVENT');
   return {
+    event: eventRaw && eventRaw !== 'all' ? String(eventRaw) : 'all',
     exam: exam && exam !== 'all' ? String(exam) : 'all',
     standard,
     participation: pick('participation', PARTICIPATION_FILTERS, 'all'),
@@ -117,6 +120,15 @@ const registeredAtOf = (payments, grant) => minDate([
   grant && grant.createdAt,
 ]);
 
+/** event id -> event name for the exams in scope (an exam outside the event model has none) */
+const eventNameMap = async (exams) => {
+  const ids = [...new Set(exams.map((e) => (e.event ? String(e.event) : null)).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { OlympiadEvent } = require('../models/OlympiadEvent');
+  const list = await OlympiadEvent.find({ _id: { $in: ids } }).select('name');
+  return new Map(list.map((e) => [String(e._id), e.name]));
+};
+
 /**
  * Loads exams in scope + the payments / grants / attempts for them and joins them per (student, exam).
  * Rows: every VALID registration, plus any submission/attempt that has no valid registration (flagged "needs review", never hidden).
@@ -124,15 +136,18 @@ const registeredAtOf = (payments, grant) => minDate([
  */
 const loadRegistrations = async (filters) => {
   const examQuery = { examType: { $ne: 'engineering' } };
+  if (filters.event && filters.event !== 'all') examQuery.event = filters.event; // the selected Olympiad EVENT: a database filter, never a front-end one
+  const eventScoped = { ...examQuery }; // the exam dropdown is limited to the selected event too
   if (filters.exam !== 'all') examQuery._id = filters.exam;
   if (filters.standard !== 'all') examQuery.standard = filters.standard;
-  const fields = 'title standard startDate endDate totalMarks totalQuestions resultsPublishedAt examType';
-  const allEvents = await OlympiadExam.find({ examType: { $ne: 'engineering' } }).select(fields).sort({ startDate: -1 });
+  const fields = 'title standard startDate endDate totalMarks totalQuestions resultsPublishedAt examType event';
+  const allEvents = await OlympiadExam.find(eventScoped).select(fields).sort({ startDate: -1 });
   const exams = filters.exam === 'all' && filters.standard === 'all' ? allEvents : await OlympiadExam.find(examQuery).select(fields);
+  const eventNames = await eventNameMap(exams);
   const examById = new Map(exams.map((e) => [String(e._id), e]));
   const examIds = exams.map((e) => e._id);
 
-  if (!examIds.length) return { events: allEvents, exams, examById, rows: [], truncated: false };
+  if (!examIds.length) return { events: allEvents, exams, examById, eventNames, rows: [], truncated: false };
 
   const [payments, grants, attempts, clearances] = await Promise.all([
     OlympiadPayment.find({ exam: { $in: examIds }, ...ACTIVE_PAYMENTS }).select('student exam status verifiedAt createdAt deletedStudent'),
@@ -186,6 +201,8 @@ const loadRegistrations = async (filters) => {
       email: user ? user.email || null : null,
       phone: user ? user.phone || null : null,
       standard: exam ? exam.standard : null,
+      eventId: exam && exam.event ? id(exam.event) : null,
+      eventName: exam && exam.event ? (eventNames.get(id(exam.event)) || null) : null,
       examTitle: exam ? exam.title : 'Unknown exam',
       registered,
       registeredAt: registered ? registeredAtOf(g.payments, g.grant) : null,
@@ -194,7 +211,7 @@ const loadRegistrations = async (filters) => {
       flags,
     };
   });
-  return { events: allEvents, exams, examById, rows, truncated };
+  return { events: allEvents, exams, examById, eventNames, rows, truncated };
 };
 
 // ──────────────────────────────────────────────
@@ -280,8 +297,9 @@ const sortRows = (rows, sort, order) => {
   });
 };
 
-const scopeLabel = (f, examById) => {
+const scopeLabel = (f, examById, eventNames) => {
   const parts = [];
+  if (f.event && f.event !== 'all') { const names = [...new Set([...examById.values()].map((e) => e.event && eventNames && eventNames.get(String(e.event))).filter(Boolean))]; parts.push(names[0] || 'Selected event'); }
   if (f.exam !== 'all') { const e = examById.get(f.exam); parts.push(e ? e.title : 'Selected exam'); } else parts.push('All Olympiad exams');
   if (f.standard !== 'all') parts.push(`Std ${f.standard}`);
   return parts.join(' · ');
@@ -304,7 +322,7 @@ const analytics = async (query, now = new Date()) => {
   const page = Math.min(f.page, pages);
   return {
     filters: { ...f, registeredFrom: query.registeredFrom || undefined, registeredTo: query.registeredTo || undefined },
-    scope: { label: scopeLabel(f, data.examById), defaultScope: 'All Olympiad exams (Std 1–10); the free engineering mock test is not included.', examCount: data.exams.length },
+    scope: { label: scopeLabel(f, data.examById, data.eventNames), event: f.event, defaultScope: 'All Olympiad exams (Std 1–10); the free engineering mock test is not included.', examCount: data.exams.length },
     events: data.events.map((e) => ({ _id: String(e._id), title: e.title, standard: e.standard, startDate: e.startDate, endDate: e.endDate })),
     cards: computeCards(scope),
     counts: tabCounts(searched),
@@ -337,7 +355,8 @@ const studentDetail = async (studentId, query = {}) => {
     stateForStudent(studentId),
   ]);
   const examIds = [...new Set([...payments, ...grants, ...attempts, ...history].map((x) => id(x.exam)))];
-  const exams = examIds.length ? await OlympiadExam.find({ _id: { $in: examIds }, examType: { $ne: 'engineering' } }).select('title standard startDate endDate totalMarks totalQuestions resultsPublishedAt') : [];
+  const exams = examIds.length ? await OlympiadExam.find({ _id: { $in: examIds }, examType: { $ne: 'engineering' } }).select('title standard startDate endDate totalMarks totalQuestions resultsPublishedAt event') : [];
+  const eventNames = await eventNameMap(exams);
 
   const registrations = exams
     .filter((e) => !examFilter || examFilter === 'all' || String(e._id) === String(examFilter))
@@ -358,7 +377,7 @@ const studentDetail = async (studentId, query = {}) => {
       const submitted = isSubmitted(attempt);
       const released = resultsPublished(e);
       return {
-        exam: { _id: eid, title: e.title, standard: e.standard, startDate: e.startDate, endDate: e.endDate, totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, resultsPublishedAt: e.resultsPublishedAt || null },
+        exam: { _id: eid, eventId: e.event ? String(e.event) : null, eventName: e.event ? eventNames.get(String(e.event)) || null : null, title: e.title, standard: e.standard, startDate: e.startDate, endDate: e.endDate, totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, resultsPublishedAt: e.resultsPublishedAt || null },
         registered,
         registeredAt: registered ? registeredAtOf(pays, grant) : null,
         registeredStandard: e.standard,
@@ -423,7 +442,8 @@ const exportRows = async (query) => {
   const { sorted: rows } = select(data, f);
   const range = (f.registeredFrom || f.registeredTo) ? `${query.registeredFrom || '…'} to ${query.registeredTo || '…'}` : null;
   const filterList = [
-    { label: 'Exam', value: scopeLabel(f, data.examById) },
+    { label: 'Olympiad event', value: f.event === 'all' ? 'All events' : (scopeLabel({ ...f, exam: 'all', standard: 'all' }, data.examById, data.eventNames)) },
+    { label: 'Exam', value: scopeLabel({ ...f, event: 'all' }, data.examById, data.eventNames) },
     { label: 'Standard', value: f.standard === 'all' ? 'All' : f.standard },
     { label: 'Participation', value: f.participation === 'all' ? 'All' : STATUS_LABEL[f.participation] },
     { label: 'Tab', value: VIEW_LABEL[f.view] },
@@ -442,9 +462,9 @@ const exportCsv = async (query, now = new Date()) => {
     csvLine([`Filters: ${filterText}`]),
     csvLine([`Records: ${rows.length}`]),
     '',
-    csvLine(['Student', 'Student ID', 'Email', 'Mobile', 'Standard', 'Exam', 'Registered (IST)', 'Exam status', 'Submitted (IST)']),
+    csvLine(['Student', 'Student ID', 'Email', 'Mobile', 'Standard', 'Exam', 'Olympiad event', 'Registered (IST)', 'Exam status', 'Submitted (IST)']),
     ...rows.map((r) => csvLine([
-      r.name, r.studentId, r.email, r.phone, r.standard, r.examTitle, istStamp(r.registeredAt), STATUS_LABEL[r.examStatus], istStamp(r.submittedAt),
+      r.name, r.studentId, r.email, r.phone, r.standard, r.examTitle, r.eventName || '', istStamp(r.registeredAt), STATUS_LABEL[r.examStatus], istStamp(r.submittedAt),
     ])),
   ];
   return { csv: `﻿${lines.join('\r\n')}\r\n`, count: rows.length };
