@@ -12,6 +12,7 @@
  * backend/src/services/live. A modified browser could ignore the plan; it can still not get a connection the server refuses to signal.
  */
 import type { PeerPlanEntry } from './types';
+import { isLegacyPeer, slotOfIndex, trackForSlot } from './tracks.ts';
 
 export interface SocketLike {
   id?: string;
@@ -38,6 +39,8 @@ interface Peer {
   receive: boolean;
   pending: RTCIceCandidateInit[];
   stream: MediaStream | null;
+  /** the peer's screen-share video (its own section), exposed only while real frames are flowing */
+  screen: MediaStream | null;
   retries: number;
   planned: boolean;
 }
@@ -74,17 +77,27 @@ const makeSilentAudio = (): MediaStreamTrack | null => {
 export class LiveMesh {
   private peers = new Map<string, Peer>();
   private video: MediaStreamTrack | null = null;
+  private screenTrack: MediaStreamTrack | null = null;
   private audio: MediaStreamTrack | null = null;
   private blankVideo: MediaStreamTrack | null = null;
   private silentAudio: MediaStreamTrack | null = null;
   private closed = false;
 
+  private socket: SocketLike;
+  private onStreams: (streams: Record<string, MediaStream>) => void;
+  private onPeerState: (socketId: string, state: PeerState) => void;
+  private iceServers: RTCIceServer[];
+  private onScreens: (screens: Record<string, MediaStream>) => void;
+
   constructor(
-    private socket: SocketLike,
-    private onStreams: (streams: Record<string, MediaStream>) => void,
-    private onPeerState: (socketId: string, state: PeerState) => void = () => {},
-    private iceServers: RTCIceServer[] = ICE_SERVERS,
-  ) {}
+    socket: SocketLike,
+    onStreams: (streams: Record<string, MediaStream>) => void,
+    onPeerState: (socketId: string, state: PeerState) => void = () => {},
+    iceServers: RTCIceServer[] = ICE_SERVERS,
+    onScreens: (screens: Record<string, MediaStream>) => void = () => {},
+  ) {
+    this.socket = socket; this.onStreams = onStreams; this.onPeerState = onPeerState; this.iceServers = iceServers; this.onScreens = onScreens;
+  }
 
   private selfId(): string { return this.socket.id || ''; }
   private isInitiator(otherId: string): boolean { return this.selfId() < otherId; }
@@ -100,21 +113,31 @@ export class LiveMesh {
 
   private publishStreams() {
     const out: Record<string, MediaStream> = {};
-    this.peers.forEach((p) => { if (p.receive && p.stream) out[p.id] = p.stream; });
+    const screens: Record<string, MediaStream> = {};
+    this.peers.forEach((p) => {
+      if (!p.receive) return;
+      if (p.stream) out[p.id] = p.stream;
+      // an older peer has no screen section: its screen share arrives in the camera section, so that stream IS the screen
+      if (this.legacy(p)) { if (p.stream) screens[p.id] = p.stream; } else if (p.screen && p.screen.getVideoTracks().some((t) => !t.muted && t.readyState === 'live')) screens[p.id] = p.screen;
+    });
     this.onStreams(out);
+    this.onScreens(screens);
   }
+
+  private legacy(p: Peer): boolean { return isLegacyPeer(p.pc.getTransceivers().length); }
 
   /** tracks that go to one peer: the real ones only if we may SEND to them */
   private applySenders(p: Peer) {
     if (p.pc.signalingState === 'closed') return;
-    const v = p.send ? (this.video || this.placeholderVideo()) : this.placeholderVideo();
-    const a = p.send ? (this.audio || this.placeholderAudio()) : this.placeholderAudio();
-    for (const t of p.pc.getTransceivers()) {
-      const kind = (t.receiver && t.receiver.track && t.receiver.track.kind) || (t.sender.track && t.sender.track.kind);
-      const track = kind === 'video' ? v : kind === 'audio' ? a : null;
-      if (!track || t.sender.track === track) continue;
+    const out = { audio: this.audio, video: this.video, screen: this.screenTrack, blankVideo: this.placeholderVideo(), blankAudio: this.placeholderAudio() };
+    const legacy = this.legacy(p);
+    p.pc.getTransceivers().forEach((t, index) => {
+      const slot = slotOfIndex(index);
+      if (!slot) return;
+      const track = trackForSlot(slot, out, p.send, legacy);
+      if ((t.sender.track || null) === track) return;
       t.sender.replaceTrack(track).catch(() => { /* peer is going away */ });
-    }
+    });
   }
 
   private create(otherId: string, planned: boolean, entry?: PeerPlanEntry): Peer {
@@ -122,11 +145,19 @@ export class LiveMesh {
     if (existing && existing.pc.signalingState !== 'closed') return existing;
     const initiator = this.isInitiator(otherId);
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
-    const peer: Peer = { id: otherId, pc, initiator, send: entry ? entry.send : false, receive: entry ? entry.receive : false, pending: [], stream: null, retries: 0, planned };
+    const peer: Peer = { id: otherId, pc, initiator, send: entry ? entry.send : false, receive: entry ? entry.receive : false, pending: [], stream: null, screen: null, retries: 0, planned };
     this.peers.set(otherId, peer);
 
     pc.onicecandidate = (e) => { if (e.candidate && !this.closed) this.socket.emit('webrtc-ice-candidate', { targetSocketId: otherId, candidate: e.candidate }); };
     pc.ontrack = (e) => {
+      const slot = slotOfIndex(pc.getTransceivers().indexOf(e.transceiver));
+      if (slot === 'screen') { // the screen section: kept apart from the camera so both can be shown at the same time
+        peer.screen = new MediaStream([e.track]);
+        const refresh = () => { peer.screen = new MediaStream([e.track]); this.publishStreams(); };
+        e.track.onunmute = refresh; e.track.onmute = refresh;
+        this.publishStreams();
+        return;
+      }
       const cur = peer.stream;
       if (cur) {
         cur.getTracks().forEach((t) => { if (t.kind === e.track.kind && t.id !== e.track.id) cur.removeTrack(t); });
@@ -150,6 +181,7 @@ export class LiveMesh {
       const v = peer.send ? (this.video || this.placeholderVideo()) : this.placeholderVideo();
       try { a ? pc.addTransceiver(a, { direction: 'sendrecv' }) : pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch { /* ignore */ }
       try { v ? pc.addTransceiver(v, { direction: 'sendrecv' }) : pc.addTransceiver('video', { direction: 'sendrecv' }); } catch { /* ignore */ }
+      try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch { /* ignore */ } // the screen-share section (idle until a screen is shared)
     }
     return peer;
   }
@@ -208,9 +240,9 @@ export class LiveMesh {
     this.publishStreams();
   }
 
-  /** The tracks we publish. The camera and the screen share one video slot: a screen share replaces the camera picture. */
-  setLocal(video: MediaStreamTrack | null, audio: MediaStreamTrack | null) {
-    this.video = video; this.audio = audio;
+  /** The tracks we publish: camera, microphone and (optionally) the screen, each in its own media section. */
+  setLocal(video: MediaStreamTrack | null, audio: MediaStreamTrack | null, screen: MediaStreamTrack | null = null) {
+    this.video = video; this.audio = audio; this.screenTrack = screen;
     this.peers.forEach((p) => this.applySenders(p));
   }
 
@@ -255,6 +287,6 @@ export class LiveMesh {
     [...this.peers.keys()].forEach((id) => this.dropPeer(id));
     this.blankVideo?.stop(); this.silentAudio?.stop();
     this.blankVideo = null; this.silentAudio = null;
-    this.onStreams({});
+    this.onStreams({}); this.onScreens({});
   }
 }

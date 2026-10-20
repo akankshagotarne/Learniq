@@ -33,6 +33,8 @@ const StandardSelectionPage = lazy(() => import('./pages/student/StandardSelecti
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
 const MyCoursesPage = lazy(() => import('./pages/student/MyCoursesPage'));
 const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
+// automated-test page: exists only in the `vite build --mode e2e` bundle (same flag as the proctoring test hook)
+const LiveStageHarness = import.meta.env.VITE_PROCTOR_TEST_HOOKS === 'true' ? lazy(() => import('./pages/e2e/LiveStageHarness')) : null;
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
 const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
 const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
@@ -137,6 +139,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/courses" element={COURSES_ENABLED ? <CoursesPage /> : <Navigate to="/" replace />} />
       <Route path="/courses/:id" element={COURSES_ENABLED ? <CourseDetailPage /> : <Navigate to="/" replace />} />
       <Route path="/live-sessions" element={<LiveSessionsListPage />} />
+      {LiveStageHarness && <Route path="/__e2e/live-stage" element={<LiveStageHarness />} />}
       <Route path="/about" element={<AboutPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<LoginPage />} />
