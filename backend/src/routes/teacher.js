@@ -52,6 +52,7 @@ router.post('/live-sessions', ...teacherAuth, liveCtrl.createSession);
 router.post('/live-sessions/:id/start', ...teacherAuth, liveCtrl.startSession);
 router.post('/live-sessions/:id/end', ...teacherAuth, liveCtrl.endSession);
 router.get('/live-sessions/:id/participants', ...teacherAuth, liveCtrl.getParticipants);
+router.put('/live-sessions/:id/meeting-config', ...teacherAuth, liveCtrl.updateMeetingConfig);
 
 // Students
 router.get('/students', ...teacherAuth, userCtrl.getStudents);

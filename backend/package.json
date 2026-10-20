@@ -29,7 +29,8 @@
     "cleanup:old-olympiad": "node src/scripts/cleanupOldOlympiadRecords.js",
     "test:certificates": "node --test src/tests/certificates.test.js src/tests/certificateRender.test.js src/tests/certificateCompletionRender.test.js src/tests/certificateUi.test.js",
     "test:teachervisibility": "node --test src/tests/teacherOlympiadVisibility.test.js",
-    "backfill:teacher": "node src/scripts/backfillOlympiadTeacher.js"
+    "backfill:teacher": "node src/scripts/backfillOlympiadTeacher.js",
+    "test:live": "node --test src/tests/liveMcq.test.js src/tests/liveMeeting.test.js src/tests/liveAdminConsole.test.js src/tests/liveHttp.test.js"
   },
   "keywords": [],
   "author": "Learniq",
@@ -62,6 +63,7 @@
   "devDependencies": {
     "jsqr": "^1.4.0",
     "nodemon": "^3.1.4",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "socket.io-client": "^4.8.4"
   }
 }

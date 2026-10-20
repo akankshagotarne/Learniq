@@ -19,6 +19,8 @@ const liveSessionSchema = new mongoose.Schema({
   currentParticipants: { type: Number, default: 0 },
   isChatEnabled: { type: Boolean, default: true },
   activeQuiz: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', default: null },
+  // Participant-visibility + permission settings (services/live/meetingConfig.js owns the shape and validates every write).
+  meetingConfig: { type: mongoose.Schema.Types.Mixed, default: undefined },
 }, { timestamps: true });
 
 const liveParticipantSchema = new mongoose.Schema({

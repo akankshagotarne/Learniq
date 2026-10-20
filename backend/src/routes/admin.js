@@ -22,6 +22,13 @@ const exportLimit = rateLimit({
 router.get('/exports', ...adminAuth, exportCtrl.listSections);
 router.get('/exports/:section', ...adminAuth, exportLimit, exportCtrl.exportSection);
 
+// Live Class Management (dashboard data + audit trail). Real-time moderation runs over the moderation-console socket.
+const liveAdminCtrl = require('../controllers/adminLiveController');
+router.get('/live-classes', ...adminAuth, liveAdminCtrl.list);
+router.get('/live-classes/:code', ...adminAuth, liveAdminCtrl.detail);
+router.get('/live-classes/:code/audit', ...adminAuth, liveAdminCtrl.auditTrail);
+router.post('/live-classes/:code/mark-ended', ...adminAuth, liveAdminCtrl.markEnded);
+
 // Stats
 router.get('/stats', ...adminAuth, userCtrl.getAdminStats);
 
