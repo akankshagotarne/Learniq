@@ -94,7 +94,7 @@ for (const vp of VIEWPORTS) {
       const bb = await b.boundingBox(); if (bb) { expect(bb.width, 'control width').toBeGreaterThanOrEqual(44); expect(bb.height, 'control height').toBeGreaterThanOrEqual(44); }
     }
 
-    // chat opens on demand as a sheet / slide-over / docked column, and never overflows
+    // chat opens on demand beside (docked) or under (stacked) the stage, and never overflows
     await s.page.getByTestId('btn-chat').click();
     const chat = s.page.getByTestId('chat-panel'); await expect(chat).toBeVisible();
     const cb = (await chat.boundingBox())!; expect(cb.x + cb.width).toBeLessThanOrEqual(vp.width + 1); expect(cb.x).toBeGreaterThanOrEqual(-1);

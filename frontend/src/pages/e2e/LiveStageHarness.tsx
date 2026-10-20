@@ -1,12 +1,17 @@
 /**
- * Automated-test page (only routed in the `--mode e2e` build): renders the REAL live-class stage with generated video so the layout can be
- * checked at phone / tablet / desktop sizes without a signalling server.  /__e2e/live-stage?mode=camera|screen&cam=on|off
+ * Automated-test page (only routed in the `--mode e2e` build): renders the REAL live-class stage, chat panel, control bar and room layout with
+ * generated video so the layout can be checked at phone / tablet / desktop sizes without a signalling server.
+ *   /__e2e/live-stage?mode=camera|screen&cam=on|off&chat=open|closed&msgs=<n>&fail=1
  * The generated frame is 16:9 with bright markers at its far left and right edges, so any cropping of the camera frame is detectable.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { MainStage, StageBox, Tile } from '../../features/live/Stage';
-import { chooseStage } from '../../features/live/logic';
-import type { RoomParticipant } from '../../features/live/types';
+import { chatPresentation, chooseStage } from '../../features/live/logic';
+import { ChatPanel } from '../../features/live/ChatPanel';
+import { ControlBar } from '../../features/live/ControlBar';
+import { RoomBody, RoomFrame } from '../../features/live/RoomLayout';
+import { useLiveViewport } from '../../features/live/viewport';
+import type { ChatItem, RoomParticipant } from '../../features/live/types';
 
 const makeStream = (label: string, hue: number): MediaStream | null => {
   const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360;
@@ -27,8 +32,17 @@ const LiveStageHarness: React.FC = () => {
   const q = new URLSearchParams(window.location.search);
   const screen = q.get('mode') === 'screen';
   const camOn = q.get('cam') !== 'off';
+  const failSend = q.get('fail') === '1';
+  const [chatOpen, setChatOpen] = useState(q.get('chat') === 'open');
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<ChatItem[]>(() => Array.from({ length: Number(q.get('msgs') || 0) }, (_, i) => ({
+    _id: `m${i}`, senderName: i % 3 === 0 ? 'Nikhil Sir' : 'Student Two', senderRole: i % 3 === 0 ? 'teacher' : 'student', message: `Message number ${i + 1} - a reasonably long line so that it wraps on a narrow phone screen`, createdAt: new Date(2026, 9, 20, 10, i % 60).toISOString(),
+  })));
   const [streams, setStreams] = useState<{ cam: MediaStream | null; screen: MediaStream | null }>({ cam: null, screen: null });
   useEffect(() => { setStreams({ cam: makeStream('CAMERA', 200), screen: makeStream('SCREEN', 20) }); }, []);
+  const { width, landscape, frame } = useLiveViewport();
+  const placement = chatPresentation(width, landscape);
+  const stackedChat = chatOpen && placement === 'stacked';
 
   const participants = useMemo(() => [
     P('H', 'Nikhil Sir', { isHost: true, isTeacher: true, role: 'teacher', isCameraOn: camOn, isScreenSharing: screen }),
@@ -37,27 +51,40 @@ const LiveStageHarness: React.FC = () => {
   const stage = { mode: 'everyone', layout: 'speaker', hostSocketId: 'H', screenShareSocketId: screen ? 'H' : null, spotlightSocketId: null, featuredSocketIds: [] } as any;
   const choice = chooseStage(stage, participants);
   const thumbs = participants.filter((p) => p.socketId !== choice.socketId);
+  const noop = () => undefined;
+
+  const send = async (text: string) => {
+    if (failSend) return { ok: false };
+    setMessages((m) => [...m, { _id: `n${m.length}`, senderName: 'Student One', senderRole: 'student', message: text, createdAt: new Date().toISOString() }]);
+    return { ok: true };
+  };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-[#0b0d1a] text-white overflow-hidden" style={{ height: '100dvh' }} data-testid="live-room">
+    <RoomFrame frame={frame}>
       <header className="flex-shrink-0 flex items-center gap-2 px-3 min-h-[48px] bg-white text-black">LIVE · harness</header>
-      <div className="flex-1 min-h-0 flex">
-        <main className="flex-1 min-w-0 min-h-0 flex flex-col gap-2 p-2 relative">
-          <StageBox>
-            <MainStage choice={choice} participants={participants} streams={{ H: streams.cam as MediaStream }} screens={screen && streams.screen ? { H: streams.screen } : {}}
-              selfSocketId="S1" selfStream={null} selfCamOn={false} hostPresent hostName="Nikhil Sir" reconnecting={false} isHost={false} sharing={false} />
-          </StageBox>
-          <div className="flex-shrink-0 flex gap-2 overflow-x-auto pb-1" data-testid="thumbnails">
-            {thumbs.map((p) => (
-              <div key={p.socketId} className="w-24 h-16 flex-shrink-0">
-                <Tile p={p} compact stream={null} isSelf={p.socketId === 'S1'} selfStream={null} selfCamOn={false} selfMicOn className="w-full h-full" />
-              </div>
-            ))}
-          </div>
-        </main>
+      <RoomBody chatOpen={chatOpen} placement={placement}
+        chat={chatOpen && <ChatPanel mode={placement} messages={messages} canChat chatMode="everyone" isHost={false} onSend={send} onClose={() => setChatOpen(false)} draft={draft} onDraftChange={setDraft} />}
+        stage={(
+          <>
+            <StageBox compact={stackedChat}>
+              <MainStage choice={choice} participants={participants} streams={{ H: streams.cam as MediaStream }} screens={screen && streams.screen ? { H: streams.screen } : {}}
+                selfSocketId="S1" selfStream={null} selfCamOn={false} hostPresent hostName="Nikhil Sir" reconnecting={false} isHost={false} sharing={false} />
+            </StageBox>
+            <div className={`flex-shrink-0 flex gap-2 overflow-x-auto pb-1 ${stackedChat ? 'hidden' : ''}`} data-testid="thumbnails">
+              {thumbs.map((p) => (
+                <div key={p.socketId} className="w-24 h-16 flex-shrink-0">
+                  <Tile p={p} compact stream={null} isSelf={p.socketId === 'S1'} selfStream={null} selfCamOn={false} selfMicOn className="w-full h-full" />
+                </div>
+              ))}
+            </div>
+          </>
+        )} />
+      <div data-testid="controls">
+        <ControlBar isMicOn={false} isCamOn={false} isSharing={false} canAudio canVideo canScreen={false} screenSupported={false} chatOpen={chatOpen} unread={0} peopleOpen={false} waiting={0}
+          isHost={false} mcqActive={false} onMic={noop} onCam={noop} onScreen={noop} onChat={() => setChatOpen((v) => !v)} onPeople={noop} onReaction={noop} onScoreboard={noop} onMcq={noop}
+          onSettings={noop} onEnd={noop} onLeave={noop} />
       </div>
-      <nav className="flex-shrink-0 flex justify-center gap-2 p-2 bg-white" data-testid="controls"><button className="min-h-[44px] px-4 bg-gray-200 text-black rounded-xl">Mic</button><button className="min-h-[44px] px-4 bg-gray-200 text-black rounded-xl">Camera</button><button className="min-h-[44px] px-4 bg-gray-200 text-black rounded-xl">Leave</button></nav>
-    </div>
+    </RoomFrame>
   );
 };
 export default LiveStageHarness;
