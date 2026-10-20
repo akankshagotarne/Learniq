@@ -273,18 +273,15 @@ test.describe('navigation on a phone', () => {
 });
 
 test.describe('live classroom on a phone', () => {
-  test('video gets the full width; chat opens as an overlay and closes', async ({ page }) => {
+  // The room itself (teacher video on the main stage, chat as a bottom sheet, question popup, rank card) needs the signalling server:
+  // those checks run in real Chromium in e2e/real-live (npm run test:e2e:live). Here, with no server, the join screen must fit.
+  test('the joining screen fits the phone and offers no chat in front of the stage', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await mockApi(page, 'student');
     await page.goto('/live/MATH10');
-    await expect(page.getByText('Class Chat')).toBeHidden(); // closed by default on phones
-    await page.getByTitle('Toggle chat').click();
-    const chat = page.getByText('Class Chat');
-    await expect(chat).toBeVisible();
-    await expect(page.getByPlaceholder('Type a message...')).toBeVisible();
+    await expect(page.getByTestId('screen-joining')).toBeVisible();
+    await expect(page.getByText('Class Chat')).toBeHidden();
     await expectNoOverflow(page);
-    await page.getByRole('button', { name: 'Close chat' }).click();
-    await expect(chat).toBeHidden();
   });
 });
 

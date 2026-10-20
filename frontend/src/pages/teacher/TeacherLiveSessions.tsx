@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { MeetingSettingsForm, summarize } from '../../features/live/MeetingSettings';
+import { DEFAULT_CONFIG, type MeetingConfig } from '../../features/live/types';
 import { Link } from 'react-router-dom';
 import { Radio, Plus, Copy, CheckCircle, Play, Square, Clock, Users, Link2 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
@@ -8,12 +10,18 @@ import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import { ALL_SUBJECTS } from '../../constants/olympiadSubjects';
 
+/** the server owns selection / spotlight / presenters / version; only the host's chosen settings are sent */
+const stripServerFields = (c: MeetingConfig) => { const { selectedUserIds, presenterUserIds, spotlightUserId, locked, configVersion, ...rest } = c as any; return rest; };
+
 const TeacherLiveSessions: React.FC = () => {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [meetingCfg, setMeetingCfg] = useState<MeetingConfig>(DEFAULT_CONFIG);
+  const [editing, setEditing] = useState<{ id: string; title: string; cfg: MeetingConfig } | null>(null);
+  const [savingCfg, setSavingCfg] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
 
   useEffect(() => {
@@ -37,16 +45,31 @@ const TeacherLiveSessions: React.FC = () => {
         ...form,
         standard: parseInt(form.standard),
         scheduledAt: form.scheduledAt || new Date().toISOString(),
+        meetingConfig: stripServerFields(meetingCfg),
       });
       toast.success('Live session created!');
       setSessions(prev => [res.data.session, ...prev]);
       setShowCreate(false);
       setForm({ title: '', description: '', subject: 'Mathematics', standard: '10', scheduledAt: '' });
+      setMeetingCfg(DEFAULT_CONFIG);
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to create session');
     } finally {
       setCreating(false);
     }
+  };
+
+  const saveCfg = async () => {
+    if (!editing) return;
+    setSavingCfg(true);
+    try {
+      const res = await api.put(`/teacher/live-sessions/${editing.id}/meeting-config`, { meetingConfig: stripServerFields(editing.cfg) });
+      setSessions(prev => prev.map(x => x._id === editing.id ? ({ ...x, meetingConfig: res.data.meetingConfig } as any) : x));
+      toast.success('Meeting settings saved.');
+      setEditing(null);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Settings were not saved.');
+    } finally { setSavingCfg(false); }
   };
 
   const handleStart = async (id: string) => {
@@ -122,6 +145,11 @@ const TeacherLiveSessions: React.FC = () => {
                     <label className="input-label">Schedule Date & Time (optional)</label>
                     <input type="datetime-local" value={form.scheduledAt} onChange={e => setForm(p => ({ ...p, scheduledAt: e.target.value }))} className="input-field" />
                   </div>
+                  <fieldset className="border border-border-subtle rounded-xl p-3" data-testid="meeting-setup">
+                    <legend className="px-1 text-sm font-semibold text-text-primary">Meeting setup &amp; participant visibility</legend>
+                    <MeetingSettingsForm value={meetingCfg} onChange={patch => setMeetingCfg(c => ({ ...c, ...patch }))} idPrefix="create" />
+                    <p className="text-xs text-text-muted mt-2">{summarize(meetingCfg)}. You can change this later, even during the class.</p>
+                  </fieldset>
                   <div className="flex gap-3 pt-2">
                     <button type="submit" disabled={creating} className="btn-primary flex-1">
                       {creating ? 'Creating...' : 'Create Session'}
@@ -129,6 +157,20 @@ const TeacherLiveSessions: React.FC = () => {
                     <button type="button" onClick={() => setShowCreate(false)} className="btn-outline flex-1">Cancel</button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {editing && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+              <div role="dialog" aria-modal="true" aria-label="Meeting settings" className="bg-surface border border-border-subtle rounded-t-3xl sm:rounded-2xl shadow-xl p-5 w-full max-w-lg max-h-[100dvh] sm:max-h-[90dvh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+                <h2 className="text-text-primary font-bold text-lg mb-1 font-heading">Meeting settings</h2>
+                <p className="text-text-secondary text-xs mb-4 truncate">{editing.title}</p>
+                <MeetingSettingsForm value={editing.cfg} onChange={patch => setEditing(e => e && ({ ...e, cfg: { ...e.cfg, ...patch } }))} idPrefix="edit" />
+                <div className="flex gap-3 pt-4">
+                  <button onClick={saveCfg} disabled={savingCfg} className="btn-primary flex-1 min-h-[48px]">{savingCfg ? 'Saving...' : 'Save settings'}</button>
+                  <button onClick={() => setEditing(null)} className="btn-outline flex-1 min-h-[48px]">Cancel</button>
+                </div>
               </div>
             </div>
           )}
@@ -181,6 +223,10 @@ const TeacherLiveSessions: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap md:flex-col gap-2 md:flex-shrink-0">
+                      {session.status === 'scheduled' && (
+                        <button onClick={() => setEditing({ id: session._id, title: session.title, cfg: { ...DEFAULT_CONFIG, ...((session as any).meetingConfig || {}) } })}
+                          className="btn-outline text-sm py-2 px-4 min-h-[44px]" data-testid="edit-meeting-settings">Meeting settings</button>
+                      )}
                       {session.status === 'scheduled' && (
                         <button onClick={() => handleStart(session._id)}
                           className="btn-primary text-sm py-2 px-4 flex items-center gap-1.5">

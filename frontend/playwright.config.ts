@@ -10,7 +10,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/real-media/**', // needs fake camera/mic flags + a real signalling server: npm run test:e2e:media
+  testIgnore: ['**/real-media/**', '**/real-live/**'], // need fake camera/mic flags + a real signalling server: npm run test:e2e:media / test:e2e:live
   timeout: 180_000,
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,

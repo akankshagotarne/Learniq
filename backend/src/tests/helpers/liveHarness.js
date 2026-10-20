@@ -56,10 +56,10 @@ const startLive = async (opts = {}) => {
 
   const { Server } = require('socket.io');
   const { io: ioClient } = require('socket.io-client');
-  const server = http.createServer();
+  const server = http.createServer(opts.app);
   const io = new Server(server, { cors: { origin: '*' } });
   const manager = setupSocket(io, { engineOptions: { windowMs: opts.windowMs || 15000, rankingMs: opts.rankingMs || 5000 }, log: { error: () => {}, warn: () => {}, log: () => {} } });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  await new Promise((r) => server.listen(opts.port || 0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${server.address().port}`;
 
   const clients = new Set();
