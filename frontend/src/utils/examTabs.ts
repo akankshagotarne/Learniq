@@ -1,32 +1,54 @@
 /**
- * Which Exams-page tab an Olympiad card belongs to. Pure function, driven only by what the backend returned.
+ * Which Exams-page tab a card belongs to. Pure functions, driven only by what the backend returned for THIS student.
  *
- * Root cause of the old behaviour: every card whose EXAM was submitted (state 'completed') went straight to "Completed",
- * even though the paid purchase also includes a teacher interview that is not done yet.
- *
- * Rules:
- *  - upcoming  → Upcoming (unchanged)
+ * Olympiad cards: the backend classifies every exam per student (`tab`: available | upcoming | completed | expired) from the exam's schedule
+ * AND that student's own registration / attempt records, and only ever returns exams of the student's own standard (see
+ * backend/src/services/studentExamTabs.js). The only thing added here is the existing teacher-interview rule:
  *  - exam submitted AND the purchase has an interview that is not COMPLETED (not requested, waiting, live, evaluation pending,
- *    cancelled, failed) → Available, so the student can still find "Start Interview"
- *  - exam submitted AND interview COMPLETED (evaluation submitted) → Completed
- *  - exam submitted and NO interview applies to this card (e.g. engineering mock test, or no interview information) → Completed (as before)
- *  - everything else → Available (as before)
+ *    cancelled, failed) -> Available, so the student can still find "Start Interview"
+ *  - exam submitted and NO interview applies (engineering mock test, or no interview information) -> Completed
+ * An exam the student attempted is never Expired; a closed exam they never attempted is Expired (registered or not).
  */
-export type ExamTab = 'available' | 'upcoming' | 'completed';
+export type ExamTab = 'available' | 'upcoming' | 'completed' | 'expired';
 
-const AVAILABLE_STATES = ['pay', 'ready', 'in_progress', 'closed', 'request', 'pending', 'rejected', 'disabled'];
+const AVAILABLE_STATES = ['pay', 'ready', 'in_progress', 'request', 'pending', 'rejected', 'disabled'];
+
+type InterviewInfo = { stage?: string; workflowComplete?: boolean; interviewWindow?: string; interview?: unknown } | null | undefined;
+
+/** tab from the per-student state alone (used when an older backend response carries no `tab`) */
+const tabFromState = (state: string): ExamTab | null => {
+  if (state === 'upcoming') return 'upcoming';
+  if (state === 'completed') return 'completed';
+  if (state === 'closed') return 'expired';
+  return AVAILABLE_STATES.includes(state) ? 'available' : null;
+};
 
 export const olympiadTab = (
-  exam: { state: string; accessMode?: string; interviewUnlocked?: boolean },
-  interview?: { stage?: string; workflowComplete?: boolean } | null,
+  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean },
+  interview?: InterviewInfo,
 ): ExamTab | null => {
-  if (exam.state === 'upcoming') return 'upcoming';
-  if (exam.state === 'completed') {
-    const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
-    if (needsInterview && !interview!.workflowComplete) return 'available';
-    // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
-    if (exam.accessMode !== 'approval' && exam.interviewUnlocked === false) return 'available';
-    return 'completed';
-  }
-  return AVAILABLE_STATES.includes(exam.state) ? 'available' : null;
+  const tab = exam.tab || tabFromState(exam.state);
+  if (tab !== 'completed') return tab;
+  const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
+  if (needsInterview && !interview!.workflowComplete) return 'available';
+  // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
+  if (exam.accessMode !== 'approval' && exam.interviewUnlocked === false) return 'available';
+  return 'completed';
 };
+
+/**
+ * Regular (teacher) exams: the tabs a card appears in. Mirrors backend classifyRegular. A retake-able exam the student already attempted
+ * stays in Available AND Completed (the existing retake workflow); an expired exam is Expired only when never attempted.
+ */
+export const regularTabs = (e: { availability?: string; myAttemptCount?: number; canAttempt?: boolean }): ExamTab[] => {
+  const attempted = (e.myAttemptCount || 0) > 0;
+  const tabs: ExamTab[] = [];
+  if (e.availability === 'available' && (e.canAttempt || !attempted)) tabs.push('available');
+  if (e.availability === 'upcoming') tabs.push('upcoming');
+  if (attempted) tabs.push('completed');
+  if (e.availability === 'expired' && !attempted) tabs.push('expired');
+  return tabs;
+};
+
+/** a student standard the exams can be matched against: 1-10 or 99 ("Others"); anything else means the profile is incomplete */
+export const hasValidStandard = (v: unknown): boolean => { const n = typeof v === 'string' && /^\d{1,2}$/.test(v.trim()) ? Number(v) : v; return typeof n === 'number' && Number.isInteger(n) && ((n >= 1 && n <= 10) || n === 99); };

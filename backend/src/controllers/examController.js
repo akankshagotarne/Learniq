@@ -1,5 +1,6 @@
 const { Exam, ExamAttempt } = require('../models/Exam');
 const User = require('../models/User');
+const { resolveStandard } = require('../services/studentExamTabs');
 const attempts = require('../services/examAttempts');
 const proctoring = require('../services/proctoring/service');
 const { validatePolicyInput, applyPolicyEdit, publicPolicy, resolvePolicy, PolicyValidationError } = require('../services/proctoring/policy');
@@ -184,13 +185,17 @@ const getTeacherExams = async (req, res) => {
 // ─────────────────────────────────────────────
 const getStudentExams = async (req, res) => {
   try {
-    const { standard, subject } = req.query;
+    const { subject } = req.query; // NOTE: a `standard` query parameter is ignored - the student's saved standard is the only source
     const now = new Date();
+    // the student's own standard comes from the authenticated account; a missing / invalid one lists nothing (never every standard)
+    const studentStandard = req.user.role === 'student' ? resolveStandard(req.user) : null;
+    if (req.user.role === 'student' && studentStandard === null) return res.json({ success: true, exams: [], standardResolved: false });
+    if (req.user.role !== 'student') return res.json({ success: true, exams: [] });
 
     const filter = {
       isPublished: true,
       isActive: true,
-      ...(standard ? { standard: parseInt(standard) } : {}),
+      standard: studentStandard,
       ...(subject ? { subject } : {}),
     };
 
@@ -242,7 +247,7 @@ const getStudentExams = async (req, res) => {
       };
     });
 
-    res.json({ success: true, exams: result });
+    res.json({ success: true, exams: result, standardResolved: true, standard: studentStandard });
   } catch (err) {
     console.error('getStudentExams error:', err);
     res.status(500).json({ success: false, message: 'Server error.' });
@@ -277,6 +282,10 @@ const getExam = async (req, res) => {
     // Check availability
     const now = new Date();
     if (!isTeacherOrAdmin) {
+      // a student only opens exams of their own saved standard (a typed-in id / link of another standard is refused)
+      if (req.user.role === 'student' && exam.standard !== resolveStandard(req.user)) {
+        return res.status(403).json({ success: false, code: 'WRONG_STANDARD', message: `Only Standard ${exam.standard} students can open this exam.` });
+      }
       if (!exam.isPublished) return res.status(403).json({ success: false, message: 'This exam is not published.' });
       if (exam.scheduledStart && now < exam.scheduledStart) {
         return res.status(403).json({ success: false, message: 'This exam has not started yet.' });
@@ -326,6 +335,9 @@ const startAttempt = async (req, res) => {
     const exam = await Exam.findById(req.params.id);
     if (!exam || !exam.isPublished) {
       return res.status(404).json({ success: false, message: 'Exam not found or not available.' });
+    }
+    if (exam.standard !== resolveStandard(req.user)) {
+      return res.status(403).json({ success: false, code: 'WRONG_STANDARD', message: `Only Standard ${exam.standard} students can take this exam.` });
     }
 
     const now = new Date();
