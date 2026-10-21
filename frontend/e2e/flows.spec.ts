@@ -75,7 +75,7 @@ test.describe('student exams page on a phone', () => {
     await expectInside(pay, payCard);
     expect((await pay.boundingBox())!.height).toBeGreaterThanOrEqual(44); // touch target
 
-    const readyCard = page.getByTestId('olympiad-card').filter({ hasText: 'Payment Verified' });
+    const readyCard = page.getByTestId('olympiad-card').filter({ hasText: 'Exam Unlocked' });
     const start = readyCard.getByRole('link', { name: /Start Exam/ });
     await expectInside(start, readyCard);
     await expect(start).toHaveAttribute('href', '/student/olympiad/oly-ready');

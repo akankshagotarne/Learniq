@@ -48,13 +48,14 @@ test.describe('student interview', () => {
     const locked = page.getByTestId('interview-locked');
     await expect(locked).toBeVisible(); await expect(locked).toBeDisabled();
     await expect(locked).toHaveText(/Start Interview — Locked/);
-    await expect(page.getByText('Submit your Olympiad exam to unlock the interview.')).toBeVisible();
-    const card = page.getByTestId('olympiad-card').filter({ has: locked });
-    const [a, b] = await Promise.all([card.getByRole('link', { name: /Start Exam/ }).boundingBox(), locked.boundingBox()]);
-    expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1); expect(b!.y - (a!.y + a!.height)).toBeLessThan(24);
+    await expect(page.getByText('Complete and submit your exam to become eligible.')).toBeVisible();
+    // the interview is its own card, directly below the exam card of the same exam
+    const pair = page.getByTestId('olympiad-pair').filter({ has: locked });
+    const [a, b] = await Promise.all([pair.getByRole('link', { name: /Start Exam/ }).boundingBox(), locked.boundingBox()]);
+    expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
 
     // submitted, interview not requested → AVAILABLE tab (not Completed), score kept, Start Interview shown
-    const done = page.getByTestId('olympiad-card').filter({ has: page.getByTestId('interview-start') });
+    const done = page.getByTestId('olympiad-pair').filter({ has: page.getByTestId('interview-start') });
     await expect(done).toBeVisible();
     await expect(done.getByText(/Your score/)).toBeVisible();
     await expect(done.getByTestId('interview-badge')).toContainText('Interview Pending');
