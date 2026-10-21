@@ -76,10 +76,12 @@ const questionDoc = (examId, paper, q) => {
     visual: q.visual ? String(q.visual).trim() : undefined, image: q.image || undefined,
     options: q.options.map((o) => String(o).trim()), correctAnswer: q.answer, marks: q.marks ?? 1,
     explanation: q.explanation || undefined, sourceRef: `${cfg.PAPER_SET}:std${paper.standard}:q${q.n}`,
+    provenance: q.provenance ? { kind: q.provenance.kind, fields: q.provenance.fields, original: q.provenance.original || undefined, basis: q.provenance.basis } : undefined,
   };
 };
 const FIELDS = ['subject', 'section', 'sectionMr', 'questionText', 'questionTextMr', 'visual', 'image', 'correctAnswer', 'marks', 'explanation', 'sourceRef'];
-const differs = (existing, doc) => FIELDS.some((f) => (existing[f] ?? undefined) !== (doc[f] ?? undefined)) || JSON.stringify(existing.options || []) !== JSON.stringify(doc.options);
+const provKey = (p) => (p && p.kind ? JSON.stringify({ kind: p.kind, fields: [...(p.fields || [])], original: p.original || null, basis: p.basis || null }) : null);
+const differs = (existing, doc) => FIELDS.some((f) => (existing[f] ?? undefined) !== (doc[f] ?? undefined)) || JSON.stringify(existing.options || []) !== JSON.stringify(doc.options) || provKey(existing.provenance) !== provKey(doc.provenance);
 
 /** The event must be the real 24 Oct 2026 event: never the original (17 Oct / legacy) one, never a cancelled one. */
 const loadTarget = async (eventId) => {
@@ -113,7 +115,7 @@ const imageState = (image) => {
 
 const planStandard = async (event, standard, exam) => {
   const { paper, problems, warnings } = loadPaper(standard);
-  const out = { warnings: warnings || [], standard, source: paper && paper.source, found: paper ? (paper.questions || []).length : 0, expected: cfg.expectedQuestions[standard], examId: exam ? oid(exam) : null, examExists: !!exam, problems, review: [], inserted: 0, updated: 0, unchanged: 0, removed: 0, duplicatesAvoided: 0, imagesAssociated: 0, imageFiles: [], locked: false, lockedReason: null, durationInPdf: paper ? paper.durationMinutes : null, durationNow: exam ? exam.durationMinutes : null, sourceIssues: paper ? paper.sourceIssues || [] : [] };
+  const out = { completions: paper ? (paper.completions || []) : [], warnings: warnings || [], standard, source: paper && paper.source, found: paper ? (paper.questions || []).length : 0, expected: cfg.expectedQuestions[standard], examId: exam ? oid(exam) : null, examExists: !!exam, problems, review: [], inserted: 0, updated: 0, unchanged: 0, removed: 0, duplicatesAvoided: 0, imagesAssociated: 0, imageFiles: [], locked: false, lockedReason: null, durationInPdf: paper ? paper.durationMinutes : null, durationNow: exam ? exam.durationMinutes : null, sourceIssues: paper ? paper.sourceIssues || [] : [] };
   if (!paper || problems.length) return { out, paper: null };
   out.review = reviewOf(standard, paper);
   const attempts = exam ? await OlympiadAttempt.countDocuments({ exam: exam._id }) : 0;
@@ -140,7 +142,7 @@ const summarize = (rows) => ({
   standards: rows.length,
   found: rows.reduce((s, r) => s + r.found, 0), inserted: rows.reduce((s, r) => s + r.inserted, 0), updated: rows.reduce((s, r) => s + r.updated, 0),
   unchanged: rows.reduce((s, r) => s + r.unchanged, 0), duplicatesAvoided: rows.reduce((s, r) => s + r.duplicatesAvoided, 0),
-  manualReview: rows.reduce((s, r) => s + r.review.length, 0), sourceWarnings: rows.reduce((s, r) => s + (r.warnings || []).length, 0), imagesAssociated: rows.reduce((s, r) => s + r.imagesAssociated, 0),
+  manualReview: rows.reduce((s, r) => s + r.review.length, 0), sourceWarnings: rows.reduce((s, r) => s + (r.warnings || []).length, 0), completed: rows.reduce((s, r) => s + (r.completions || []).length, 0), imagesAssociated: rows.reduce((s, r) => s + r.imagesAssociated, 0),
   examsToCreate: rows.filter((r) => !r.examExists).length, locked: rows.filter((r) => r.locked).length,
 });
 
@@ -227,7 +229,7 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
         Object.assign(set, {
           sections, totalQuestions: paper.questions.length, totalMarks: paper.questions.reduce((m, q) => m + (q.marks ?? 1), 0),
           description: paper.title,
-          paperImport: { set: cfg.PAPER_SET, source: paper.source, importedAt: now, questionCount: paper.questions.length, review: row.review },
+          paperImport: { set: cfg.PAPER_SET, source: paper.source, importedAt: now, questionCount: paper.questions.length, review: row.review, completions: paper.completions || [] },
         });
         if (applyDurations && paper.durationMinutes && paper.durationMinutes !== exam.durationMinutes) set.durationMinutes = paper.durationMinutes;
       }
@@ -243,13 +245,24 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
     await OlympiadEvent.updateOne({ _id: event._id }, { $set: evSet });
 
     const fresh = await OlympiadEvent.findById(event._id);
+    const readiness = await readinessOf(event._id);
     return {
       dryRun: false, event: { _id: oid(fresh), name: fresh.name, state: fresh.state, paperSet: fresh.paperSet }, paperSet: cfg.PAPER_SET,
       settings: settingsDiff(fresh), rows, summary: summarize(rows), blocking: [], canApply: true,
       needsReview: rows.filter((r) => r.review.length).map((r) => ({ standard: r.standard, review: r.review })),
+      readiness,
       note: 'The event stays in its current state; publishing is a separate step and is blocked while a paper has unresolved review items.',
     };
   } finally { locks.delete(key); }
+};
+
+/** Server-side completeness check of every exam of the event (what publishing will enforce). Reasons only - never answers. */
+const readinessOf = async (eventId) => {
+  const { validateExam } = require('./paperValidation');
+  const exams = await events.examsOfEvent(eventId);
+  const rows = [];
+  for (const e of exams) rows.push(await validateExam(e));
+  return { ready: rows.length > 0 && rows.every((r) => r.ok), standards: rows };
 };
 
 /** Exams of an event whose imported paper still has unresolved content (blocks publishing). */
@@ -259,4 +272,4 @@ const unresolvedReview = async (eventId) => {
     .map((e) => ({ standard: e.standard, review: e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) }));
 };
 
-module.exports = { loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, loadTarget };
+module.exports = { loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, readinessOf, loadTarget };

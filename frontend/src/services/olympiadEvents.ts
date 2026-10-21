@@ -17,14 +17,17 @@ export interface PaperImportRow {
   standard: number; found: number; expected: number; examExists: boolean; created?: boolean;
   inserted: number; updated: number; unchanged: number; removed: number; duplicatesAvoided: number; imagesAssociated: number;
   review: { question: number; issue: string }[]; warnings: { question: number; issue: string }[]; problems: string[];
+  completions: { question: number; kind: string; fields: string[]; original?: string; basis: string }[];
   locked: boolean; lockedReason: string | null; durationInPdf: number | null; durationNow: number | null; sourceIssues: string[];
 }
 export interface PaperImportReport {
   dryRun: boolean; paperSet: string; event: { _id: string; name: string; state: string };
   settings: { field: string; current: unknown; target: unknown; changed: boolean }[];
   rows: PaperImportRow[];
-  summary: { standards: number; found: number; inserted: number; updated: number; unchanged: number; duplicatesAvoided: number; manualReview: number; sourceWarnings: number; imagesAssociated: number; examsToCreate: number; locked: number };
+  summary: { standards: number; found: number; inserted: number; updated: number; unchanged: number; duplicatesAvoided: number; manualReview: number; sourceWarnings: number; completed: number; imagesAssociated: number; examsToCreate: number; locked: number };
   blocking: { standard: number; problems: string[] }[]; canApply: boolean; note?: string;
+  /** server-side completeness check of every paper of the event (what publishing enforces) */
+  readiness?: { ready: boolean; standards: { standard: number; ok: boolean; count: number; issues: { question: number | null; issue: string }[] }[] };
 }
 export interface EventOption { _id: string; name: string; examDate: string; examDateIST: string; status: EventStatus; state: string; standards: number[]; isLegacy: boolean }
 export interface CreateEventPayload {

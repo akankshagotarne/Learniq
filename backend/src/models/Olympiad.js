@@ -97,6 +97,8 @@ const olympiadExamSchema = new mongoose.Schema({
     importedAt: { type: Date },
     questionCount: { type: Number },
     review: { type: [new mongoose.Schema({ question: Number, issue: String }, { _id: false })], default: undefined },
+    // content authored to complete / repair the source (see OlympiadQuestion.provenance): reviewed corrections, NOT open items
+    completions: { type: [new mongoose.Schema({ question: Number, kind: String, fields: [String], original: String, basis: String }, { _id: false })], default: undefined },
   },
 
   // Online proctoring rules (admin-configured; off until enabled) - see services/proctoring/policy.js
@@ -119,6 +121,9 @@ const olympiadQuestionSchema = new mongoose.Schema({
   visual: { type: String, trim: true },
   // Stable identity of an imported question ('<paper set>:std<N>:q<n>'): re-running an import updates in place and never duplicates.
   sourceRef: { type: String, trim: true },
+  // Present only when part of this question was AUTHORED by LearnIQ because the source paper was incomplete or defective (never for text
+  // that appeared in the source). Lets administrators tell restored content apart from the original paper. Contains no answer key.
+  provenance: { kind: { type: String, trim: true }, fields: { type: [String], default: undefined }, original: { type: String, trim: true }, basis: { type: String, trim: true } },
   options: {
     type: [{ type: String, trim: true }],
     validate: [(v) => v.length >= 2 && v.length <= 6, 'A question needs between 2 and 6 options.'],

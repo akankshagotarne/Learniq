@@ -35,7 +35,7 @@ const PaperImportDialog: React.FC<{ event: OlympiadEventRow; onClose: () => void
           <p className="text-xs text-text-muted">{applied ? 'Import finished.' : 'Preview only — nothing has been changed yet.'} Standards 1–10 are imported into this event&apos;s own exams. Re-running updates in place and never duplicates.</p>
           <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="paper-import-summary">
             {[['Questions found', s.found], [applied ? 'Inserted' : 'To insert', s.inserted], [applied ? 'Updated' : 'To update', s.updated], ['Unchanged', s.unchanged],
-              ['Duplicates avoided', s.duplicatesAvoided], ['Needs review', s.manualReview], ['Images linked', s.imagesAssociated], ['Papers locked', s.locked]].map(([k, v]) => (
+              ['Duplicates avoided', s.duplicatesAvoided], ['Needs review', s.manualReview], ['Completed by LearnIQ', s.completed], ['Images linked', s.imagesAssociated], ['Papers locked', s.locked]].map(([k, v]) => (
               <div key={String(k)} className="rounded-xl bg-surface-alt border border-border-subtle p-2"><dt className="text-[11px] text-text-muted">{k}</dt><dd className="font-bold text-text-primary">{String(v)}</dd></div>))}
           </dl>
           <div className="overflow-x-auto"><table className="w-full text-xs min-w-[520px]"><thead><tr className="text-left text-text-muted"><th className="py-1 pr-2">Std</th><th>Found</th><th>Insert</th><th>Update</th><th>Same</th><th>Review</th><th>Note</th></tr></thead>
@@ -48,6 +48,16 @@ const PaperImportDialog: React.FC<{ event: OlympiadEventRow; onClose: () => void
               <ul className="list-disc pl-5 mt-1 text-xs">{report.rows.flatMap(r => r.review.map(x => <li key={`${r.standard}-${x.question}`}>Standard {r.standard}, question {x.question}: {x.issue}</li>))}</ul>
               <p className="text-xs mt-1">The event cannot be published while an item is open, unless you publish with an explicit acknowledgement.</p>
             </div>)}
+          {report.rows.some(r => r.completions.length) && (
+            <div className="rounded-xl border border-sky-300 bg-sky-50 text-sky-900 p-3" data-testid="paper-import-completions">
+              <p className="font-semibold">Completed by LearnIQ — not text from the source PDF</p>
+              <ul className="list-disc pl-5 mt-1 text-xs">{report.rows.flatMap(r => r.completions.map(x => <li key={`c${r.standard}-${x.question}`}>Standard {r.standard}, question {x.question} ({x.kind === 'authored-completion' ? 'missing options and answer line authored' : 'duplicate wrong option replaced'}): {x.basis}</li>))}</ul>
+              <p className="text-xs mt-1">These are recorded corrections, not open items; they do not block publishing.</p>
+            </div>)}
+          {report.readiness && (
+            report.readiness.ready
+              ? <p className="flex items-center gap-1.5 text-emerald-700 text-xs" data-testid="paper-readiness"><CheckCircle2 className="w-4 h-4" /> All {report.readiness.standards.length} papers pass the completeness checks ({report.readiness.standards.map(r => `Std ${r.standard}: ${r.count}`).join(', ')}).</p>
+              : <div className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-xs" role="alert" data-testid="paper-readiness"><p className="font-semibold">Not ready to publish</p><ul className="list-disc pl-5">{report.readiness.standards.filter(r => !r.ok).flatMap(r => r.issues.map(x => <li key={`i${r.standard}-${x.question}-${x.issue}`}>Standard {r.standard}{x.question ? `, question ${x.question}` : ''}: {x.issue}</li>))}</ul></div>)}
           {report.rows.some(r => r.warnings.length) && <details className="text-xs text-text-secondary"><summary className="cursor-pointer">Source notes ({s.sourceWarnings})</summary><ul className="list-disc pl-5 mt-1">{report.rows.flatMap(r => r.warnings.map(x => <li key={`w${r.standard}-${x.question}`}>Standard {r.standard}, question {x.question}: {x.issue}</li>))}</ul></details>}
           <details className="text-xs text-text-secondary"><summary className="cursor-pointer">Event settings applied with the import</summary>
             <ul className="list-disc pl-5 mt-1">{report.settings.map(x => <li key={x.field}>{x.field}: {String(x.target)} {x.changed ? '' : '(already set)'}</li>)}</ul></details>

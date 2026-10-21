@@ -164,10 +164,12 @@ test('A: the dry run writes NOTHING and reports found / to-insert / review / ima
   const r = await adminCall('GET', `/api/olympiad/admin/events/${O.e24._id}/paper-import`);
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.dryRun, true); assert.equal(r.body.canApply, true);
-  assert.equal(r.body.summary.standards, 10); assert.equal(r.body.summary.found, 3 * 40 + 7 * 60 - 1, 'Std 9 has 59 of 60 questions in the source');
-  assert.equal(r.body.summary.inserted, 539); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.duplicatesAvoided, 0);
-  assert.equal(r.body.summary.manualReview, 1); assert.equal(r.body.summary.imagesAssociated, 1);
-  assert.deepEqual(r.body.rows.find((x) => x.standard === 9).review.map((x) => x.question), [57]);
+  assert.equal(r.body.summary.standards, 10); assert.equal(r.body.summary.found, 3 * 40 + 7 * 60, 'every paper is complete: 540 questions');
+  assert.equal(r.body.summary.inserted, 540); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.duplicatesAvoided, 0);
+  assert.equal(r.body.summary.manualReview, 0, 'no unresolved item remains'); assert.equal(r.body.summary.sourceWarnings, 0); assert.equal(r.body.summary.imagesAssociated, 1);
+  assert.equal(r.body.summary.completed, 3, 'Std 9 Q57 plus two repaired duplicate distractors are listed as completed by LearnIQ');
+  assert.deepEqual(r.body.rows.find((x) => x.standard === 9).review, []); assert.equal(r.body.rows.find((x) => x.standard === 9).found, 60);
+  assert.deepEqual(r.body.rows.find((x) => x.standard === 9).completions.map((x) => [x.question, x.kind]), [[57, 'authored-completion']]);
   assert.equal(fake.OlympiadQuestion.docs.length, before, 'a dry run never writes');
   assert.ok(r.body.settings.some((s) => s.field === 'examFee' && s.target === 15 && s.changed));
 });
@@ -181,9 +183,9 @@ test('B: the import is admin-only', async () => {
 test('C: apply imports each standard into ITS OWN exam, with sections, EN+Marathi text, emoji visuals and the diagram image; the answer key never appears in the report', async () => {
   const r = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/paper-import`, {});
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.summary.inserted, 539);
-  assert.doesNotMatch(r.text, /correctAnswer|"answer"/, 'no answer key in the import report');
-  for (const [std, n] of Object.entries({ 1: 40, 2: 40, 3: 40, 4: 60, 5: 60, 6: 60, 7: 60, 8: 60, 9: 59, 10: 60 })) {
+  assert.equal(r.body.summary.inserted, 540);
+  assert.doesNotMatch(r.text, /correctAnswer|"answer":/, 'no answer key in the import report (the word "answer" only appears as a provenance field label)');
+  for (const [std, n] of Object.entries({ 1: 40, 2: 40, 3: 40, 4: 60, 5: 60, 6: 60, 7: 60, 8: 60, 9: 60, 10: 60 })) {
     assert.equal(questionsOf(std).length, n, `Std ${std}`);
     const ex = fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x24[std]._id));
     assert.equal(ex.totalQuestions, n); assert.equal(ex.totalMarks, n); assert.ok(ex.sections.length >= 4, `sections of Std ${std}`);
@@ -199,20 +201,46 @@ test('C: apply imports each standard into ITS OWN exam, with sections, EN+Marath
   for (const std of [1, 5, 10]) for (const q of questionsOf(std)) assert.ok(Number.isInteger(q.correctAnswer) && q.correctAnswer >= 0 && q.correctAnswer < q.options.length);
 });
 
-test('D: Std 9 question 57 is incomplete in the source: it is NOT invented, it is flagged, and it blocks publishing until acknowledged', async () => {
-  assert.equal(questionsOf(9).find((q) => q.questionNumber === 57), undefined);
+test('D: Std 9 Q57 is complete: stem and A/B from the PDF, authored C (correct) and D, stored key = C, section / marks / exam correct, provenance recorded', async () => {
+  const q = questionsOf(9).find((x) => x.questionNumber === 57);
+  assert.ok(q, 'Q57 exists'); assert.equal(questionsOf(9).filter((x) => x.questionNumber === 57).length, 1);
+  assert.equal(q.questionText, 'Rearrange to form a meaningful sentence: P: the underlying / Q: scientists are / R: discovering / S: mechanism');
+  assert.deepEqual(q.options, ['PQRS', 'QSRP', 'QRPS', 'RPQS']); assert.equal(q.correctAnswer, 2, 'C is the stored answer');
+  assert.equal(q.options[q.correctAnswer], 'QRPS'); assert.equal(q.marks, 1); assert.equal(q.section, 'Achievers / HOTS'); assert.equal(String(q.exam), String(O.x24[9]._id));
+  assert.equal(q.sourceRef, 'oct24-2026:std9:q57');
+  assert.equal(q.provenance.kind, 'authored-completion'); assert.deepEqual(q.provenance.fields, ['options[2]', 'options[3]', 'answer']);
+  assert.match(q.provenance.basis, /answer table/);
+  // neighbours are untouched and carry no provenance
+  assert.equal(questionsOf(9).find((x) => x.questionNumber === 56).provenance, undefined);
+  assert.deepEqual(questionsOf(9).find((x) => x.questionNumber === 58).options, ['Thursday', 'Friday', 'Saturday', 'Sunday']);
   const ex9 = fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x24[9]._id));
-  assert.deepEqual(ex9.paperImport.review.map((x) => x.question), [57]);
-  const blocked = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/publish`);
-  assert.equal(blocked.status, 422); assert.equal(blocked.body.code, 'PAPER_NEEDS_REVIEW'); assert.equal(blocked.body.unresolved[0].standard, 9);
-  assert.equal(fake.OlympiadEvent.docs.find((e) => String(e._id) === String(O.e24._id)).state, 'draft', 'still a draft');
+  assert.deepEqual(ex9.paperImport.review || [], [], 'nothing unresolved'); assert.deepEqual(ex9.paperImport.completions.map((c) => c.question), [57]);
+  assert.equal(ex9.totalQuestions, 60); assert.equal(ex9.totalMarks, 60);
+  // the two repaired duplicate distractors keep the original wording in the record and the correct answer unchanged
+  const b1 = questionsOf(1).find((x) => x.questionNumber === 30); assert.deepEqual(b1.options, ['Boyes', 'Boys', 'Boyz', 'Boies']); assert.equal(b1.correctAnswer, 1); assert.equal(b1.provenance.original, 'Boyes');
+  const b3 = questionsOf(3).find((x) => x.questionNumber === 29); assert.equal(b3.options[b3.correctAnswer], 'Teeth (दांत)'); assert.equal(b3.provenance.original, 'Toothes');
+});
+
+test('D2: every standard passes the server-side completeness check (counts, 4 distinct options, one valid stored answer, no gaps, marks)', async () => {
+  const { validateExam } = require('../services/paperValidation');
+  const expected = { 1: 40, 2: 40, 3: 40, 4: 60, 5: 60, 6: 60, 7: 60, 8: 60, 9: 60, 10: 60 };
+  for (const std of Object.keys(expected)) {
+    const exam = fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x24[std]._id));
+    const v = await validateExam(exam);
+    assert.equal(v.ok, true, `Std ${std}: ${JSON.stringify(v.issues)}`); assert.equal(v.count, expected[std]);
+    const qs = questionsOf(std); assert.equal(new Set(qs.map((q) => q.questionNumber)).size, expected[std], 'distinct question numbers');
+    assert.ok(qs.every((q) => q.options.length === 4 && new Set(q.options).size === 4 && q.correctAnswer >= 0 && q.correctAnswer < 4));
+  }
+  const report = await paperImport.readinessOf(O.e24._id); assert.equal(report.ready, true);
 });
 
 test('E: re-running the import is idempotent: nothing inserted, every question matched, counts identical', async () => {
   const qBefore = fake.OlympiadQuestion.docs.length; const exBefore = fake.OlympiadExam.docs.length;
   const r = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/paper-import`, {});
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.summary.inserted, 0); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.unchanged, 539); assert.equal(r.body.summary.duplicatesAvoided, 539);
+  assert.equal(r.body.summary.inserted, 0); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.unchanged, 540); assert.equal(r.body.summary.duplicatesAvoided, 540);
+  assert.equal(questionsOf(9).filter((q) => q.questionNumber === 57).length, 1, 'still exactly one Q57');
+  assert.equal(r.body.readiness.ready, true);
   assert.equal(fake.OlympiadQuestion.docs.length, qBefore); assert.equal(fake.OlympiadExam.docs.length, exBefore);
   // an edited question is repaired in place (still one copy)
   const q = questionsOf(5).find((x) => x.questionNumber === 7); q.questionText = 'tampered';
@@ -280,8 +308,8 @@ test('I: the event validates its own settings: interview closing after opening, 
 // ───────────────────────── student side ─────────────────────────
 const openWindow = () => fake.OlympiadExam.updateMany({ event: O.e24._id }, { $set: { startDate: new Date(Date.now() - 1 * H), endDate: new Date(Date.now() + 5 * H), isPublished: true } });
 
-test('J: publishing (after the admin accepts the open Std 9 item) makes each student see only their own standard, bilingual, with no answer key', async () => {
-  const pub = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/publish`, { acknowledgeReview: true });
+test('J: publishing through the normal workflow - no acknowledgement needed any more - makes each student see only their own standard, bilingual, with no answer key', async () => {
+  const pub = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/publish`);
   assert.equal(pub.status, 200, pub.text);
   await openWindow();
   await fake.OlympiadEvent.updateOne({ _id: O.e24._id }, { $set: { registrationClosesAt: new Date(Date.now() + 4 * H) } });
@@ -297,7 +325,7 @@ test('J: publishing (after the admin accepts the open Std 9 item) makes each stu
   const q1 = st.body.questions.find((q) => q.questionNumber === 1); const q3 = st.body.questions.find((q) => q.questionNumber === 3);
   assert.equal(q1.questionTextMr, 'चौकटीत दाखवलेले सफरचंद मोजा:'); assert.equal(q1.visual, '🍎🍎🍎🍎🍎🍎'); assert.equal(q1.section, 'Mathematics'); assert.equal(q1.sectionMr, 'गणित');
   assert.equal(q3.image, '/olympiad/oct24/std1-q3-clock.jpg');
-  assert.doesNotMatch(st.text, /correctAnswer|"answer"|explanation|sourceRef/, 'no key, no explanation, no internal id in the student payload');
+  assert.doesNotMatch(st.text, /correctAnswer|"answer":|explanation|sourceRef|provenance|authored/, 'no key, no explanation, no internal id or provenance in the student payload');
   assert.equal(O.s[1].token && (await call('GET', `/api/olympiad/exams/${O.x24[1]._id}/attempt`, { token: O.s[1].token })).text.match(/correctAnswer/), null);
 });
 
@@ -396,4 +424,83 @@ test('P: a student in the 17 Oct event is unaffected by the 24 Oct import (recor
   const all = [...(mine.exams || [])];
   assert.ok(all.every((e) => e.eventName !== O.e24.name || e.standard === 10));
   assert.equal(fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x17._id)).length, 1);
+});
+
+// ───────────────────────── Std 9 Q57 completion: student side, scoring, safeguards ─────────────────────────
+const saveAnswers = (stu, exam, answers) => call('PUT', `/api/olympiad/exams/${exam._id}/attempt/answers`, { token: stu.token, body: { answers } });
+const attemptsOf = async (exam) => (await adminCall('GET', `/api/olympiad/admin/exams/${exam._id}/attempts`)).body.attempts;
+
+test('Q: Std 9 students see Q57 with all four options in order, in their own exam, and no answer, key or provenance', async () => {
+  const stu = O.s[9]; await payFor(stu, O.x24[9], 'EXAM');
+  const st = await call('POST', `/api/olympiad/exams/${O.x24[9]._id}/start`, { token: stu.token });
+  assert.equal(st.status, 200, st.text); assert.equal(st.body.questions.length, 60);
+  assert.deepEqual(st.body.questions.map((q) => q.questionNumber), Array.from({ length: 60 }, (_, i) => i + 1), 'sequential 1..60');
+  const q = st.body.questions.find((x) => x.questionNumber === 57);
+  assert.deepEqual(q.options, ['PQRS', 'QSRP', 'QRPS', 'RPQS']); assert.equal(q.subject, 'Achievers / HOTS'); assert.equal(q.marks, 1);
+  assert.match(q.questionText, /^Rearrange to form a meaningful sentence: P: the underlying/);
+  assert.doesNotMatch(st.text, /correctAnswer|"answer":|explanation|provenance|authored|sourceRef/);
+  O.q57 = q; O.q57Others = st.body.questions.filter((x) => x.questionNumber !== 57);
+  // a Std 10 student never receives the Std 9 paper
+  assert.equal((await call('POST', `/api/olympiad/exams/${O.x24[9]._id}/start`, { token: O.s[10].token })).body.code, 'WRONG_STANDARD');
+});
+
+test('R: the backend scores Q57 with C as the correct answer (controlled responses); no answer is shown to the student before release', async () => {
+  await fake.OlympiadExam.updateOne({ _id: O.x24[9]._id }, { $set: { resultsPublishedAt: null, resultsPublishAt: new Date(Date.now() + 5 * D) } });   // test O's sweeper released it; put it back before release
+  const right = O.s[9]; const wrong = await mkUser('student', 9, 'Std9 Wrong');
+  await payFor(wrong, O.x24[9], 'EXAM'); await call('POST', `/api/olympiad/exams/${O.x24[9]._id}/start`, { token: wrong.token });
+  assert.equal((await saveAnswers(right, O.x24[9], [{ questionId: O.q57._id, selectedOption: 2 }])).status, 200);   // C
+  assert.equal((await saveAnswers(wrong, O.x24[9], [{ questionId: O.q57._id, selectedOption: 1 }])).status, 200);   // B
+  const sr = await call('POST', `/api/olympiad/exams/${O.x24[9]._id}/submit`, { token: right.token, body: {} });
+  const sw = await call('POST', `/api/olympiad/exams/${O.x24[9]._id}/submit`, { token: wrong.token, body: {} });
+  assert.equal(sr.status, 200, sr.text); assert.equal(sr.body.result.released, false); assert.doesNotMatch(sr.text, /correctAnswer|"score"/);
+  const rows = await attemptsOf(O.x24[9]);
+  const mine = rows.find((a) => a.student && a.student.name === 'Std 9 Student'); const bad = rows.find((a) => a.student && a.student.name === 'Std9 Wrong');
+  assert.equal(mine.score, 1); assert.equal(mine.correctCount, 1); assert.equal(mine.totalMarks, 60);
+  assert.equal(bad.score, 0); assert.equal(bad.wrongCount, 1);
+  O.std9Attempts = deepClone(fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x24[9]._id)));
+});
+
+test('S: a repeat import after students have attempted keeps their results and creates no duplicate Q57 / answer key', async () => {
+  const qBefore = fake.OlympiadQuestion.docs.length;
+  questionsOf(9).find((q) => q.questionNumber === 57).options[3] = 'tampered';  // a drifted copy must NOT be rewritten once attempts exist
+  const r = await adminCall('POST', `/api/olympiad/admin/events/${O.e24._id}/paper-import`, { standards: [9] });
+  assert.equal(r.status, 200, r.text); assert.equal(r.body.rows[0].locked, true); assert.match(r.body.rows[0].lockedReason, /attempt/);
+  assert.equal(fake.OlympiadQuestion.docs.length, qBefore); assert.equal(questionsOf(9).filter((q) => q.questionNumber === 57).length, 1);
+  assert.equal(questionsOf(9).find((q) => q.questionNumber === 57).options[3], 'tampered', 'questions answered by real students are never rewritten');
+  questionsOf(9).find((q) => q.questionNumber === 57).options[3] = 'RPQS';
+  assert.deepEqual(deepClone(fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x24[9]._id))), O.std9Attempts, 'attempts and scores unchanged');
+  assert.equal(fake.OlympiadExam.docs.filter((e) => String(e.event) === String(O.e24._id)).length, 10);
+});
+
+test('T: publishing stays protected: a broken paper is refused (no acknowledgement can override it); a genuinely unresolved review item still needs an explicit acknowledgement', async () => {
+  const mk = async (name, n, tweak, skip = 0) => {
+    const ev = await fake.OlympiadEvent.create({ name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), examDate: at('2026-10-24T00:00:00'), standards: [9], state: 'draft' });
+    const ex = await fake.OlympiadExam.create({ title: name, slug: `${ev.slug}-std-9`, standard: 9, examType: 'olympiad', accessMode: 'payment', isPublished: false, event: ev._id, startDate: at('2026-10-24T09:00:00'), endDate: at('2026-10-24T21:00:00'), durationMinutes: 60, totalQuestions: n, totalMarks: n, fee: 30, currency: 'INR', instructions: ['x'], paperImport: { set: 'oct24-2026', review: [] } });
+    for (let i = 1; i <= n + (skip ? 1 : 0); i += 1) if (i !== skip) await fake.OlympiadQuestion.create({ exam: ex._id, questionNumber: i, subject: 'Maths', questionText: `q${i}`, options: ['a', 'b', 'c', 'd'], correctAnswer: 1, marks: 1 });
+    if (tweak) await tweak(ev, ex);
+    return { ev, ex };
+  };
+  const pub = (ev, body) => adminCall('POST', `/api/olympiad/admin/events/${ev._id}/publish`, body);
+  // 1. a question whose stored answer is gone -> hard failure
+  const a = await mk('Broken key test event 1', 60, async (ev, ex) => { fake.OlympiadQuestion.docs.find((q) => String(q.exam) === String(ex._id) && q.questionNumber === 5).correctAnswer = undefined; });
+  const r1 = await pub(a.ev, { acknowledgeReview: true }); assert.equal(r1.status, 422); assert.equal(r1.body.code, 'PAPER_INVALID'); assert.equal(r1.body.invalid[0].issues[0].question, 5);
+  // 2. missing options on one question -> hard failure
+  const b = await mk('Missing option test event 2', 60, async (ev, ex) => { fake.OlympiadQuestion.docs.find((q) => String(q.exam) === String(ex._id) && q.questionNumber === 57).options = ['PQRS', 'QSRP']; fake.OlympiadQuestion.docs.find((q) => String(q.exam) === String(ex._id) && q.questionNumber === 57).options.push(''); });
+  assert.equal((await pub(b.ev)).body.code, 'PAPER_INVALID');
+  // 3. a missing question that is NOT flagged -> hard failure
+  const c = await mk('Missing question test event 3', 59);
+  const r3 = await pub(c.ev, { acknowledgeReview: true }); assert.equal(r3.body.code, 'PAPER_INVALID');
+  // 4. the same shortfall, flagged by the importer as an open review item -> blocked until explicitly acknowledged
+  const d = await mk('Review item test event 4', 59, async (ev, ex) => { fake.OlympiadExam.docs.find((e) => String(e._id) === String(ex._id)).paperImport.review = [{ question: 57, issue: 'x' }]; }, 57);
+  const rd = await pub(d.ev); assert.equal(rd.body.code, 'PAPER_NEEDS_REVIEW', JSON.stringify(rd.body));
+  assert.equal((await pub(d.ev, { acknowledgeReview: true })).status, 200);
+  // none of the failed attempts published anything
+  for (const e of [a, b, c]) assert.equal(fake.OlympiadEvent.docs.find((x) => String(x._id) === String(e.ev._id)).state, 'draft');
+});
+
+test('U: the 24 Oct event published normally; nothing else was published and the 17 Oct event / exam / questions / attempt are unchanged', async () => {
+  assert.equal(fake.OlympiadEvent.docs.find((e) => String(e._id) === String(O.e24._id)).state, 'published');
+  const strip = (o) => { const c = deepClone(o); delete c.ex.resultsAudit; delete c.ex.resultsPublishedAt; delete c.ex.updatedAt; return c; };
+  // (test O ran the scheduled results sweeper at a simulated 25 Oct, which legitimately stamps the 17 Oct exam's release bookkeeping; its questions, attempts and settings must be identical)
+  assert.deepEqual(strip({ ev: fake.OlympiadEvent.docs.find((e) => String(e._id) === String(O.e17._id)), ex: fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x17._id)), q: fake.OlympiadQuestion.docs.filter((q) => String(q.exam) === String(O.x17._id)), at: fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x17._id)) }), strip(O.snap17));
 });
