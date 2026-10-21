@@ -1,0 +1,683 @@
+{
+ "standard": 3,
+ "source": "3rd_Standard_LearnIQ_Test_2.pdf",
+ "title": "LearnIQ All India Olympiad 2026 - Class 3 (Bilingual English & Marathi)",
+ "bilingual": true,
+ "durationMinutes": null,
+ "sections": [
+  {
+   "name": "Mathematics",
+   "nameMr": "गणित",
+   "to": 10,
+   "marks": 10,
+   "from": 1
+  },
+  {
+   "name": "Science / EVS",
+   "nameMr": "विज्ञान",
+   "to": 20,
+   "marks": 10,
+   "from": 11
+  },
+  {
+   "name": "English",
+   "nameMr": "इंग्रजी",
+   "to": 30,
+   "marks": 10,
+   "from": 21
+  },
+  {
+   "name": "Logical Reasoning & HOTS",
+   "nameMr": "बुद्धिमत्ता",
+   "to": 40,
+   "marks": 10,
+   "from": 31
+  }
+ ],
+ "questions": [
+  {
+   "n": 1,
+   "section": 0,
+   "text": "What fraction of the circle is shaded?",
+   "textMr": "वर्तुळाचा किती भाग छायांकित आहे?",
+   "visual": "[ ◔ Circle with 1 out of 4 parts shaded ]",
+   "image": null,
+   "options": [
+    "1/2",
+    "1/4",
+    "3/4",
+    "2/4"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 2,
+   "section": 0,
+   "text": "What is the reading on the weighing scale?",
+   "textMr": "वजन काट्यावरील वजन किती आहे?",
+   "visual": "⚖️ [ Pointer pointing at 500 grams ]",
+   "image": null,
+   "options": [
+    "250 g",
+    "500 g",
+    "1 kg",
+    "750 g"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 3,
+   "section": 0,
+   "text": "Identify the line shown in the diagram:",
+   "textMr": "चित्रातील रेषेचा प्रकार ओळखा:",
+   "visual": "│ (Vertical Standing Line)",
+   "image": null,
+   "options": [
+    "Horizontal",
+    "Vertical (उभी रेषा)",
+    "Slanted",
+    "Curved"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 4,
+   "section": 0,
+   "text": "How many tens are there in 240?",
+   "textMr": "२४० मध्ये एकूण किती दशक असतात?",
+   "visual": "[ 2 Hundreds Blocks ] + [ 4 Tens Blocks ]",
+   "image": null,
+   "options": [
+    "4",
+    "24",
+    "40",
+    "2"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 5,
+   "section": 0,
+   "text": "Solve using multiplication array: 3 rows × 5 stars = ?",
+   "textMr": "गुणाकार करा: ३ ओळी × ५ चांदण्या = ?",
+   "visual": "⭐⭐⭐⭐⭐\n⭐⭐⭐⭐⭐\n⭐⭐⭐⭐⭐",
+   "image": null,
+   "options": [
+    "12",
+    "15",
+    "20",
+    "10"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 6,
+   "section": 0,
+   "text": "Find the perimeter of a triangle with sides 5cm, 5cm, 6cm:",
+   "textMr": "५ सेमी, ५ सेमी व ६ सेमी बाजू असलेल्या त्रिकोणाची परिमिती काढा:",
+   "visual": "🔺 (Sides: 5 cm, 5 cm, 6 cm)",
+   "image": null,
+   "options": [
+    "15 cm",
+    "16 cm",
+    "18 cm",
+    "20 cm"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 7,
+   "section": 0,
+   "text": "What is 342 + 156?",
+   "textMr": "३४२ + १५६ = किती?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "498",
+    "488",
+    "508",
+    "492"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 8,
+   "section": 0,
+   "text": "How many face edges does a cube have?",
+   "textMr": "घनाला (Cube) किती कडा (Edges) असतात?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "8",
+    "12",
+    "6",
+    "10"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 9,
+   "section": 0,
+   "text": "Read the pictograph: Each 🍎 = 5 apples. How many apples did Rohan eat?",
+   "textMr": "प्रत्येक 🍎 = ५ सफरचंद. रोहनने किती सफरचंद खाल्ले?",
+   "visual": "Rohan: 🍎🍎🍎",
+   "image": null,
+   "options": [
+    "3",
+    "15",
+    "10",
+    "20"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 10,
+   "section": 0,
+   "text": "Complete pattern: 100, 200, 300, ____",
+   "textMr": "संख्यामालिका पूर्ण करा: १००, २००, ३००, ____",
+   "visual": null,
+   "image": null,
+   "options": [
+    "350",
+    "400",
+    "500",
+    "450"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 11,
+   "section": 1,
+   "text": "Identify the organ system shown in picture:",
+   "textMr": "चित्रातील मानवी अवयव संस्था ओळखा:",
+   "visual": "🦴 (Skeletal System / मानवींगातील सांगाडा)",
+   "image": null,
+   "options": [
+    "Digestive",
+    "Skeletal System (अस्थिसंस्था)",
+    "Nervous",
+    "Respiratory"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 12,
+   "section": 1,
+   "text": "Look at the water cycle process shown in diagram:",
+   "textMr": "जलचक्रातील दाखवलेली प्रक्रिया कोणती?",
+   "visual": "[ Sun heating ocean water ➔ Vapour rising ]",
+   "image": null,
+   "options": [
+    "Freezing",
+    "Evaporation (बाष्पीभवन)",
+    "Melting",
+    "Condensation"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 13,
+   "section": 1,
+   "text": "Look at the diagram below. Which plant has a strong TAPROOT system?",
+   "textMr": "खालील आकृती पहा. सोठमूळ (Taproot) असणारी वनस्पती कोणती?",
+   "visual": "🥕 (Carrot / गाजर - Main thick central root)",
+   "image": null,
+   "options": [
+    "Grass (गवत)",
+    "Carrot (गाजर)",
+    "Wheat (गहू)",
+    "Rice (तांदूळ)"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 14,
+   "section": 1,
+   "text": "Identify the herbivorous animal from picture:",
+   "textMr": "चित्रातील शाकाहारी प्राणी ओळखा:",
+   "visual": "Deer Eating Grass 🦌",
+   "image": null,
+   "options": [
+    "Lion",
+    "Deer (हरीण)",
+    "Tiger",
+    "Wolf"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 15,
+   "section": 1,
+   "text": "Which state of matter is shown in the closed container with fixed shape?",
+   "textMr": "ठराविक आकार असलेल्या पदार्थाची अवस्था कोणती?",
+   "visual": "🧊 (Ice Cube / स्थायू)",
+   "image": null,
+   "options": [
+    "Liquid",
+    "Solid (स्थायू)",
+    "Gas",
+    "Vapor"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 16,
+   "section": 1,
+   "text": "Birds fly with the help of light bones and ____.",
+   "textMr": "पक्षी हलक्या हाडांच्या आणि ____ च्या मदतीने उडतात.",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Fins",
+    "Feathers/Wings (पंख)",
+    "Gills",
+    "Claws"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 17,
+   "section": 1,
+   "text": "Which planet is known as the RED PLANET?",
+   "textMr": "तांबडा ग्रह (Red Planet) म्हणून कोणता ग्रह ओळखला जातो?",
+   "visual": "🔴 (Mars Planet)",
+   "image": null,
+   "options": [
+    "Earth",
+    "Mars (मंगळ)",
+    "Jupiter",
+    "Venus"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 18,
+   "section": 1,
+   "text": "Identify the safety traffic sign shown:",
+   "textMr": "दाखवलेला ट्रॅफिक नियम सांगणारा सांगणारा फलक ओळखा:",
+   "visual": "🛑 (STOP Sign)",
+   "image": null,
+   "options": [
+    "Go",
+    "STOP (थांबा)",
+    "No Entry",
+    "Turn Left"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 19,
+   "section": 1,
+   "text": "Humans breathe in Oxygen and breathe out:",
+   "textMr": "माणूस श्वासावाटे ऑक्सिजन घेतो आणि कोणता वायू बाहेर सोडतो?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Nitrogen",
+    "Carbon Dioxide (कार्बन डायऑक्साइड)",
+    "Hydrogen",
+    "Helium"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 20,
+   "section": 1,
+   "text": "Which soil is best for growing crops?",
+   "textMr": "पिकांच्या वाढीसाठी कोणती माती सर्वात उत्तम मानली जाते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Sandy Soil",
+    "Loamy Soil / Topsoil (सुपीक माती)",
+    "Rocky Soil",
+    "Desert Soil"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 21,
+   "section": 2,
+   "text": "Choose the correct collective noun for the picture:",
+   "textMr": "चित्रासाठी योग्य समूहदर्शक शब्द (Collective Noun) निवडा:",
+   "visual": "🍇🍇🍇 (A ______ of grapes)",
+   "image": null,
+   "options": [
+    "Herd",
+    "Bunch (घोस/घोंड)",
+    "Pack",
+    "Flock"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 22,
+   "section": 2,
+   "text": "What is the boy doing in the picture?",
+   "textMr": "चित्रातील मुलगा कोणती क्रिया करत आहे?",
+   "visual": "📖 (Boy Reading Book)",
+   "image": null,
+   "options": [
+    "Writing",
+    "Reading (वाचणे)",
+    "Dancing",
+    "Cooking"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 23,
+   "section": 2,
+   "text": "Identify the verb in: \"Rohan writes a story.\"",
+   "textMr": "वाक्यातील क्रियापद (Verb) ओळखा: \"Rohan writes a story.\"",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Rohan",
+    "writes (लिहितो)",
+    "story",
+    "a"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 24,
+   "section": 2,
+   "text": "Identify the animal shelter:",
+   "textMr": "चित्रातील प्राण्याचे घर ओळखा:",
+   "visual": "🐝 (Beehive / मधाचे पोळे)",
+   "image": null,
+   "options": [
+    "Nest",
+    "Hive (पोळे)",
+    "Stable",
+    "Shed"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 25,
+   "section": 2,
+   "text": "Synonym of 'QUICK' is:",
+   "textMr": "'QUICK' (जलद) या शब्दाचा समानार्थी शब्द कोणता?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Slow",
+    "Fast (वेगवान)",
+    "Late",
+    "Quiet"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 26,
+   "section": 2,
+   "text": "Correct spelling of the vehicle shown:",
+   "textMr": "वाहनाचे अचूक इंग्रजी स्पेलिंग ओळखा:",
+   "visual": "✈️ (Aeroplane)",
+   "image": null,
+   "options": [
+    "Aeroplan",
+    "Aeroplane",
+    "Airoplane",
+    "Eroplane"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 27,
+   "section": 2,
+   "text": "Fill with conjunction: \"I like tea ____ coffee.\"",
+   "textMr": "योग्य Conjunction भरा: \"I like tea ____ coffee.\"",
+   "visual": null,
+   "image": null,
+   "options": [
+    "and",
+    "or",
+    "but",
+    "so"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 28,
+   "section": 2,
+   "text": "Where is the cat in the picture?",
+   "textMr": "चित्रात मांजर कोठे आहे?",
+   "visual": "🪑🐈 (Cat UNDER the chair)",
+   "image": null,
+   "options": [
+    "On",
+    "Under (खाली)",
+    "In",
+    "Over"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 29,
+   "section": 2,
+   "text": "Plural of 'TOOTH' is:",
+   "textMr": "'TOOTH' या शब्दाचे अनेकवचनी रूप कोणते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Toothss",
+    "Teeth (दांत)",
+    "Toothes",
+    "Toothes"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 30,
+   "section": 2,
+   "text": "Antonym of 'BEAUTIFUL' is:",
+   "textMr": "'BEAUTIFUL' चा विरुद्धार्थी शब्द कोणता?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Pretty",
+    "Ugly (कुरूप)",
+    "Nice",
+    "Cute"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 31,
+   "section": 3,
+   "text": "Which figure is ODD out?",
+   "textMr": "कोणती आकृती गटात बसत नाही?",
+   "visual": "A) ⬛ | B) ◼️ | C) 🔴 (Circle) | D) ◾",
+   "image": null,
+   "options": [
+    "Square A",
+    "Square B",
+    "Circle C (वर्तुळ)",
+    "Square D"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 32,
+   "section": 3,
+   "text": "How many triangles are in the given figure?",
+   "textMr": "खालील चित्रात एकूण किती त्रिकोण आहेत?",
+   "visual": "[ Large Triangle split into 2 smaller ones ]",
+   "image": null,
+   "options": [
+    "2",
+    "3",
+    "4",
+    "1"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 33,
+   "section": 3,
+   "text": "Complete the logical series:",
+   "textMr": "तार्किक क्रम पूर्ण करा:",
+   "visual": "2, 4, 6, 8, ____",
+   "image": null,
+   "options": [
+    "9",
+    "10",
+    "11",
+    "12"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 34,
+   "section": 3,
+   "text": "Which instrument is used to measure temperature?",
+   "textMr": "शरीराचे तापमान मोजण्यासाठी कोणते साधन वापरतात?",
+   "visual": "🌡️ (Thermometer)",
+   "image": null,
+   "options": [
+    "Ruler",
+    "Thermometer (तापमापक)",
+    "Scale",
+    "Clock"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 35,
+   "section": 3,
+   "text": "What is the code relation: DOG : PUPPY :: CAT : ____?",
+   "textMr": "संबंध ओळखा: DOG : PUPPY :: CAT : ____?",
+   "visual": "🐈 🐱 ➔ (Kitten)",
+   "image": null,
+   "options": [
+    "Cub",
+    "Kitten (मांजरपिल्लू)",
+    "Calf",
+    "Kid"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 36,
+   "section": 3,
+   "text": "Choose the correct mirror image of 'F':",
+   "textMr": "'F' या अक्षराची आरशातील अचूक प्रतिमा ओळखा:",
+   "visual": "Mirror Image of 'F' ➔ 𝛲",
+   "image": null,
+   "options": [
+    "ꟻ",
+    "F",
+    "E",
+    "L"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 37,
+   "section": 3,
+   "text": "Identify national aquatic animal of India:",
+   "textMr": "भारताचा राष्ट्रीय जलचर प्राणी कोणता?",
+   "visual": "🐬 (Ganges River Dolphin)",
+   "image": null,
+   "options": [
+    "Whale",
+    "Ganges River Dolphin (डॉल्फिन)",
+    "Shark",
+    "Octopus"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 38,
+   "section": 3,
+   "text": "Which direction is opposite to NORTH?",
+   "textMr": "उत्तर (North) दिशेच्या विरुद्ध कोणती दिशा असते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "East",
+    "South (दक्षिण)",
+    "West",
+    "Central"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 39,
+   "section": 3,
+   "text": "Identify the monument built in Agra, India:",
+   "textMr": "आग्रा येथे असलेले ऐतिहासिक स्मारक ओळखा:",
+   "visual": "🕌 (Taj Mahal / ताजमहाल)",
+   "image": null,
+   "options": [
+    "Qutub Minar",
+    "Taj Mahal (ताजमहाल)",
+    "Red Fort",
+    "Gateway of India"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 40,
+   "section": 3,
+   "text": "How many total hours make one full day?",
+   "textMr": "एका संपूर्ण दिवसात एकूण किती तास असतात?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "12",
+    "24 (चौवीस)",
+    "30",
+    "48"
+   ],
+   "answer": 1,
+   "marks": 1
+  }
+ ],
+ "review": [],
+ "sourceIssues": [],
+ "totalQuestions": 40,
+ "totalMarks": 40
+}

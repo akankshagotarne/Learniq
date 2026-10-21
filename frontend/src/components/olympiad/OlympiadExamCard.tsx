@@ -146,6 +146,12 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, c
             <span className="min-w-0">Exam: {exam.fee > 0 ? formatRupees(examPrice) : 'FREE'}</span>
           </div>
         </div>
+        {!approval && exam.prices && exam.fee > 0 && (
+          <p className="text-[11px] text-text-muted mb-3" data-testid="price-breakdown">
+            Exam {formatRupees(exam.prices.EXAM)} · Interview {formatRupees(exam.prices.INTERVIEW)} · <b className="text-text-secondary">Total {formatRupees(exam.prices.EXAM + exam.prices.INTERVIEW)}</b>
+            <span className="block">Each is paid separately; 1 credit covers the exam only.</span>
+          </p>
+        )}
 
         <div className="text-[11px] text-text-muted mb-3 flex items-start gap-1.5">
           <Calendar className="w-3 h-3 mt-0.5 text-brand-primary flex-shrink-0" aria-hidden="true" />

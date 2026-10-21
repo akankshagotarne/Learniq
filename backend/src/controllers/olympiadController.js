@@ -14,7 +14,7 @@ const { priceFor, isComponent, pricing: pricingFor } = require('../config/olympi
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
 const studentTabs = require('../services/studentExamTabs');
-const { istDate, istTime, INTERVIEW_OPENS_AT } = require('../config/schedule');
+const { istDate, istTime } = require('../config/schedule');
 const events = require('../services/olympiadEvents');
 
 /**
@@ -325,12 +325,16 @@ const studentResult = (attempt, exam) => {
   return { released: false, status: 'SUBMITTED', submittedAt: attempt.submittedAt, submissionType: attempt.submissionType };
 };
 
+/** completionFor() with the interview day of the exam's own event (the original event keeps the global 17/18 Oct calendar). */
+const completionOf = async (attempt, exam) => completionFor(attempt, exam, await require('../services/eventSchedule').windowForExam(exam));
+
 /** The completion screen's payload: submission is persisted; eligibility for the interview comes from the backend rules. */
-const completionFor = (attempt, exam) => ({
+const completionFor = (attempt, exam, win = require('../services/eventSchedule').GLOBAL) => ({
   submitted: true,
   submittedAt: attempt.submittedAt,
-  interviewDate: istDate(INTERVIEW_OPENS_AT),
-  interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(),
+  interviewDate: istDate(win.opensAt),
+  interviewOpensAt: win.opensAt.toISOString(),
+  interviewClosesAt: win.closesAt.toISOString(),
   resultsReleased: resultsReleased(exam),
   resultsReleaseAt: exam.resultsPublishedAt || exam.resultsPublishAt || null,
   // every valid, paid-and-submitted Olympiad attempt is eligible for the interview (checkEligibility is the single rule)
@@ -456,7 +460,7 @@ const buildState = async (exam, userId, now = new Date()) => {
     prices: pricingFor(exam),
     attemptStatus: attempt ? attempt.status : 'NOT_STARTED',
     result: attempt && attempt.status === 'COMPLETED' ? studentResult(attempt, exam) : null,
-    completion: attempt && attempt.status === 'COMPLETED' ? completionFor(attempt, exam) : null,
+    completion: attempt && attempt.status === 'COMPLETED' ? await completionOf(attempt, exam) : null,
     remainingSeconds:
       attempt && attempt.status === 'IN_PROGRESS'
         ? Math.max(0, Math.ceil((attempt.deadline.getTime() - now.getTime()) / 1000))
@@ -531,7 +535,7 @@ const getCompleted = handler(async (req, res) => {
   for (const a of attempts) {
     if (!a.exam) continue;
     const done = await ensureEvaluated(a);
-    exams.push({ ...examPublic(a.exam), ...publicLabel(labels.get(String(a.exam.event))), state: 'completed', result: studentResult(done, a.exam), completion: completionFor(done, a.exam), ...(await certificatePayloads(done)) });
+    exams.push({ ...examPublic(a.exam), ...publicLabel(labels.get(String(a.exam.event))), state: 'completed', result: studentResult(done, a.exam), completion: await completionOf(done, a.exam), ...(await certificatePayloads(done)) });
   }
   res.json({ success: true, exams });
 });
@@ -868,7 +872,7 @@ const buildAttemptPayload = async (exam, attempt, now = new Date()) => {
   // correctAnswer / explanation are `select: false` → cannot leak from here
   const questions = await OlympiadQuestion.find({ exam: exam._id })
     .sort('questionNumber')
-    .select('questionNumber subject questionText options marks image');
+    .select('questionNumber subject section sectionMr questionText questionTextMr visual options marks image');
   return {
     exam: {
       _id: exam._id, title: exam.title, standard: exam.standard, durationMinutes: exam.durationMinutes,
@@ -885,7 +889,8 @@ const buildAttemptPayload = async (exam, attempt, now = new Date()) => {
     },
     questions: questions.map((q) => ({
       _id: q._id, questionNumber: q.questionNumber, subject: q.subject,
-      questionText: q.questionText, options: q.options, marks: q.marks, image: q.image,
+      questionText: q.questionText, questionTextMr: q.questionTextMr, visual: q.visual, section: q.section, sectionMr: q.sectionMr,
+      options: q.options, marks: q.marks, image: q.image,
     })),
     responses: responsesToObject(attempt.responses),
   };
@@ -1053,12 +1058,12 @@ const submitExam = handler(async (req, res) => {
   // Idempotent: double-click / retry after a network failure just returns the stored result.
   if (attempt.status === 'COMPLETED') {
     attempt = await ensureEvaluated(attempt);
-    return res.json({ success: true, alreadySubmitted: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), ...(await certificatePayloads(attempt)) });
+    return res.json({ success: true, alreadySubmitted: true, result: studentResult(attempt, exam), completion: await completionOf(attempt, exam), ...(await certificatePayloads(attempt)) });
   }
 
   if (isExpired(attempt, now)) {
     attempt = await finalizeAttempt(attempt._id, 'TIMER', now);
-    return res.json({ success: true, autoSubmitted: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), ...(await certificatePayloads(attempt)) });
+    return res.json({ success: true, autoSubmitted: true, result: studentResult(attempt, exam), completion: await completionOf(attempt, exam), ...(await certificatePayloads(attempt)) });
   }
 
   await requireProctoring(exam, attempt);
@@ -1069,7 +1074,7 @@ const submitExam = handler(async (req, res) => {
 
   const type = now.getTime() > attempt.deadline.getTime() ? 'TIMER' : 'MANUAL';
   attempt = await finalizeAttempt(attempt._id, type, now);
-  res.json({ success: true, result: studentResult(attempt, exam), completion: completionFor(attempt, exam), ...(await certificatePayloads(attempt)) });
+  res.json({ success: true, result: studentResult(attempt, exam), completion: await completionOf(attempt, exam), ...(await certificatePayloads(attempt)) });
 });
 
 // ──────────────────────────────────────────────
@@ -1095,7 +1100,7 @@ const getResult = handler(async (req, res) => {
     success: true,
     exam: examPublic(exam),
     result: resultsReleased(exam) ? { ...resultSummary(attempt), released: true, totalQuestions: exam.totalQuestions, status: 'COMPLETED' } : studentResult(attempt, exam),
-    completion: completionFor(attempt, exam),
+    completion: await completionOf(attempt, exam),
     ...(await certificatePayloads(attempt)),
   });
 });
@@ -1119,6 +1124,10 @@ const getReview = handler(async (req, res) => {
       questionNumber: q.questionNumber,
       subject: q.subject,
       questionText: q.questionText,
+      questionTextMr: q.questionTextMr,
+      visual: q.visual,
+      section: q.section,
+      sectionMr: q.sectionMr,
       options: q.options,
       image: q.image,
       marks: q.marks,

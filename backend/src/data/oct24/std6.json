@@ -1,0 +1,999 @@
+{
+ "standard": 6,
+ "source": "6th_Standard_LearnIQ_Test_2.pdf",
+ "title": "Grade 6 All-Subject MCQ Examination",
+ "bilingual": false,
+ "durationMinutes": 120,
+ "sections": [
+  {
+   "name": "Mathematics",
+   "to": 15,
+   "marks": 15,
+   "from": 1
+  },
+  {
+   "name": "Logic & Reasoning",
+   "to": 30,
+   "marks": 15,
+   "from": 16
+  },
+  {
+   "name": "English Language",
+   "to": 45,
+   "marks": 15,
+   "from": 31
+  },
+  {
+   "name": "General Science",
+   "to": 60,
+   "marks": 15,
+   "from": 46
+  }
+ ],
+ "questions": [
+  {
+   "n": 1,
+   "section": 0,
+   "text": "Smallest 5-digit number formed using 3, 0, 8, 1 and 5:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "01358",
+    "10358",
+    "13058",
+    "10538"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 2,
+   "section": 0,
+   "text": "The predecessor of 1,00,000 is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "99,999",
+    "99,900",
+    "100,001",
+    "99,990"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 3,
+   "section": 0,
+   "text": "What is the place value of 7 in 4,72,519?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "700",
+    "7,000",
+    "70,000",
+    "7"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 4,
+   "section": 0,
+   "text": "Which of the following is a prime number?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "9",
+    "15",
+    "21",
+    "29"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 5,
+   "section": 0,
+   "text": "The HCF of 12 and 18 is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "2",
+    "3",
+    "6",
+    "36"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 6,
+   "section": 0,
+   "text": "The LCM of 4, 6 and 8 is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "12",
+    "24",
+    "48",
+    "16"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 7,
+   "section": 0,
+   "text": "Which fraction is equivalent to 2/3 and has denominator 12?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "4/12",
+    "6/12",
+    "8/12",
+    "10/12"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 8,
+   "section": 0,
+   "text": "Evaluate (-8) + (+5):",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "-13",
+    "-3",
+    "+3",
+    "+13"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 9,
+   "section": 0,
+   "text": "Find the perimeter of a rectangle with length 8 cm and breadth 5 cm.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "13 cm",
+    "26 cm",
+    "40 cm",
+    "18 cm"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 10,
+   "section": 0,
+   "text": "An angle measuring 120 degrees is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Acute",
+    "Right",
+    "Obtuse",
+    "Straight"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 11,
+   "section": 0,
+   "text": "The decimal form of 35/100 is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "3.5",
+    "0.35",
+    "0.035",
+    "35.0"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 12,
+   "section": 0,
+   "text": "Simplify the ratio 50 cm : 2 metres.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "1 : 4",
+    "1 : 2",
+    "25 : 1",
+    "1 : 40"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 13,
+   "section": 0,
+   "text": "How many lines of symmetry does an equilateral triangle have?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "1",
+    "2",
+    "3",
+    "0"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 14,
+   "section": 0,
+   "text": "Find the area of a square with side 7 cm.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "28 cm^2",
+    "49 cm^2",
+    "14 cm^2",
+    "21 cm^2"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 15,
+   "section": 0,
+   "text": "If x + 5 = 12, then x =",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "17",
+    "7",
+    "60",
+    "5"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 16,
+   "section": 1,
+   "text": "Complete the sequence: 3, 6, 12, 24, ___.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "30",
+    "36",
+    "48",
+    "60"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 17,
+   "section": 1,
+   "text": "Find the missing letter: Z, Y, X, W, ___.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "U",
+    "V",
+    "T",
+    "S"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 18,
+   "section": 1,
+   "text": "Which is the odd one out?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Apple",
+    "Mango",
+    "Potato",
+    "Banana"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 19,
+   "section": 1,
+   "text": "If PEN = 35 (16 + 5 + 14), then RED =",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "27",
+    "25",
+    "28",
+    "30"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 20,
+   "section": 1,
+   "text": "You walk 10 m east, then turn right and walk 5 m. Which direction are you facing?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "North",
+    "South",
+    "East",
+    "West"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 21,
+   "section": 1,
+   "text": "Bird : Fly :: Fish : ___",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Walk",
+    "Crawl",
+    "Swim",
+    "Run"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 22,
+   "section": 1,
+   "text": "Your father's brother is your:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Cousin",
+    "Nephew",
+    "Uncle",
+    "Grandfather"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 23,
+   "section": 1,
+   "text": "Find the next term: 2, 5, 8, 11, ___.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "13",
+    "14",
+    "15",
+    "16"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 24,
+   "section": 1,
+   "text": "In a number puzzle, 'x' means '+'. What is 6 x 4?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "24",
+    "10",
+    "2",
+    "12"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 25,
+   "section": 1,
+   "text": "Which word cannot be formed from the letters in 'GARDEN'?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "READ",
+    "NEAR",
+    "DANGER",
+    "RAIN"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 26,
+   "section": 1,
+   "text": "What angle is formed by the hands of a clock at 6:00?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "90 degrees",
+    "120 degrees",
+    "180 degrees",
+    "360 degrees"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 27,
+   "section": 1,
+   "text": "X is taller than Y, and Y is taller than Z. Who is the tallest?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "X",
+    "Y",
+    "Z",
+    "They are equal"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 28,
+   "section": 1,
+   "text": "Which is the odd pair out?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Dog - Puppy",
+    "Cat - Kitten",
+    "Cow - Calf",
+    "Duck - Piglet"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 29,
+   "section": 1,
+   "text": "You are facing a direction and east is on your right. Which direction are you facing?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "North",
+    "South",
+    "East",
+    "West"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 30,
+   "section": 1,
+   "text": "How many faces does a standard six-sided die have?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "4",
+    "6",
+    "8",
+    "12"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 31,
+   "section": 2,
+   "text": "Choose the synonym of 'happy'.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Sad",
+    "Joyful",
+    "Angry",
+    "Tired"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 32,
+   "section": 2,
+   "text": "Choose the antonym of 'hard' (meaning not soft).",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Tough",
+    "Firm",
+    "Soft",
+    "Solid"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 33,
+   "section": 2,
+   "text": "Choose the correct spelling:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Friend",
+    "Freind",
+    "Frind",
+    "Frend"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 34,
+   "section": 2,
+   "text": "Identify the proper noun in: \"Delhi is a big city.\"",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Delhi",
+    "Big",
+    "City",
+    "Is"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 35,
+   "section": 2,
+   "text": "The book is lying on top of the table. It is ___ the table.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "on",
+    "in",
+    "under",
+    "at"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 36,
+   "section": 2,
+   "text": "What is the plural form of 'tooth'?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Tooths",
+    "Teeth",
+    "Teeths",
+    "Toothes"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 37,
+   "section": 2,
+   "text": "What is the female counterpart of a king?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Princess",
+    "Queen",
+    "Lady",
+    "Duchess"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 38,
+   "section": 2,
+   "text": "Complete the sentence: She bought ___ apple.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "a",
+    "an",
+    "the",
+    "no article"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 39,
+   "section": 2,
+   "text": "Choose the past tense of 'go'.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Gone",
+    "Went",
+    "Going",
+    "Goes"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 40,
+   "section": 2,
+   "text": "In 'Ravi lost his bag', which word shows possession immediately before the noun 'bag'?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Ravi",
+    "Lost",
+    "His",
+    "Bag"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 41,
+   "section": 2,
+   "text": "Identify the adjective in: \"She wore a red dress.\"",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "She",
+    "Wore",
+    "Red",
+    "Dress"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 42,
+   "section": 2,
+   "text": "What type of sentence is: \"Where are you going?\"",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Statement",
+    "Command",
+    "Interrogative",
+    "Exclamatory"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 43,
+   "section": 2,
+   "text": "A group of wolves is called a:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Herd",
+    "Pack",
+    "Flock",
+    "School"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 44,
+   "section": 2,
+   "text": "Complete the sentence: \"He is poor ___ honest.\"",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "but",
+    "or",
+    "so",
+    "because"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 45,
+   "section": 2,
+   "text": "Which prefix forms the antonym of 'kind'?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Dis-",
+    "Un-",
+    "Im-",
+    "In-"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 46,
+   "section": 3,
+   "text": "Which is a major dietary source of vitamin C?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Milk",
+    "Citrus fruits",
+    "Wheat",
+    "Fish"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 47,
+   "section": 3,
+   "text": "A lack of which nutrient can cause goitre?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Iron",
+    "Iodine",
+    "Calcium",
+    "Vitamin A"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 48,
+   "section": 3,
+   "text": "The process of making yarn from fibres is called:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Weaving",
+    "Spinning",
+    "Knitting",
+    "Ginning"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 49,
+   "section": 3,
+   "text": "Which of these is a transparent material?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Clear glass",
+    "Wood",
+    "Cardboard",
+    "Butter paper"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 50,
+   "section": 3,
+   "text": "Which method is commonly used to separate grain from husk?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Sieving",
+    "Winnowing",
+    "Filtration",
+    "Decantation"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 51,
+   "section": 3,
+   "text": "Which gas is present in the greatest proportion in Earth's atmosphere?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Oxygen",
+    "Nitrogen",
+    "Carbon dioxide",
+    "Hydrogen"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 52,
+   "section": 3,
+   "text": "Which of these is a reversible change?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Burning wood",
+    "Melting wax",
+    "Cooking food",
+    "Rusting iron"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 53,
+   "section": 3,
+   "text": "Which plant part anchors the plant in the soil?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Stem",
+    "Leaf",
+    "Root",
+    "Flower"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 54,
+   "section": 3,
+   "text": "Which type of joint is present in the human knee?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Ball-and-socket joint",
+    "Hinge joint",
+    "Fixed joint",
+    "Pivot joint"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 55,
+   "section": 3,
+   "text": "What is the SI unit of length?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Centimetre",
+    "Metre",
+    "Kilometre",
+    "Foot"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 56,
+   "section": 3,
+   "text": "Materials that are attracted to a magnet are called:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Magnetic materials",
+    "Non-magnetic materials",
+    "Insulators",
+    "Conductors"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 57,
+   "section": 3,
+   "text": "Sunlight helps the human body synthesize which vitamin?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Vitamin A",
+    "Vitamin B",
+    "Vitamin C",
+    "Vitamin D"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 58,
+   "section": 3,
+   "text": "Which gas do humans normally take in during breathing?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Oxygen",
+    "Carbon dioxide",
+    "Nitrogen",
+    "Argon"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 59,
+   "section": 3,
+   "text": "Which habitat is best suited to a camel?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Aquatic habitat",
+    "Desert",
+    "Mountain",
+    "Forest"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 60,
+   "section": 3,
+   "text": "Which device is used to make or break an electric circuit?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Bulb",
+    "Battery",
+    "Switch",
+    "Wire"
+   ],
+   "answer": 2,
+   "marks": 1
+  }
+ ],
+ "review": [],
+ "sourceIssues": [],
+ "totalQuestions": 60,
+ "totalMarks": 60
+}

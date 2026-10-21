@@ -17,6 +17,8 @@ class ScheduleError extends Error {
   constructor(status, message, code) { super(message); this.status = status; this.code = code; }
 }
 
+const eventSchedule = require('./eventSchedule');
+
 const IST_OFFSET = '+05:30';
 const DAY_MS = 86400000;
 const oid = (v) => String(v && v._id ? v._id : v);
@@ -50,11 +52,26 @@ const normalizeScheduleInput = (input, now = new Date()) => {
 // `eventId` (optional): only the exams of that Olympiad event - an interview schedule is never shared between events.
 const interviewExams = async (eventId) => (await OlympiadExam.find({ examType: 'olympiad', ...(eventId ? { event: eventId } : {}) })).filter((e) => e.standard >= 1 && e.standard <= 10).sort((a, b) => a.standard - b.standard);
 
+/** An event that carries its own interview window (e.g. 25 Oct 9 AM - 5 PM IST) only accepts appointments inside it. Other events: unchanged. */
+const assertInsideEventWindow = async (exam, startAt, endAt) => {
+  const win = await eventSchedule.windowForExam(exam);
+  if (win.source !== 'event') return;
+  if (startAt < win.opensAt || endAt > win.closesAt) {
+    throw new ScheduleError(422, `Interviews for this event can only be scheduled between ${dayLabel(ymdIST(win.opensAt))}, ${timeLabel(hhmmIST(win.opensAt))} and ${timeLabel(hhmmIST(win.closesAt))} IST.`, 'OUTSIDE_INTERVIEW_WINDOW');
+  }
+};
+
 const setSchedule = async ({ examIds, eventId, ...input }, admin, now = new Date()) => {
   const data = normalizeScheduleInput(input, now);
   const exams = await interviewExams(eventId);
   const wanted = examIds === 'all' ? exams : exams.filter((e) => (Array.isArray(examIds) ? examIds.map(String) : []).includes(oid(e)));
   if (!wanted.length) throw new ScheduleError(400, 'Please choose at least one examination.', 'NO_EXAM');
+  for (const e of wanted) { // the general schedule's day (and times, when given) must lie inside the event's own interview window
+    const win = await eventSchedule.windowForExam(e);
+    if (win.source !== 'event') continue;
+    if (data.startTime) await assertInsideEventWindow(e, instant(data.interviewDate, data.startTime), data.endTime ? instant(data.interviewDate, data.endTime) : instant(data.interviewDate, data.startTime));
+    else if (data.interviewDate < ymdIST(win.opensAt) || data.interviewDate > ymdIST(new Date(win.closesAt.getTime() - 1))) throw new ScheduleError(422, `The interview day must be ${dayLabel(ymdIST(win.opensAt))} (the event's interview window).`, 'OUTSIDE_INTERVIEW_WINDOW');
+  }
   const saved = [];
   for (const e of wanted) {
     const doc = await InterviewSchedule.findOneAndUpdate(
@@ -119,6 +136,7 @@ const upsertSlot = async ({ studentId, examId, startAt, durationMinutes, teacher
   if (!student || student.role !== 'student') throw new ScheduleError(404, 'Student not found.', 'STUDENT_NOT_FOUND');
   if (!exam || exam.examType !== 'olympiad') throw new ScheduleError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
   if (!(await hasSubmitted(student._id, exam._id))) throw new ScheduleError(409, 'This student has not submitted the exam yet, so no interview can be scheduled.', 'NOT_SUBMITTED');
+  await assertInsideEventWindow(exam, start, end);
 
   let teacher;
   if (teacherId) {

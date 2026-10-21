@@ -10,6 +10,10 @@ import { OlympiadCompletion } from '../../types/olympiad';
 const TestCompletionScreen: React.FC<{ completion?: OlympiadCompletion | null }> = ({ completion }) => {
   const selected = completion ? completion.interviewSelected : true;
   const date = completion?.interviewDate || '18 October 2026';
+  // "tomorrow" only when the interview really is the day after the submission (IST); otherwise a neutral wording
+  const istDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const tomorrow = !completion?.interviewOpensAt || !completion.submittedAt
+    || istDay(completion.interviewOpensAt) === istDay(new Date(new Date(completion.submittedAt).getTime() + 86400000).toISOString());
   return (
     <div className="card-soft rounded-2xl p-6 sm:p-10 border border-[#6C63F2]/30 text-center max-w-xl mx-auto relative overflow-hidden" data-testid="test-completion">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#8B03ED] to-[#09ACEF]" />
@@ -18,7 +22,7 @@ const TestCompletionScreen: React.FC<{ completion?: OlympiadCompletion | null }>
       <h2 className="font-heading font-semibold text-lg sm:text-xl text-text-primary mt-2">Your Test Has Been Completed Successfully!</h2>
       {selected ? (
         <>
-          <p className="mt-5 text-base sm:text-lg font-bold text-[#6C63F2]" data-testid="completion-selected">You are selected for tomorrow's interview!</p>
+          <p className="mt-5 text-base sm:text-lg font-bold text-[#6C63F2]" data-testid="completion-selected">{tomorrow ? 'You are selected for tomorrow\'s interview!' : 'You are selected for the upcoming interview!'}</p>
           <p className="mt-3 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#6C63F2]/10 text-text-primary font-semibold text-sm sm:text-base" data-testid="completion-date">
             <CalendarDays className="w-4 h-4 text-[#6C63F2]" aria-hidden="true" /> 📅 Interview Date: {date}
           </p>
