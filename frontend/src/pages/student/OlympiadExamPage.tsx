@@ -244,10 +244,10 @@ const OlympiadExamPage: React.FC = () => {
           <button
             type="button"
             onClick={() => checkout(exam)}
-            disabled={payingId === exam._id}
+            disabled={payingId === `${exam._id}:EXAM`}
             className="btn-primary w-full sm:w-auto py-3 px-6 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-70"
           >
-            {payingId === exam._id
+            {payingId === `${exam._id}:EXAM`
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
               : <><Sparkles className="w-4 h-4" /> Pay {formatRupees(exam.fee)} &amp; Start Exam</>}
           </button>

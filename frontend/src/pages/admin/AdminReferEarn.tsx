@@ -18,7 +18,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'send', label: 'Send exam credits' }, { key: 'settings', label: 'Settings' },
 ];
 const STD = (n: number | null) => (n === null || n === undefined ? '—' : n === 99 ? 'Others' : `Std ${n}`);
-const TX_TYPES = [['REFERRAL_REWARD', 'Referral reward'], ['ADMIN_GRANT', 'Admin grant'], ['EXAM_REDEMPTION', 'Exam redemption'], ['ADMIN_ADJUSTMENT', 'Adjustment'], ['REVERSAL', 'Reversal']];
+const TX_TYPES = [['REFERRAL_REWARD', 'Referral reward'], ['ADMIN_GRANT', 'Admin grant'], ['EXAM_REDEMPTION', 'Exam redemption'], ['INTERVIEW_REDEMPTION', 'Interview redemption'], ['ADMIN_ADJUSTMENT', 'Adjustment'], ['REVERSAL', 'Reversal']];
 
 // ───────────────────────── overview ─────────────────────────
 const Metric: React.FC<{ icon: React.ElementType; label: string; value: React.ReactNode; hint: string; tone: string; id: string }> = ({ icon: Icon, label, value, hint, tone, id }) => (

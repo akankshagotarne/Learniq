@@ -36,7 +36,8 @@ const section = (name: string, questionCount: number) => ({ name, questionCount,
 const baseOlympiad = {
   slug: 'olympiad-std-10', description: 'National level online Olympiad.', conductedBy: 'Nikhil Sir', examType: 'olympiad',
   standard: 10, startDate: iso(NOW - 11 * day), endDate: iso(NOW + 5 * day), durationMinutes: 60, totalQuestions: 60,
-  totalMarks: 60, negativeMarking: false, negativeMarkValue: 0, fee: 20, currency: 'INR',
+  totalMarks: 60, negativeMarking: false, negativeMarkValue: 0, fee: 10, currency: 'INR',
+  prices: { EXAM: 10, INTERVIEW: 10, currency: 'INR' }, examUnlocked: false, interviewUnlocked: false, examVia: null, interviewVia: null,
   sections: [section('Mathematics', 15), section('Science', 15), section('English', 15), section('Logical Reasoning', 15)],
   instructions: [
     'The examination has 60 multiple-choice questions and lasts 60 minutes.',

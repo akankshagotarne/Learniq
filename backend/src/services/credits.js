@@ -96,7 +96,7 @@ const notify = async (studentId, title, message, link) => {
 // ── the two primitive operations ─────────────────────────────────────────────────────────────
 const ledgerFields = (o) => ({
   student: o.student, studentName: o.studentName, type: o.type, delta: o.delta, source: o.source, idempotencyKey: o.key,
-  referral: o.referral, exam: o.exam, examTitle: o.examTitle, batch: o.batch, batchId: o.batchId, reversalOf: o.reversalOf,
+  referral: o.referral, exam: o.exam, examTitle: o.examTitle, component: o.component, batch: o.batch, batchId: o.batchId, reversalOf: o.reversalOf,
   reason: o.reason, note: o.note, actor: o.actor, actorName: o.actorName,
 });
 
@@ -268,42 +268,64 @@ const reverse = async ({ txId, admin, reason }) => {
  * attempt). This does the money-free part atomically-enough: charge one credit, record it, create the entitlement.
  * Idempotent: asking again for an exam that is already unlocked returns it and charges nothing.
  */
-const redeemForExam = async ({ student, exam }) => {
-  const existing = await OlympiadAccessGrant.findOne({ student: student._id, exam: exam._id, status: 'ACTIVE' });
-  if (existing) return { grant: existing, charged: false, alreadyUnlocked: true };
+/**
+ * Spend ONE credit to unlock ONE component (EXAM or INTERVIEW) of one exam. A credit never unlocks both, is never turned into rupees and
+ * never creates a payment row. Order of operations (no multi-document transaction needed):
+ *   1. already unlocked (credit, payment, legacy bundle or admin grant)?  -> nothing is charged;
+ *   2. atomic conditional debit (balance >= 1) with a per-student/exam/component idempotency key (a retry finds the same ledger row);
+ *   3. create the component entitlement (DB-unique per student+exam+component); on failure the credit is returned by a linked reversal.
+ */
+const redeemComponent = async ({ student, exam, component }) => {
+  if (component !== 'EXAM' && component !== 'INTERVIEW') throw new CreditError(400, 'INVALID_COMPONENT', 'Choose either the exam or the interview.');
+  const ea = require('./examAccess');
+  const isInterview = component === 'INTERVIEW';
+  const type = isInterview ? 'INTERVIEW_REDEMPTION' : 'EXAM_REDEMPTION';
+  const label = isInterview ? 'Interview' : 'Exam';
+  const findExisting = async () => {
+    const ent = isInterview ? await ea.interviewEntitlementFor(student._id, exam._id) : await ea.entitlementFor(student._id, exam._id);
+    return ent.grant || (ent.payment ? { payment: ent.payment } : null);
+  };
+  const existing = await findExisting();
+  if (existing) return { grant: existing.payment ? null : existing, payment: existing.payment || null, charged: false, alreadyUnlocked: true, component };
 
   // a credit that was handed back after a failed unlock (see below) must be chargeable again on the next attempt: each undo moves the key on
-  const undone = await CreditTransaction.countDocuments({ student: student._id, exam: exam._id, type: 'REVERSAL', source: 'SYSTEM' });
-  const key = `redeem:${idStr(student)}:${idStr(exam)}${undone ? `:${undone}` : ''}`;
+  const reversals = await CreditTransaction.find({ student: student._id, exam: exam._id, type: 'REVERSAL', source: 'SYSTEM' });
+  const undone = reversals.filter((r) => (isInterview ? r.component === 'INTERVIEW' : r.component !== 'INTERVIEW')).length;
+  const key = `${isInterview ? 'redeem-interview' : 'redeem'}:${idStr(student)}:${idStr(exam)}${undone ? `:${undone}` : ''}`;
   const r = await debit({
-    student: student._id, studentName: student.name, type: 'EXAM_REDEMPTION', delta: -1, source: 'EXAM', key, exam: exam._id, examTitle: exam.title,
-    reason: `Exam credit used: ${exam.title}`,
+    student: student._id, studentName: student.name, type, delta: -1, source: 'EXAM', key, exam: exam._id, examTitle: exam.title, component,
+    reason: `${label} credit used: ${exam.title}`,
   });
+  const undo = (why) => credit({ student: student._id, studentName: student.name, type: 'REVERSAL', delta: 1, source: 'SYSTEM', key: `redeem-undo:${idStr(r.tx)}`, reversalOf: r.tx._id, exam: exam._id, examTitle: exam.title, component, reason: why });
   let grant;
   try {
     grant = await OlympiadAccessGrant.create({
-      student: student._id, exam: exam._id, standard: exam.standard, registeredStandard: student.currentStandard, status: 'ACTIVE', includesInterview: true,
+      student: student._id, exam: exam._id, standard: exam.standard, registeredStandard: student.currentStandard, status: 'ACTIVE',
+      ...(isInterview ? { component: 'INTERVIEW' } : {}), includesInterview: isInterview,
       reasonCode: 'CREDIT_REDEMPTION', source: 'CREDIT', creditTransaction: r.tx._id, grantedBy: student._id, grantedByName: student.name,
     });
   } catch (e) {
     if (isDup(e)) {
       // a concurrent request (or an admin) created the one allowed entitlement: ours is not needed
-      grant = await OlympiadAccessGrant.findOne({ student: student._id, exam: exam._id, status: 'ACTIVE' });
-      if (!r.duplicate && grant && grant.source !== 'CREDIT') {
-        // an administrator exception appeared in the meantime: nothing was needed, give the credit back (linked, audited)
-        await credit({ student: student._id, studentName: student.name, type: 'REVERSAL', delta: 1, source: 'SYSTEM', key: `redeem-undo:${idStr(r.tx)}`, reversalOf: r.tx._id, exam: exam._id, examTitle: exam.title, reason: 'Credit returned: the exam was already unlocked.' });
-        return { grant, charged: false, alreadyUnlocked: true };
+      grant = isInterview ? await ea.interviewGrant(student._id, exam._id) : await ea.activeGrant(student._id, exam._id);
+      if (!r.duplicate && grant && !(grant.source === 'CREDIT' && String(grant.creditTransaction) === String(r.tx._id))) {
+        // an administrator exception / another request appeared in the meantime: nothing was needed, give the credit back (linked, audited)
+        await undo(`Credit returned: the ${label.toLowerCase()} was already unlocked.`);
+        return { grant, charged: false, alreadyUnlocked: true, component };
       }
     } else {
       if (!r.duplicate) {
         // the entitlement could not be created: never leave a credit deducted without a usable entitlement
-        try { await credit({ student: student._id, studentName: student.name, type: 'REVERSAL', delta: 1, source: 'SYSTEM', key: `redeem-undo:${idStr(r.tx)}`, reversalOf: r.tx._id, exam: exam._id, examTitle: exam.title, reason: 'Credit returned: the exam could not be unlocked.' }); } catch (e2) { console.error('[credits] could not return the credit:', e2.message); }
+        try { await undo(`Credit returned: the ${label.toLowerCase()} could not be unlocked.`); } catch (e2) { console.error('[credits] could not return the credit:', e2.message); }
       }
       throw e;
     }
   }
-  return { grant, charged: !r.duplicate, alreadyUnlocked: false, transaction: r.tx };
+  // The ledger is append-only: the link runs from the entitlement (grant.creditTransaction) to the ledger row, never the other way.
+  return { grant, charged: !r.duplicate, alreadyUnlocked: false, transaction: r.tx, component };
 };
+const redeemForExam = ({ student, exam }) => redeemComponent({ student, exam, component: 'EXAM' });
+const redeemForInterview = ({ student, exam }) => redeemComponent({ student, exam, component: 'INTERVIEW' });
 
 // ── reconciliation ───────────────────────────────────────────────────────────────────────────
 /**
@@ -336,5 +358,5 @@ module.exports = {
   CreditError, isDup, validId, idStr,
   getSettings, publicSettings, updateSettings, DEFAULT_SETTINGS,
   ensureAccount, getBalance, credit, debit, notify,
-  awardReferral, grantBatch, adjust, reverse, redeemForExam, reconcile, batchView,
+  awardReferral, grantBatch, adjust, reverse, redeemComponent, redeemForExam, redeemForInterview, reconcile, batchView,
 };

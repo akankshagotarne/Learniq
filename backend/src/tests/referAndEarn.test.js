@@ -561,7 +561,7 @@ test('H: normal paid checkout still creates a 20-rupee Razorpay order and is una
   const stu = await mkUser(); const exam = await mkExam();
   const order = await call('POST', `/api/olympiad/exams/${exam._id}/payment/order`, { token: stu.token });
   assert.equal(order.status, 200, order.text);
-  assert.equal(rzp.created[rzp.created.length - 1].amount, 2000);
+  assert.equal(rzp.created[rzp.created.length - 1].amount, 1000);
   assert.equal(fake.OlympiadPayment.docs.filter((p) => String(p.student) === stu.id && p.status === 'PENDING').length, 1);
   assert.equal(balanceOf(stu.id), 0);
 });

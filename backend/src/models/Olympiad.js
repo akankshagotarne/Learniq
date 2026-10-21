@@ -63,6 +63,9 @@ const olympiadExamSchema = new mongoose.Schema({
   negativeMarking: { type: Boolean, default: false },
   negativeMarkValue: { type: Number, default: 0, min: 0 },
 
+  // Optional per-exam overrides of the split prices (whole rupees). Absent = config/olympiadPricing.js defaults (Rs 10 each).
+  examFee: { type: Number, min: 1 },
+  interviewFee: { type: Number, min: 1 },
   fee: {
     type: Number, required: true, // in rupees; Olympiads cost at least Rs 1, only the free Engineering mock test may be 0
     validate: {
@@ -118,8 +121,11 @@ const olympiadPaymentSchema = new mongoose.Schema({
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   razorpaySignature: { type: String, select: false },
-  amount: { type: Number, required: true }, // rupees
+  amount: { type: Number, required: true }, // rupees actually collected through Razorpay (credits never create a payment row)
   currency: { type: String, default: 'INR' },
+  // Which part this payment unlocked. NO default on purpose: a record without it is a legacy Rs 20 bundle (exam + interview).
+  // New orders are always EXAM or INTERVIEW (config/olympiadPricing.js).
+  component: { type: String, enum: ['EXAM', 'INTERVIEW', 'PACKAGE'] },
   // UNCONFIRMED = kept for audit, but NOT matched to a captured LIVE Razorpay payment: never revenue, never grants access.
   status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'UNCONFIRMED'], default: 'PENDING' },
   statusBeforeReview: { type: String, trim: true }, // the status the record had before it was marked UNCONFIRMED (lets the change be reversed exactly)
@@ -162,13 +168,13 @@ olympiadPaymentSchema.index({ exam: 1, status: 1 }); // admin analytics: payment
 olympiadPaymentSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });
 // A student can hold at most one SUCCESS payment per exam (double-charge / double-callback guard)
 olympiadPaymentSchema.index(
-  { student: 1, exam: 1 },
-  { unique: true, partialFilterExpression: { status: 'SUCCESS' }, name: 'one_success_per_student_exam' }
+  { student: 1, exam: 1, component: 1 },
+  { unique: true, partialFilterExpression: { status: 'SUCCESS' }, name: 'one_success_per_student_exam_component' }
 );
 // A student can hold at most one open (PENDING) order per exam — makes "Pay" idempotent
 olympiadPaymentSchema.index(
-  { exam: 1, student: 1 },
-  { unique: true, partialFilterExpression: { status: 'PENDING' }, name: 'one_pending_per_student_exam' }
+  { exam: 1, student: 1, component: 1 },
+  { unique: true, partialFilterExpression: { status: 'PENDING' }, name: 'one_pending_per_student_exam_component' }
 );
 
 // ──────────────────────────────────────────────
