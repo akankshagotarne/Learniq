@@ -1,13 +1,15 @@
 /**
  * Pre-exam security check. Nothing starts (no attempt, no timer) until every required check passes:
- *   1 eligibility (server)   2 device support   3 rules + consent   4 camera on   5 fullscreen (the separate face-check step was removed)
- * The camera is only requested after the student has read the rules and pressed "Turn on camera".
+ *   1 eligibility (server)   2 device support   3 rules + consent   4 camera on   5 monitoring system ready   6 fullscreen
+ * The camera is only requested after the student has read the rules and pressed "Turn on camera". The monitoring models (~20 MB) are a
+ * SEPARATE check: they start downloading as soon as this screen opens (so they are usually ready by the time the camera is on), show
+ * their progress, always end in ready / failed (stall + overall timeouts), and can be retried without touching the camera.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Camera, CheckCircle2, Loader2, Maximize2, ShieldCheck, XCircle, AlertTriangle, MonitorSmartphone, Info } from 'lucide-react';
+import { Camera, CheckCircle2, Loader2, Maximize2, ShieldCheck, XCircle, AlertTriangle, MonitorSmartphone, Info, RotateCw } from 'lucide-react';
 import { proctoringApi, errorMessage, PrecheckResult } from './api';
-import { checkDeviceSupport, Detector, loadDetector, openCamera, stopStream, waitForFrames } from './engine';
+import { checkDeviceSupport, describeLoadFailure, Detector, DetectorLoadError, LoadProgress, loadDetector, openCamera, stopStream, waitForFrames } from './engine';
 import { ExamKind, ProctoringPolicy } from './types';
 
 export interface GateResult { precheck: PrecheckResult; stream: MediaStream | null; detector: Detector | null }
@@ -48,7 +50,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
   const [device] = useState(checkDeviceSupport);
   const [consent, setConsent] = useState(false);
   const [camera, setCamera] = useState<{ state: Step; message?: string }>({ state: 'idle' });
-  const [models, setModels] = useState<{ state: Step; message?: string }>({ state: 'idle' });
+  const [models, setModels] = useState<{ state: Step; message?: string; progress?: LoadProgress | null }>({ state: 'idle' });
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -57,6 +59,10 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
   const detectorRef = useRef<Detector | null>(null);
   const loopRef = useRef<number | null>(null);
   const handedOver = useRef(false);
+  const startingRef = useRef(false);
+  const attemptRef = useRef(0);
+  const loadingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const cameraNeeded = policy.cameraRequired;
   const deviceBlocked = (policy.desktopRequired && device.mobile)
@@ -73,10 +79,41 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
 
   const stopLoop = () => { if (loopRef.current) window.clearTimeout(loopRef.current); loopRef.current = null; };
 
+  // Monitoring models: independent of the camera. One attempt at a time; a stale attempt (a newer one started, or the screen was left) never
+  // overwrites newer state and closes whatever it finished loading.
+  const loadModels = useCallback(() => {
+    if (detectorRef.current || loadingRef.current) return;
+    loadingRef.current = true;
+    const id = ++attemptRef.current;
+    const ctl = new AbortController(); abortRef.current = ctl;
+    const t0 = performance.now();
+    setModels({ state: 'working', message: 'Preparing the monitoring system…', progress: null });
+    loadDetector({ phone: policy.phoneDetection, phoneConfidence: policy.phoneConfidence, signal: ctl.signal,
+      onProgress: (p) => { if (id === attemptRef.current) setModels((m) => (m.state === 'working' ? { ...m, progress: p } : m)); } })
+      .then((d) => {
+        if (id !== attemptRef.current) { try { d.close(); } catch { /* ignore */ } return; }
+        detectorRef.current = d;
+        setModels({ state: 'ok', message: `Everything runs on this device - no video is uploaded. (${secs(performance.now() - t0)})`, progress: null });
+      })
+      .catch((e) => {
+        if (id !== attemptRef.current) return;
+        // diagnostics: the failure class and timing only - no video, tokens or personal data
+        console.warn(`[proctor/gate] monitoring load failed: code=${e instanceof DetectorLoadError ? e.code : 'init'} afterMs=${Math.round(performance.now() - t0)} mobile=${device.mobile}`);
+        setModels({ state: 'fail', message: describeLoadFailure(e), progress: null });
+      })
+      .finally(() => { if (id === attemptRef.current) loadingRef.current = false; });
+  }, [policy.phoneDetection, policy.phoneConfidence, device.mobile]);
+
+  // start downloading as soon as the screen opens (needs no camera and no consent: they are static files)
+  useEffect(() => { if (cameraNeeded && !deviceBlocked) loadModels(); }, [cameraNeeded, deviceBlocked, loadModels]);
+
   // release everything if the student leaves this screen without starting
   useEffect(() => () => {
     stopLoop();
-    if (!handedOver.current) { stopStream(streamRef.current); try { detectorRef.current?.close(); } catch { /* ignore */ } }
+    if (!handedOver.current) {
+      attemptRef.current += 1; loadingRef.current = false; abortRef.current?.abort();
+      stopStream(streamRef.current); try { detectorRef.current?.close(); } catch { /* ignore */ }
+    }
   }, []);
 
   const turnOnCamera = async () => {
@@ -94,35 +131,18 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       stream.getVideoTracks()[0]?.addEventListener('ended', () => { setCamera({ state: 'fail', message: 'The camera stopped. Press "Try again".' }); });
     } catch (e: any) {
       setCamera({ state: 'fail', message: e?.message || 'The camera could not be started.' });
-      return;
-    }
-    if (!detectorRef.current) {
-      setModels({ state: 'working', message: 'Loading the monitoring models (about 10–20 MB the first time, then cached)…' });
-      try {
-        const t0 = performance.now();
-        detectorRef.current = await loadDetector({ phone: policy.phoneDetection, phoneConfidence: policy.phoneConfidence });
-        const elapsed = performance.now() - t0;
-        if (import.meta.env.DEV) {
-          console.debug(
-            `[proctor/gate] detector loaded: name=${detectorRef.current.name} phone=${policy.phoneDetection} elapsedMs=${Math.round(elapsed)}`
-          );
-          if (!policy.phoneDetection) console.debug('[proctor/gate] phoneDetection is disabled — phone counter will not be populated.');
-        }
-        setModels({ state: 'ok', message: `Monitoring ready (${secs(elapsed)}). Everything runs on this device - no video is uploaded.` });
-      } catch (e) {
-        if (import.meta.env.DEV) console.error('[proctor/gate] detector load failed:', e);
-        setModels({ state: 'fail', message: 'The monitoring components could not be loaded on this device. Use the latest Chrome, Edge or Firefox on a laptop or desktop, or contact support.' });
-        return;
-      }
     }
   };
+
+  const retryModels = () => { detectorRef.current = null; loadModels(); };
 
   // The separate face-check step was removed: the student switches the camera on, then starts. Face absence / other-person
   // monitoring continues DURING the exam (useProctoring), using the detector loaded here.
   const ready = eligible.state === 'ok' && !deviceBlocked && consent && (!cameraNeeded || (camera.state === 'ok' && models.state === 'ok'));
 
   const startSecureExam = async () => {
-    if (!ready || starting) return;
+    if (!ready || starting || startingRef.current) return;
+    startingRef.current = true;
     setStarting(true); setStartError(null);
     try {
       if (policy.fullscreenRequired) {
@@ -140,6 +160,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
       if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch { /* ignore */ } }
       setStartError(e?.message || 'The exam could not be started.');
     } finally {
+      startingRef.current = false;
       setStarting(false);
     }
   };
@@ -245,12 +266,24 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                 </StepRow>
               )}
               {cameraNeeded && (
-                <StepRow state={models.state === 'fail' ? 'fail' : camera.state !== 'ok' ? 'idle' : models.state === 'ok' ? 'ok' : 'working'} title="Camera ready" testId="check-camera-ready">
-                  {models.state === 'fail' ? <span className="text-[#E1447A]">{models.message}</span>
-                    : models.state === 'working' ? models.message
-                      : models.state === 'ok' ? <span data-testid="camera-ready-message">Camera is on. You can start the exam.</span>
-                        : 'Starts after the camera is on.'}
-                  {models.state === 'ok' && <span className="block text-text-muted">{models.message}</span>}
+                <StepRow state={models.state} title="Monitoring system" testId="check-camera-ready">
+                  {models.state === 'fail' ? <span className="text-[#E1447A]" data-testid="models-error">Monitoring system could not initialize. {models.message}</span>
+                    : models.state === 'working' ? (
+                      <span data-testid="models-loading">
+                        {models.progress?.phase === 'start' ? 'Starting the monitoring models…' : 'Loading monitoring models…'}
+                        {models.progress && models.progress.phase === 'download' && (
+                          <span className="block" data-testid="models-progress">
+                            {(models.progress.loadedBytes / 1048576).toFixed(1)}{models.progress.totalBytes ? ` of ${(models.progress.totalBytes / 1048576).toFixed(1)}` : ''} MB downloaded{models.progress.totalBytes ? ` (${Math.min(100, Math.round(100 * models.progress.loadedBytes / models.progress.totalBytes))}%)` : ''}
+                          </span>)}
+                        <span className="block text-text-muted">About 20 MB the first time, then kept on this device. You can turn on the camera meanwhile.</span>
+                      </span>)
+                      : models.state === 'ok' ? <span data-testid="camera-ready-message">Monitoring system ready.</span> : 'Preparing…'}
+                  {models.state === 'ok' && models.message && <span className="block text-text-muted">{models.message}</span>}
+                  {models.state === 'fail' && (
+                    <>
+                      <span className="block text-text-muted">You cannot start until the monitoring system is ready - it is required for this exam. Your registration and attempt are not affected.</span>
+                      <button type="button" onClick={retryModels} className="btn-primary text-xs px-3 py-1.5 mt-1 inline-flex items-center gap-1.5" data-testid="models-retry"><RotateCw className="w-3.5 h-3.5" aria-hidden />Retry</button>
+                    </>)}
                 </StepRow>
               )}
               {policy.fullscreenRequired && (

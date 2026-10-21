@@ -139,7 +139,8 @@ export async function passChecks(page: Page) {
   await expect(page.getByTestId('check-eligibility')).toHaveAttribute('data-state', 'ok');
   await page.getByTestId('consent').check();
   await page.getByTestId('camera-button').click();
-  await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
+  await expect(page.getByTestId('check-camera')).toHaveAttribute('data-state', 'ok', { timeout: 15000 }); // the camera and the monitoring system are separate checks
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 15000 });
   await page.getByTestId('start-secure-exam').click();
   await expect(page.getByTestId('proctoring-panel')).toBeVisible({ timeout: 15000 });
 }

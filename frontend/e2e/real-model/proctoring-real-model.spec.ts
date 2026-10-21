@@ -40,7 +40,7 @@ test.describe('real model: one face', () => {
     try {
     test.setTimeout(180_000);
     const server = await openGate(page);
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: MODEL_TIMEOUT });
     await page.getByTestId('start-secure-exam').click();
     const panel = page.getByTestId('proctoring-panel');
     await expect(panel).toHaveAttribute('data-face-count', '1', { timeout: 20_000 });
@@ -62,7 +62,7 @@ test.describe('real model: two faces', () => {
     try {
     test.setTimeout(180_000);
     await openGate(page);
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: MODEL_TIMEOUT });
     await expect(page.getByTestId('check-face')).toHaveCount(0);
     await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
     } finally { await close(); }
@@ -76,7 +76,7 @@ test.describe('real model: nobody in front of the camera', () => {
     try {
     test.setTimeout(180_000);
     await openGate(page);
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: MODEL_TIMEOUT });
     await expect(page.getByTestId('check-face')).toHaveCount(0);
     await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
     } finally { await close(); }
@@ -90,7 +90,7 @@ test.describe('real model: student with a phone', () => {
     try {
     test.setTimeout(180_000);
     const server = await openGate(page);
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: MODEL_TIMEOUT });
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: MODEL_TIMEOUT });
     await page.getByTestId('start-secure-exam').click();
     await expect(page.getByTestId('proctoring-warning-text')).toHaveText('Warning 1/2: A possible mobile phone has been detected. Please remove it from your examination area.', { timeout: 30_000 });
     const ev = server.events.find((e) => e.type === 'MOBILE_PHONE_DETECTED');
