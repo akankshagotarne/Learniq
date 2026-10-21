@@ -58,7 +58,8 @@ test.describe('pre-exam checks', () => {
     await expect(page.getByTestId('start-secure-exam')).toBeDisabled(); // camera not on yet
     await page.getByTestId('camera-button').click();
     await expect(page.getByTestId('camera-message')).toHaveText('Camera connected.');
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
+    await expect(page.getByTestId('check-camera')).toHaveAttribute('data-state', 'ok', { timeout: 15000 }); // the camera and the monitoring system are separate checks
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 15000 });
     await expect(page.getByTestId('check-face')).toHaveCount(0);
     await expect(page.getByTestId('face-message')).toHaveCount(0);
     await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
@@ -73,7 +74,8 @@ test.describe('pre-exam checks', () => {
     await page.goto(`/student/exams/${EXAM_ID}`);
     await page.getByTestId('consent').check();
     await page.getByTestId('camera-button').click();
-    await expect(page.getByTestId('camera-ready-message')).toHaveText('Camera is on. You can start the exam.', { timeout: 15000 });
+    await expect(page.getByTestId('check-camera')).toHaveAttribute('data-state', 'ok', { timeout: 15000 }); // the camera and the monitoring system are separate checks
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 15000 });
     await page.getByTestId('start-secure-exam').click();
     await expect(page.getByTestId('start-error')).toContainText('Fullscreen could not be entered');
     await expect(page.getByTestId('proctoring-panel')).toHaveCount(0);

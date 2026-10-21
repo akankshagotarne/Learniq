@@ -39,47 +39,192 @@ const testDetector = (): Detector | null => {
 let monotonic = 0;
 const nextTimestamp = () => { monotonic = Math.max(monotonic + 1, Math.round(performance.now())); return monotonic; };
 
-export const loadDetector = async ({ phone, phoneConfidence }: { phone: boolean; phoneConfidence?: number }): Promise<Detector> => {
-  const fake = testDetector();
-  if (fake) return fake;
+// ---------------------------------------------------------------------------------------------------------------------
+// Loading the monitoring components (~20 MB: WebAssembly runtime + two models).
+//
+// Every attempt ends in a defined outcome - ready, or a DetectorLoadError with a code the screen can explain:
+//   unsupported  this browser cannot run the monitoring (no WebAssembly)
+//   download     a file could not be fetched (offline, blocked, HTTP error) even after automatic retries
+//   stalled      a download received no data for STALL_MS
+//   timeout      the whole attempt exceeded TOTAL_MS, or starting the models exceeded INIT_MS
+//   init         the files arrived but the models would not start on this device
+// Files are fetched in parallel with progress and a stall watchdog, kept in memory (a retry only re-fetches what failed), and the
+// WebAssembly binary / models are handed to MediaPipe from memory, so nothing is downloaded twice. A late result of an attempt
+// that already timed out is closed and discarded.
+// ---------------------------------------------------------------------------------------------------------------------
+export type DetectorLoadCode = 'unsupported' | 'download' | 'stalled' | 'timeout' | 'init';
+export class DetectorLoadError extends Error {
+  code: DetectorLoadCode;
+  constructor(code: DetectorLoadCode, message: string) { super(message); this.name = 'DetectorLoadError'; this.code = code; }
+}
+export interface LoadProgress { phase: 'download' | 'start'; loadedBytes: number; totalBytes: number | null }
+export interface LoadOptions {
+  phone: boolean; phoneConfidence?: number;
+  onProgress?: (p: LoadProgress) => void;
+  /** aborts the attempt (the screen was left) */
+  signal?: AbortSignal;
+  /** overrides for tests */
+  limits?: Partial<typeof LIMITS>;
+}
+export const LIMITS = { STALL_MS: 25_000, TOTAL_MS: 360_000, INIT_MS: 45_000, RETRIES: 2 };
 
+const assetCache = new Map<string, Uint8Array>(); // url -> bytes of a fully downloaded file (kept for retries / a second exam on the same page)
+const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const t = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DetectorLoadError('timeout', 'cancelled')); }, { once: true });
+});
+
+/** One file, with a no-data watchdog. Resolves with the full bytes or rejects with a DetectorLoadError. */
+const fetchAsset = async (url: string, stallMs: number, signal: AbortSignal, onBytes: (n: number) => void, onTotal: (n: number) => void): Promise<Uint8Array> => {
+  const hit = assetCache.get(url);
+  if (hit) { onTotal(hit.byteLength); onBytes(hit.byteLength); return hit; }
+  const ctl = new AbortController();
+  let stalled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { stalled = true; ctl.abort(); }, stallMs); };
+  const onOuterAbort = () => ctl.abort();
+  signal.addEventListener('abort', onOuterAbort, { once: true });
+  try {
+    arm();
+    const res = await fetch(url, { signal: ctl.signal, cache: 'force-cache' });
+    if (!res.ok) throw new DetectorLoadError('download', `HTTP ${res.status} for ${url.split('/').pop()}`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    if (total) onTotal(total);
+    if (!res.body) { const buf = new Uint8Array(await res.arrayBuffer()); onBytes(buf.byteLength); assetCache.set(url, buf); return buf; }
+    const reader = res.body.getReader(); const chunks: Uint8Array[] = []; let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      arm(); chunks.push(value); got += value.byteLength; onBytes(value.byteLength);
+    }
+    const out = new Uint8Array(got); let off = 0; for (const c of chunks) { out.set(c, off); off += c.byteLength; }
+    assetCache.set(url, out);
+    return out;
+  } catch (e) {
+    if (e instanceof DetectorLoadError) throw e;
+    if (stalled) throw new DetectorLoadError('stalled', `no data for ${Math.round(stallMs / 1000)} s from ${url.split('/').pop()}`);
+    if (signal.aborted) throw new DetectorLoadError('timeout', 'cancelled');
+    throw new DetectorLoadError('download', `${(e as Error)?.name || 'Error'} fetching ${url.split('/').pop()}`);
+  } finally { if (timer) clearTimeout(timer); signal.removeEventListener('abort', onOuterAbort); }
+};
+
+/** fetchAsset + automatic retries (not after a cancel) so a flaky mobile connection does not need a manual retry. */
+const fetchWithRetry = async (url: string, lim: typeof LIMITS, signal: AbortSignal, onBytes: (n: number) => void, onTotal: (n: number) => void) => {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= lim.RETRIES; attempt += 1) {
+    let counted = 0;
+    try { return await fetchAsset(url, lim.STALL_MS, signal, (n) => { counted += n; onBytes(n); }, onTotal); }
+    catch (e) {
+      lastErr = e; onBytes(-counted); // this attempt's bytes will be downloaded again
+      if (signal.aborted || (e instanceof DetectorLoadError && e.message === 'cancelled')) throw e;
+      if (attempt < lim.RETRIES) await sleep(800 * (attempt + 1), signal);
+    }
+  }
+  throw lastErr;
+};
+
+const withTimeout = <T,>(p: Promise<T>, ms: number, onLate: (v: T) => void): Promise<T> => new Promise<T>((resolve, reject) => {
+  let done = false;
+  const t = setTimeout(() => { done = true; reject(new DetectorLoadError('timeout', `models did not start within ${Math.round(ms / 1000)} s`)); }, ms);
+  p.then((v) => { if (done) { try { onLate(v); } catch { /* ignore */ } return; } done = true; clearTimeout(t); resolve(v); },
+    (e) => { if (done) return; done = true; clearTimeout(t); reject(e); });
+});
+
+const blobUrl = (bytes: Uint8Array, type: string) => URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+
+const buildDetector = async (opts: LoadOptions, lim: typeof LIMITS, signal: AbortSignal): Promise<Detector> => {
+  if (typeof WebAssembly !== 'object') throw new DetectorLoadError('unsupported', 'WebAssembly is not available');
   const vision = await import('@mediapipe/tasks-vision');
   const simd = await vision.FilesetResolver.isSimdSupported();
-  const fileset = simd
-    ? { wasmLoaderPath: wasmLoaderSimd, wasmBinaryPath: wasmBinarySimd }
-    : { wasmLoaderPath: wasmLoaderNoSimd, wasmBinaryPath: wasmBinaryNoSimd };
+  const loaderUrl = simd ? wasmLoaderSimd : wasmLoaderNoSimd;
+  const binaryUrl = simd ? wasmBinarySimd : wasmBinaryNoSimd;
 
-  // CPU (WebAssembly + XNNPACK) by default: predictable on every machine. The GPU delegate was much SLOWER where Chrome
-  // falls back to software WebGL (measured 0.5-5 s per check vs 12-80 ms on CPU), and it cannot be detected reliably.
-  const create = async <T>(fn: (delegate: 'GPU' | 'CPU') => Promise<T>): Promise<{ task: T; delegate: string }> => ({ task: await fn('CPU'), delegate: 'CPU' });
+  // 1. download everything in parallel, with progress and a stall watchdog
+  const urls = [loaderUrl, binaryUrl, FACE_MODEL, ...(opts.phone ? [PHONE_MODEL] : [])];
+  let loaded = 0; let totalKnown = true; const sizes = new Map<string, number>();
+  const sumTotal = () => [...sizes.values()].reduce((a, b) => a + b, 0);
+  const report = () => opts.onProgress?.({ phase: 'download', loadedBytes: Math.max(0, loaded), totalBytes: totalKnown && sizes.size === urls.length ? sumTotal() : null });
+  const onBytes = (n: number) => { loaded += n; report(); };
+  // the content length of a compressed response may be unknown: then only the bytes so far are shown
+  const results = await Promise.all(urls.map((u) => fetchWithRetry(u, lim, signal, onBytes, (n) => { sizes.set(u, n); report(); }).catch((e) => { totalKnown = false; throw e; })));
+  const [, binary, faceBytes, phoneBytes] = results;
+  if (signal.aborted) throw new DetectorLoadError('timeout', 'cancelled');
 
-  const face = await create((delegate) => vision.FaceLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: FACE_MODEL, delegate },
-    runningMode: 'VIDEO', numFaces: 4,
-    minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
-  }));
-  const objects = phone ? await create((delegate) => vision.ObjectDetector.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: PHONE_MODEL, delegate },
-    runningMode: 'VIDEO', categoryAllowlist: ['cell phone'], scoreThreshold: detectorScoreFloor(phoneConfidence), maxResults: 3,
-  })) : null;
-
-  return {
-    name: `mediapipe-${face.delegate}${objects ? `+phone-${objects.delegate}` : ''}`,
-    async detect(video, withPhone) {
-      const t0 = performance.now();
-      const fr = face.task.detectForVideo(video, nextTimestamp());
-      let phoneScore: number | null = null;
-      if (withPhone && objects) {
-        const od = objects.task.detectForVideo(video, nextTimestamp());
-        phoneScore = od.detections.reduce((best, d) => Math.max(best, d.categories[0]?.score ?? 0), 0);
-      }
-      return { faceCount: fr.faceLandmarks.length, phoneScore, inferenceMs: performance.now() - t0 };
-    },
-    close() {
-      try { face.task.close(); } catch { /* already closed */ }
-      try { objects?.task.close(); } catch { /* already closed */ }
-    },
+  // 2. start the models (CPU / WebAssembly: predictable on every phone and laptop; the GPU delegate was slower where Chrome uses software WebGL)
+  opts.onProgress?.({ phase: 'start', loadedBytes: loaded, totalBytes: sumTotal() || null });
+  const binaryObjectUrl = blobUrl(binary, 'application/wasm');
+  const fileset = { wasmLoaderPath: loaderUrl, wasmBinaryPath: binaryObjectUrl };
+  const created: { close(): void }[] = [];
+  const start = async <T extends { close(): void }>(fn: () => Promise<T>): Promise<T> => {
+    try { return await withTimeout(fn(), lim.INIT_MS, (late) => late.close()); } catch (e) {
+      if (e instanceof DetectorLoadError) throw e;
+      throw new DetectorLoadError('init', `${(e as Error)?.message || 'model start-up failed'}`.slice(0, 200));
+    }
   };
+  try {
+    const face = await start(() => vision.FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetBuffer: faceBytes, delegate: 'CPU' }, runningMode: 'VIDEO', numFaces: 4,
+      minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+    })); created.push(face);
+    const objects = opts.phone ? await start(() => vision.ObjectDetector.createFromOptions(fileset, {
+      baseOptions: { modelAssetBuffer: phoneBytes, delegate: 'CPU' }, runningMode: 'VIDEO', categoryAllowlist: ['cell phone'],
+      scoreThreshold: detectorScoreFloor(opts.phoneConfidence), maxResults: 3,
+    })) : null;
+    if (objects) created.push(objects);
+    return {
+      name: `mediapipe-CPU${objects ? '+phone-CPU' : ''}`,
+      async detect(video, withPhone) {
+        const t0 = performance.now();
+        const fr = face.detectForVideo(video, nextTimestamp());
+        let phoneScore: number | null = null;
+        if (withPhone && objects) {
+          const od = objects.detectForVideo(video, nextTimestamp());
+          phoneScore = od.detections.reduce((best, d) => Math.max(best, d.categories[0]?.score ?? 0), 0);
+        }
+        return { faceCount: fr.faceLandmarks.length, phoneScore, inferenceMs: performance.now() - t0 };
+      },
+      close() { for (const c of created) { try { c.close(); } catch { /* already closed */ } } },
+    };
+  } catch (e) {
+    for (const c of created) { try { c.close(); } catch { /* ignore */ } }
+    throw e;
+  } finally { setTimeout(() => URL.revokeObjectURL(binaryObjectUrl), 60_000); }
+};
+
+/**
+ * Loads the monitoring detector. Always settles: resolves with a working detector, or rejects with a DetectorLoadError.
+ * (Automated browser tests swap in a scripted detector, see testDetector.)
+ */
+export const loadDetector = async (opts: LoadOptions): Promise<Detector> => {
+  const fake = testDetector();
+  if (fake) return fake;
+  const hookLimits = import.meta.env.VITE_PROCTOR_TEST_HOOKS === 'true' ? (window as unknown as { __proctorLoadLimits?: Partial<typeof LIMITS> }).__proctorLoadLimits : undefined; // e2e builds only
+  const lim = { ...LIMITS, ...hookLimits, ...opts.limits };
+  const ctl = new AbortController();
+  const onOuter = () => ctl.abort();
+  opts.signal?.addEventListener('abort', onOuter, { once: true });
+  let totalTimer: ReturnType<typeof setTimeout> | undefined;
+  const overall = new Promise<never>((_, reject) => { totalTimer = setTimeout(() => { ctl.abort(); reject(new DetectorLoadError('timeout', `monitoring did not load within ${Math.round(lim.TOTAL_MS / 1000)} s`)); }, lim.TOTAL_MS); });
+  const work = buildDetector(opts, lim, ctl.signal);
+  try {
+    return await Promise.race([work, overall]);
+  } catch (e) {
+    // a result that arrives after this attempt gave up must not leak a running model
+    work.then((d) => { try { d.close(); } catch { /* ignore */ } }, () => { /* already reported */ });
+    throw e instanceof DetectorLoadError ? e : new DetectorLoadError('init', (e as Error)?.message || 'unknown error');
+  } finally { if (totalTimer) clearTimeout(totalTimer); opts.signal?.removeEventListener('abort', onOuter); }
+};
+
+/** Student-facing explanation of why the monitoring did not load (no technical detail). */
+export const describeLoadFailure = (e: unknown): string => {
+  const code = e instanceof DetectorLoadError ? e.code : 'init';
+  switch (code) {
+    case 'unsupported': return 'This browser cannot run the exam monitoring. Please use the latest Chrome, Edge or Firefox.';
+    case 'stalled': return 'The download stopped because the connection is too slow or was interrupted. Move to a stronger Wi-Fi or mobile signal and press Retry.';
+    case 'timeout': return 'The monitoring files took too long to load. Check your connection and press Retry.';
+    case 'download': return 'The monitoring files could not be downloaded. Check your internet connection (turn off data saver / VPN) and press Retry.';
+    default: return 'The monitoring system could not start on this device. Close other apps and browser tabs to free memory, then press Retry. If it keeps failing, try the latest Chrome or another device.';
+  }
 };
 
 /** Camera access with explanations a student can act on. */
