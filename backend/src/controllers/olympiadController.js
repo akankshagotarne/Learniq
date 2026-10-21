@@ -4,11 +4,13 @@ const {
   OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt,
 } = require('../models/Olympiad');
 const { Notification } = require('../models/index');
+const { OlympiadAccessGrant } = require('../models/ExamAccess');
 const { getRazorpayInstance } = require('../services/razorpayClient');
 const certificates = require('../services/certificateService');
 const { publicPolicy, resolvePolicy, validatePolicyInput, applyPolicyEdit, PolicyValidationError } = require('../services/proctoring/policy');
 const examAccess = require('../services/examAccess');
 const credits = require('../services/credits');
+const { priceFor, isComponent, pricing: pricingFor } = require('../config/olympiadPricing');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
 const studentTabs = require('../services/studentExamTabs');
@@ -357,7 +359,8 @@ const examPublic = (exam) => ({
   totalMarks: exam.totalMarks,
   negativeMarking: exam.negativeMarking,
   negativeMarkValue: exam.negativeMarkValue,
-  fee: exam.fee,
+  fee: priceFor('EXAM', exam), // what the student pays to unlock the EXAM (Rs 10 default); exam.fee stays the legacy bundle price
+  prices: pricingFor(exam),
   currency: exam.currency,
   sections: exam.sections,
   proctoring: publicPolicy(exam.proctoring),
@@ -403,11 +406,12 @@ const buildApprovalState = async (exam, userId, now) => {
 
 const buildState = async (exam, userId, now = new Date()) => {
   if (isApprovalExam(exam)) return buildApprovalState(exam, userId, now);
-  const [success, latest, foundAttempt, grant] = await Promise.all([
-    OlympiadPayment.findOne({ student: userId, exam: exam._id, status: 'SUCCESS' }),
-    OlympiadPayment.findOne({ student: userId, exam: exam._id }).sort({ createdAt: -1 }),
+  const [success, latest, foundAttempt, grant, ivEnt] = await Promise.all([
+    OlympiadPayment.findOne({ student: userId, exam: exam._id, status: 'SUCCESS', component: examAccess.EXAM_PAY }),
+    OlympiadPayment.findOne({ student: userId, exam: exam._id, component: examAccess.EXAM_PAY }).sort({ createdAt: -1 }),
     OlympiadAttempt.findOne({ student: userId, exam: exam._id }),
-    examAccess.activeGrant(userId, exam._id), // an administrator exception: shown to the student as an ordinary available exam
+    examAccess.activeGrant(userId, exam._id), // an administrator / credit exam grant: shown to the student as an ordinary available exam
+    examAccess.interviewEntitlementFor(userId, exam._id), // the interview is a separate component with its own entitlement
   ]);
   const payment = success || latest; // a SUCCESS payment always wins
   const attempt = await expireIfNeeded(foundAttempt, now);
@@ -430,7 +434,7 @@ const buildState = async (exam, userId, now = new Date()) => {
   } else if (regBlock === 'cancelled') { state = 'closed'; message = 'This Olympiad event has been cancelled.'; }
   else if (regBlock === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
   else if (regBlock === 'not_open') { state = 'upcoming'; message = `Registration opens on ${istDate(evt.registrationOpensAt)} at ${istTime(evt.registrationOpensAt)} IST.`; }
-  else if (win === 'upcoming') { state = 'pay'; message = `You can pay ₹${exam.fee} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
+  else if (win === 'upcoming') { state = 'pay'; message = `You can unlock the exam for ₹${priceFor('EXAM', exam)} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
   else if (win === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
   else state = 'pay';
 
@@ -440,6 +444,12 @@ const buildState = async (exam, userId, now = new Date()) => {
     message,
     registered: paid, // registered = a verified payment or an administrator exception (what the Expired card wording depends on)
     paymentStatus: payment ? payment.status : 'NONE',
+    // Separate, backend-decided component entitlements (the browser never infers one from the other)
+    examUnlocked: paid,
+    examVia: paid ? examAccess.examVia({ payment: success, grant }) : null,
+    interviewUnlocked: ivEnt.entitled,
+    interviewVia: ivEnt.via,
+    prices: pricingFor(exam),
     attemptStatus: attempt ? attempt.status : 'NOT_STARTED',
     result: attempt && attempt.status === 'COMPLETED' ? studentResult(attempt, exam) : null,
     completion: attempt && attempt.status === 'COMPLETED' ? completionFor(attempt, exam) : null,
@@ -564,43 +574,63 @@ const safeEqual = (a, b) => {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 };
 
-// ── Exam credits: "Use Exam Credit" as an alternative to paying (1 credit = 1 eligible paid exam; never a Razorpay payment) ──
-/** Why (if at all) the student cannot use a credit on this exam right now. Same rules as paying: eligibility, window, no attempt/entitlement. */
-const creditBlocker = async (user, exam) => {
-  if (isApprovalExam(exam) || !(exam.fee > 0)) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit is needed.' };
-  const [paid, attempt, grant] = await Promise.all([
-    OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS' }),
-    OlympiadAttempt.findOne({ student: user._id, exam: exam._id }),
-    examAccess.activeGrant(user._id, exam._id),
-  ]);
-  if (paid || grant) return { code: 'ALREADY_PAID', message: 'You can already start this examination. No credit is needed.' };
+// ── Exam credits: "Use 1 Credit" unlocks ONE component (exam OR interview); never a Razorpay payment, never both at once ──
+const componentOf = (req) => {
+  const raw = (req.body && req.body.component) || (req.query && req.query.component) || 'EXAM';
+  const c = typeof raw === 'string' ? raw.toUpperCase() : '';
+  if (!isComponent(c)) throw new ApiError(400, 'Choose either the exam or the interview.', 'INVALID_COMPONENT');
+  return c;
+};
+
+/** Why (if at all) the student cannot unlock this COMPONENT right now (credit or payment). Backend truth. */
+const componentBlocker = async (user, exam, component) => {
+  if (isApprovalExam(exam) || !(exam.fee > 0)) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit or payment is needed.' };
+  if (component === 'INTERVIEW') {
+    const ent = await examAccess.interviewEntitlementFor(user._id, exam._id);
+    if (ent.entitled) return { code: 'ALREADY_PAID', message: 'Your interview is already unlocked. No credit or payment is needed.' };
+    const evt = exam.event ? await events.eventOfExam(exam) : null;
+    if (evt && evt.state === 'cancelled') return { code: 'CLOSED', message: 'This Olympiad event has been cancelled.' };
+    return null; // interview can be unlocked before or after the exam; unlocking never starts it
+  }
+  const [ent, attempt] = await Promise.all([examAccess.entitlementFor(user._id, exam._id), OlympiadAttempt.findOne({ student: user._id, exam: exam._id })]);
+  if (ent.entitled) return { code: 'ALREADY_PAID', message: 'You can already start this examination. No credit or payment is needed.' };
   if (attempt) return { code: 'ALREADY_REGISTERED', message: 'You have already registered for this examination.' };
   if (windowState(exam) === 'closed') return { code: 'CLOSED', message: 'Registration is closed.' };
   return null;
 };
+const creditBlocker = (user, exam) => componentBlocker(user, exam, 'EXAM');
 
-// GET /api/olympiad/exams/:id/credit
+// GET /api/olympiad/exams/:id/credit   -> authoritative balance + per-component availability
 const getCreditInfo = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   await assertCanAccessExam(req.user, exam);
-  const [balance, blocker, settings] = await Promise.all([credits.getBalance(req.user._id), creditBlocker(req.user, exam), credits.getSettings()]);
-  res.json({ success: true, balance, canUse: !blocker && balance >= 1, blockedReason: blocker ? blocker.code : balance < 1 ? 'NO_CREDITS' : null, message: blocker ? blocker.message : balance < 1 ? 'You have no exam credits.' : null, creditsPerExam: 1, enabled: settings.enabled !== false });
+  const [balance, settings, eb, ib] = await Promise.all([
+    credits.getBalance(req.user._id), credits.getSettings(), componentBlocker(req.user, exam, 'EXAM'), componentBlocker(req.user, exam, 'INTERVIEW'),
+  ]);
+  const view = (b) => ({ canUse: !b && balance >= 1, blockedReason: b ? b.code : balance < 1 ? 'NO_CREDITS' : null, message: b ? b.message : balance < 1 ? 'You have no exam credits.' : null });
+  const e = view(eb);
+  res.json({
+    success: true, balance, ...e, creditsPerExam: 1, creditsPerComponent: 1, enabled: settings.enabled !== false,
+    components: { EXAM: e, INTERVIEW: view(ib) }, prices: pricingFor(exam),
+  });
 });
 
-// POST /api/olympiad/exams/:id/credit/redeem
+// POST /api/olympiad/exams/:id/credit/redeem   body: { component: 'EXAM' | 'INTERVIEW' }  (default EXAM)
 const redeemCredit = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   await assertCanAccessExam(req.user, exam);
-  const blocker = await creditBlocker(req.user, exam);
+  const component = componentOf(req);
+  const blocker = await componentBlocker(req.user, exam, component);
+  // an already-unlocked component (double click / second tab / duplicate API call) is refused with ALREADY_PAID: never charged twice
   if (blocker) throw new ApiError(blocker.code === 'CLOSED' ? 403 : blocker.code === 'NO_PAYMENT_REQUIRED' ? 400 : 409, blocker.message, blocker.code);
-  assertWindowOpen(exam, 'register');
-  await eventGuard(exam, 'register');
+  if (component === 'EXAM') { assertWindowOpen(exam, 'register'); await eventGuard(exam, 'register'); }
   try {
-    const r = await credits.redeemForExam({ student: req.user, exam });
+    const r = await credits.redeemComponent({ student: req.user, exam, component });
     const balance = await credits.getBalance(req.user._id);
+    const label = component === 'INTERVIEW' ? 'interview' : 'examination';
     res.json({
-      success: true, charged: r.charged, alreadyUnlocked: r.alreadyUnlocked, balance,
-      message: r.alreadyUnlocked ? 'This examination is already unlocked for you.' : 'Exam credit used. Your examination is unlocked.',
+      success: true, component, charged: r.charged, alreadyUnlocked: r.alreadyUnlocked, balance,
+      message: r.alreadyUnlocked ? `Your ${label} is already unlocked.` : `1 credit used. Your ${label} is unlocked.`,
       state: await buildState(exam, req.user._id),
     });
   } catch (e) {
@@ -609,36 +639,31 @@ const redeemCredit = handler(async (req, res) => {
   }
 });
 
-// POST /api/olympiad/exams/:id/payment/order
+// POST /api/olympiad/exams/:id/payment/order   body: { component: 'EXAM' | 'INTERVIEW' }  (default EXAM). Amount is decided HERE, never by the client.
 const createOrder = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   await assertCanAccessExam(req.user, exam);
+  const component = componentOf(req);
   if (isApprovalExam(exam)) throw new ApiError(400, 'This examination is free. Request access instead of paying.', 'NO_PAYMENT_REQUIRED');
 
-  const alreadyPaid = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
-  if (alreadyPaid) {
-    throw new ApiError(409, 'You have already completed the payment for this examination.', 'ALREADY_PAID');
-  }
-  const attempt = await OlympiadAttempt.findOne({ student: req.user._id, exam: exam._id });
-  if (attempt) throw new ApiError(409, 'You have already registered for this examination.', 'ALREADY_REGISTERED');
-  // an administrator already authorised this exam for the student: no payment is needed (and none is taken)
-  if (await examAccess.activeGrant(req.user._id, exam._id)) throw new ApiError(409, 'You can start this examination now. No payment is needed.', 'ALREADY_PAID');
+  // already unlocked (payment, credit, legacy Rs 20 bundle or administrator grant) -> never charge again, even on a duplicate request
+  const blocker = await componentBlocker(req.user, exam, component);
+  if (blocker) throw new ApiError(blocker.code === 'CLOSED' ? 403 : 409, blocker.message, blocker.code);
+  if (component === 'EXAM') { assertWindowOpen(exam, 'register'); await eventGuard(exam, 'register'); } // cancelled event / the event's own registration window
 
-  assertWindowOpen(exam, 'register');
-  await eventGuard(exam, 'register'); // cancelled event / the event's own registration window
-
+  const price = priceFor(component, exam); // whole rupees, trusted config only
   const razorpay = getRazorpayInstance();
   if (!razorpay) {
     console.error('[olympiad] Razorpay is not configured (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET).');
     throw new ApiError(503, 'Online payments are temporarily unavailable. Please try again later.', 'PAYMENT_UNAVAILABLE');
   }
 
-  // One open order per student+exam: refresh / double-click / retry all get the same order back.
-  let payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'PENDING' });
-  // An open order created at an older fee (e.g. the former ₹1) must never be handed out again: Razorpay fixes the
-  // amount at order creation, so reusing it would let the student pay the old price. Close it (kept for audit, and
-  // still eligible for the reconciler's late-capture re-checks in case it was paid) and open a fresh order below.
-  if (payment && Math.round(payment.amount * 100) !== Math.round(exam.fee * 100)) {
+  // One open order per student+exam+COMPONENT: refresh / double-click / retry all get the same order back; the exam order is never reused for the interview.
+  const compFilter = component === 'EXAM' ? { component: 'EXAM' } : { component: 'INTERVIEW' };
+  const pendingQuery = { student: req.user._id, exam: exam._id, status: 'PENDING', ...compFilter };
+  let payment = await OlympiadPayment.findOne(pendingQuery);
+  // An open order created at an older price must never be handed out again: Razorpay fixes the amount at order creation.
+  if (payment && Math.round(payment.amount * 100) !== Math.round(price * 100)) {
     const closedAt = new Date();
     await OlympiadPayment.updateOne(
       { _id: payment._id, status: 'PENDING' },
@@ -646,16 +671,25 @@ const createOrder = handler(async (req, res) => {
     );
     payment = null;
   }
+  if (component === 'EXAM') {
+    // An open order from BEFORE the split (no component, the old Rs 20 bundle) must not stay payable beside the new Rs 10 order: retire it the
+    // same way a stale-fee order is retired (kept for audit and for the reconciler's late-capture re-check, in case it was already paid).
+    const closedAt = new Date();
+    await OlympiadPayment.updateMany(
+      { student: req.user._id, exam: exam._id, status: 'PENDING', component: null },
+      { $set: { status: 'FAILED', failureReason: 'SUPERSEDED_BY_FEE_CHANGE', failedBy: 'reconciler', reconciledAt: closedAt, lateChecks: 0, reconcileNextAt: new Date(closedAt.getTime() + 10 * 60e3) } }
+    );
+  }
   let createdPlaceholder = false;
   if (!payment) {
     try {
       payment = await OlympiadPayment.create({
-        student: req.user._id, exam: exam._id, amount: exam.fee, currency: exam.currency, status: 'PENDING',
+        student: req.user._id, exam: exam._id, component, amount: price, currency: exam.currency, status: 'PENDING',
       });
       createdPlaceholder = true;
     } catch (err) {
       if (!isDuplicateKey(err)) throw err;
-      payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'PENDING' });
+      payment = await OlympiadPayment.findOne(pendingQuery);
       if (!payment) throw err;
     }
   }
@@ -664,11 +698,12 @@ const createOrder = handler(async (req, res) => {
     let order;
     try {
       order = await razorpay.orders.create({
-        amount: Math.round(exam.fee * 100), // paise — always taken from the exam record, never from the client
+        amount: Math.round(price * 100), // paise
         currency: exam.currency,
         receipt: `oly_${payment._id}`,
         notes: {
           purpose: 'olympiad',
+          component,
           examId: oid(exam._id),
           studentId: oid(req.user._id),
           paymentId: oid(payment._id),
@@ -690,8 +725,9 @@ const createOrder = handler(async (req, res) => {
     success: true,
     keyId: process.env.RAZORPAY_KEY_ID,
     paymentId: payment._id,
+    component,
     order: { id: payment.razorpayOrderId, amount: Math.round(payment.amount * 100), currency: payment.currency },
-    exam: { _id: exam._id, title: exam.title, fee: exam.fee },
+    exam: { _id: exam._id, title: exam.title, fee: price, component },
   });
 });
 
@@ -734,7 +770,8 @@ const verifyPayment = handler(async (req, res) => {
     success: true,
     paymentStatus: updated ? updated.status : 'SUCCESS',
     duplicate: !!duplicate,
-    message: 'Payment verified. You can now start the examination.',
+    component: updated && updated.component ? updated.component : 'PACKAGE',
+    message: updated && updated.component === 'INTERVIEW' ? 'Payment verified. Your interview is unlocked.' : 'Payment verified. Your examination is unlocked.',
   });
 });
 
@@ -743,9 +780,11 @@ const getPaymentStatus = handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   await assertCanAccessExam(req.user, exam);
 
-  let payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS' });
+  const component = componentOf(req);
+  const compQ = component === 'INTERVIEW' ? examAccess.INTERVIEW_PAY : examAccess.EXAM_PAY;
+  let payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, status: 'SUCCESS', component: compQ });
   if (!payment) {
-    payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id }).sort({ createdAt: -1 });
+    payment = await OlympiadPayment.findOne({ student: req.user._id, exam: exam._id, component: compQ }).sort({ createdAt: -1 });
     // Reconcile with Razorpay if the browser closed before /verify ran (backend-verified, not client-trusted).
     if (payment && payment.status !== 'REFUNDED' && payment.razorpayOrderId) {
       const razorpay = getRazorpayInstance();
@@ -876,7 +915,7 @@ const startExam = handler(async (req, res) => {
   } else {
     const ent = await examAccess.entitlementFor(req.user._id, exam._id);
     if (!ent.entitled) {
-      throw new ApiError(402, `Please complete the ₹${exam.fee} payment before starting the examination.`, 'PAYMENT_REQUIRED');
+      throw new ApiError(402, `Please unlock the examination (₹${priceFor('EXAM', exam)} or 1 credit) before starting.`, 'PAYMENT_REQUIRED');
     }
     unlock = ent.payment ? { payment: ent.payment._id } : { accessGrant: ent.grant._id };
   }
@@ -1462,8 +1501,10 @@ const toAdminPayment = (p, exam) => {
       ? { name: p.student.name, email: maskEmail(p.student.email) }
       : (p.deletedStudent && p.deletedStudent.name ? { name: `${p.deletedStudent.name} (deleted)`, email: maskEmail(p.deletedStudent.email) } : null),
     exam: ex && ex.title ? { _id: ex._id, title: ex.title, standard: ex.standard } : null,
-    amount: p.amount,
+    amount: p.amount, // rupees actually collected through Razorpay
     currency: p.currency,
+    component: p.component || 'PACKAGE', // EXAM | INTERVIEW | PACKAGE (legacy Rs 20 bundle: exam + interview)
+    paymentMethod: 'RAZORPAY',
     status: p.status,
     razorpayOrderId: p.razorpayOrderId,
     razorpayPaymentId: p.razorpayPaymentId,
@@ -1550,7 +1591,16 @@ const adminAllPayments = handler(async (req, res) => {
   ]);
   res.set('Cache-Control', 'no-store'); // live financial figures
   const labels = await events.eventLabels(payments.map((p) => p.exam).filter(Boolean));
-  res.json({ success: true, standard, event: evFilter.event || 'all', view, payments: payments.map((p) => ({ ...toAdminPayment(p), ...(p.exam && p.exam.event ? { eventId: String(p.exam.event), eventName: (labels.get(String(p.exam.event)) || {}).eventName || null } : { eventId: null, eventName: null }) })), summary: { ...summarisePayments(grouped), historyCount } });
+  // Credit-backed unlocks: NOT payments and NOT revenue (amountCollected is always 0). Listed beside the payments so an admin can audit them.
+  const creditGrants = view === 'history' ? [] : await OlympiadAccessGrant.find({ ...examFilter, status: 'ACTIVE', source: 'CREDIT' })
+    .sort({ createdAt: -1 }).limit(2000).populate('student', 'name email').populate('exam', 'title standard');
+  const creditUnlocks = creditGrants.map((g) => ({
+    _id: g._id, student: g.student ? { name: g.student.name, email: maskEmail(g.student.email) } : null,
+    exam: g.exam && g.exam.title ? { _id: g.exam._id, title: g.exam.title, standard: g.exam.standard } : null,
+    component: g.component === 'INTERVIEW' ? 'INTERVIEW' : 'EXAM', paymentMethod: 'EXAM_CREDIT', amountCollected: 0, status: 'UNLOCKED_BY_CREDIT',
+    creditTransaction: g.creditTransaction ? String(g.creditTransaction) : null, createdAt: g.createdAt,
+  }));
+  res.json({ success: true, standard, event: evFilter.event || 'all', view, payments: payments.map((p) => ({ ...toAdminPayment(p), ...(p.exam && p.exam.event ? { eventId: String(p.exam.event), eventName: (labels.get(String(p.exam.event)) || {}).eventName || null } : { eventId: null, eventName: null }) })), summary: { ...summarisePayments(grouped), historyCount }, creditUnlocks });
 });
 
 // ──────────────────────────────────────────────

@@ -51,10 +51,11 @@ export const ChatPanel: React.FC<{
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={m._id || i} className={`${m.senderRole === 'teacher' ? 'bg-brand-primary/10 border-brand-primary/20' : 'bg-surface-alt border-border-subtle'} border rounded-xl p-2.5`}>
+            <div key={m._id || i} className={`${m.senderRole === 'teacher' || m.senderRole === 'admin' ? 'bg-brand-primary/10 border-brand-primary/20' : 'bg-surface-alt border-border-subtle'} border rounded-xl p-2.5`}>
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className={`text-xs font-semibold ${m.senderRole === 'teacher' ? 'text-brand-primary' : 'text-text-primary'}`}>{m.senderName}</span>
                 {m.senderRole === 'teacher' && <Crown className="w-3 h-3 text-accent-amber" />}
+                {m.senderRole === 'admin' && <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 rounded px-1">Admin</span>}
                 <span className="text-text-muted text-[10px] ml-auto font-mono">{new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
                 {isHost && m._id && onDelete && <button aria-label="Delete message" onClick={() => onDelete(m._id!)} className="p-1 text-text-muted hover:text-red-500"><Trash2 className="w-3 h-3" /></button>}
               </div>

@@ -49,6 +49,8 @@ export interface RoomParticipant {
   role: string;
   isHost: boolean;
   isTeacher: boolean;
+  /** an administrator who joined the meeting as a moderator (set by the server only) */
+  isAdmin?: boolean;
   isCameraOn: boolean;
   isMicOn: boolean;
   isScreenSharing: boolean;
@@ -100,7 +102,7 @@ export interface ChatItem { _id?: string; senderName: string; senderRole: string
 export interface ScoreEntry { userId: string; name: string; correct: number; wrong: number; rank: number; totalResponseTimeSec?: number }
 
 export interface JoinedPayload {
-  self: { socketId: string; userId: string; name: string; isHost: boolean };
+  self: { socketId: string; userId: string; name: string; isHost: boolean; isAdmin?: boolean };
   session: { code: string; title: string };
   participants: RoomParticipant[];
   counts: { students: number; waiting: number; hostPresent: boolean; locked: boolean };

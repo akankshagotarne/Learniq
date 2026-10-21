@@ -278,7 +278,7 @@ test('Standard 10 student sees the Olympiad card with fee, dates and no answers'
   const e = r.body.exams[0];
   assert.equal(e.title, 'LearnIQ – All India Olympiad Examination 2026');
   assert.equal(e.standard, 10);
-  assert.equal(e.fee, 20);
+  assert.equal(e.fee, 10);
   assert.equal(e.totalQuestions, 60);
   assert.equal(e.totalMarks, 60);
   assert.equal(e.state, 'pay');
@@ -331,7 +331,7 @@ test('unpaid student cannot start, save, submit or view result/review', async ()
   const start = await api('POST', `/exams/${S.exam._id}/start`, { token: S.A.token });
   assert.equal(start.status, 402);
   assert.equal(start.body.code, 'PAYMENT_REQUIRED');
-  assert.equal(start.body.message, 'Please complete the ₹20 payment before starting the examination.');
+  assert.equal(start.body.message, 'Please unlock the examination (₹10 or 1 credit) before starting.');
   for (const [m, u, b] of [
     ['GET', `/exams/${S.exam._id}/attempt`], ['PUT', `/exams/${S.exam._id}/attempt/answers`, { answers: [] }],
     ['POST', `/exams/${S.exam._id}/submit`, {}], ['GET', `/exams/${S.exam._id}/result`], ['GET', `/exams/${S.exam._id}/review`],
@@ -343,35 +343,35 @@ test('unpaid student cannot start, save, submit or view result/review', async ()
 });
 
 // ── 2. payment ────────────────────────────────────────────────────────
-test('create order: amount comes from the server (₹20 = 2000 paise), client cannot tamper', async () => {
+test('create order: amount comes from the server (₹10 = 1000 paise), client cannot tamper', async () => {
   const r = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: S.A.token, body: { amount: 1, fee: 1, student: String(S.B.user._id) } });
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.order.amount, 2000);
+  assert.equal(r.body.order.amount, 1000);
   assert.equal(r.body.order.currency, 'INR');
   assert.equal(r.body.keyId, 'rzp_test_abc123');
   assert.ok(!/test_key_secret/.test(r.text), 'secret key must never be exposed');
-  assert.equal(rzp.createdOrders.at(-1).amount, 2000);
+  assert.equal(rzp.createdOrders.at(-1).amount, 1000);
   assert.equal(rzp.createdOrders.at(-1).notes.studentId, String(S.A.user._id));
   S.orderA = r.body.order;
 });
 
-test('an open order created at the old ₹1 fee is retired; the student gets a fresh ₹20 (2000 paise) order', async () => {
+test('an open order created at the old ₹1 fee is retired; the student gets a fresh ₹10 (1000 paise) order', async () => {
   const T = await mkUser({ standard: 10 });
   const old = await M.OlympiadPayment.create({
     student: T.user._id, exam: S.exam._id, amount: 1, currency: 'INR', status: 'PENDING', razorpayOrderId: 'order_OLD_ONE_RUPEE',
   });
   const r = await api('POST', `/exams/${S.exam._id}/payment/order`, { token: T.token });
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.order.amount, 2000);
+  assert.equal(r.body.order.amount, 1000);
   assert.notEqual(r.body.order.id, 'order_OLD_ONE_RUPEE');
-  assert.equal(rzp.createdOrders.at(-1).amount, 2000);
+  assert.equal(rzp.createdOrders.at(-1).amount, 1000);
   const oldAfter = await M.OlympiadPayment.findById(old._id);
   assert.equal(oldAfter.status, 'FAILED');
   assert.equal(oldAfter.failureReason, 'SUPERSEDED_BY_FEE_CHANGE');
   assert.equal(oldAfter.amount, 1, 'the historical record keeps its amount');
   const open = await M.OlympiadPayment.find({ student: T.user._id, exam: S.exam._id, status: 'PENDING' });
   assert.equal(open.length, 1);
-  assert.equal(open[0].amount, 20);
+  assert.equal(open[0].amount, 10);
 });
 
 test('duplicate / parallel "Pay" clicks reuse the same open order (idempotent)', async () => {
@@ -434,7 +434,8 @@ test('verify: valid signature marks SUCCESS; repeating it is idempotent; no seco
   const docs = await M.OlympiadPayment.find({ student: S.A.user._id, exam: S.exam._id });
   assert.equal(docs.length, 1);
   assert.equal(docs[0].status, 'SUCCESS');
-  assert.equal(docs[0].amount, 20);
+  assert.equal(docs[0].amount, 10);
+  assert.equal(docs[0].component, 'EXAM');
   assert.equal(docs[0].currency, 'INR');
   assert.equal(docs[0].razorpayPaymentId, payId);
   assert.ok(docs[0].verifiedAt);
@@ -457,28 +458,28 @@ test('webhook: signature required; captured event unlocks; wrong amount does not
   const hook = (raw, secret = process.env.RAZORPAY_WEBHOOK_SECRET) =>
     api('POST', '/payments/webhook', { rawBody: raw, headers: { 'x-razorpay-signature': crypto.createHmac('sha256', secret).update(raw).digest('hex') } });
 
-  const noSig = await api('POST', '/payments/webhook', { rawBody: event('payment.captured', 2000) });
+  const noSig = await api('POST', '/payments/webhook', { rawBody: event('payment.captured', 1000) });
   assert.equal(noSig.status, 400);
-  const badSig = await hook(event('payment.captured', 2000), 'wrong-secret');
+  const badSig = await hook(event('payment.captured', 1000), 'wrong-secret');
   assert.equal(badSig.status, 400);
 
   await hook(event('payment.captured', 1)); // tampered amount
   assert.equal((await M.OlympiadPayment.findOne({ razorpayOrderId: orderId })).status, 'PENDING');
 
-  await hook(event('payment.failed', 2000));
+  await hook(event('payment.failed', 1000));
   assert.equal((await M.OlympiadPayment.findOne({ razorpayOrderId: orderId })).status, 'FAILED');
   const startFailed = await api('POST', `/exams/${S.exam._id}/start`, { token: W.token });
   assert.equal(startFailed.status, 402, 'failed payment must not unlock');
 
   // customer retried on the same order and it succeeded later → FAILED can still turn SUCCESS
-  const ok = await hook(event('payment.captured', 2000));
+  const ok = await hook(event('payment.captured', 1000));
   assert.equal(ok.status, 200);
   const p = await M.OlympiadPayment.findOne({ razorpayOrderId: orderId });
   assert.equal(p.status, 'SUCCESS'); assert.equal(p.verifiedVia, 'webhook');
   const startOk = await api('POST', `/exams/${S.exam._id}/start`, { token: W.token });
   assert.equal(startOk.status, 200);
 
-  const unknown = await hook(JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'p', order_id: 'order_not_ours', amount: 2000, currency: 'INR' } } } }));
+  const unknown = await hook(JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'p', order_id: 'order_not_ours', amount: 1000, currency: 'INR' } } } }));
   assert.equal(unknown.status, 200); // ignored, acknowledged
 });
 
@@ -494,7 +495,7 @@ test('failed payment can be retried with a fresh order; reconcile unlocks a paid
   rzp.capturedByOrder[o2.body.order.id] = [{ id: 'pay_rc_1', status: 'captured', amount: 100, currency: 'INR' }];
   let st = await api('GET', `/exams/${S.exam._id}/payment/status`, { token: R.token });
   assert.equal(st.body.unlocked, false);
-  rzp.capturedByOrder[o2.body.order.id] = [{ id: 'pay_rc_1', status: 'captured', amount: 2000, currency: 'INR' }];
+  rzp.capturedByOrder[o2.body.order.id] = [{ id: 'pay_rc_1', status: 'captured', amount: 1000, currency: 'INR' }];
   st = await api('GET', `/exams/${S.exam._id}/payment/status`, { token: R.token });
   assert.equal(st.body.unlocked, true);
   assert.equal((await M.OlympiadPayment.findOne({ razorpayOrderId: o2.body.order.id })).verifiedVia, 'reconcile');
@@ -505,7 +506,7 @@ test('double charge through two orders keeps ONE registration and flags the dupl
   const first = await payViaApi(D);
   // simulate a second (stale) order that also got paid
   const stale = await M.OlympiadPayment.create({
-    student: D.user._id, exam: S.exam._id, amount: 20, currency: 'INR', status: 'PENDING', razorpayOrderId: 'order_stale_dup',
+    student: D.user._id, exam: S.exam._id, component: 'EXAM', amount: 10, currency: 'INR', status: 'PENDING', razorpayOrderId: 'order_stale_dup',
   });
   const v = await api('POST', `/exams/${S.exam._id}/payment/verify`, {
     token: D.token, body: { razorpayOrderId: 'order_stale_dup', razorpayPaymentId: 'pay_dup', razorpaySignature: sign('order_stale_dup', 'pay_dup') },
@@ -817,7 +818,7 @@ test('admin analytics: registrations, payments, attempts, scores, revenue; maske
   const failedCount = (await M.OlympiadPayment.find({ exam: S.exam._id })).filter((p) => p.status === 'FAILED').length;
   assert.equal(e.stats.successfulPayments, successCount);
   assert.equal(e.stats.totalRegistrations, successCount);
-  assert.equal(e.stats.revenue, successCount * 20);
+  assert.equal(e.stats.revenue, (await M.OlympiadPayment.find({ exam: S.exam._id })).filter((p) => p.status === 'SUCCESS').reduce((s, p) => s + p.amount, 0), 'revenue = what Razorpay actually collected');
   assert.equal(e.stats.failedPayments, failedCount);
   assert.ok(e.stats.completedAttempts >= 4);
   assert.equal(e.stats.highestScore, 40);
@@ -999,7 +1000,8 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
     assert.equal(e.standard, std);
     assert.equal(e.title, require('../seed/olympiadTitles').examTitleFor(std));
     assert.match(e.title, /^LearnIQ Practice Test – \d+(st|nd|rd|th) Standard$/);
-    assert.equal(e.fee, 20);
+    assert.equal(e.fee, 10, 'the student sees the Rs 10 exam price');
+    assert.equal(e.prices.INTERVIEW, 10);
     assert.equal(e.totalQuestions, QUESTIONS_IN(std));
     assert.equal(e.totalMarks, QUESTIONS_IN(std));
     assert.equal(e.durationMinutes, 60);

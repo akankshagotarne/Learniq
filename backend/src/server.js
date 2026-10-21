@@ -209,6 +209,13 @@ const startServer = async () => {
     } catch (err) {
       console.error(`🚨 Certificate index migration FAILED (${err.message}). Participation certificates will not be issued until this is fixed.`);
     }
+    // Split Exam / Interview entitlements: replace the one-per-exam unique indexes with component-aware ones (additive; rewrites no payment)
+    try {
+      const m = await require('./services/componentMigration').migrateComponentIndexes({ ...require('./models/Olympiad'), ...require('./models/ExamAccess') });
+      console.log(`💳 Component entitlement indexes ready (${m.dropped} old index(es) replaced)`);
+    } catch (err) {
+      console.error(`🚨 Component index migration FAILED (${err.message}). A second component of the same exam cannot be bought until this is fixed.`);
+    }
     const cs = require('./services/certificateRelease').startCertificateSweeper(); // 18 Oct 2026 6:00 PM IST release + certificate generation (persistent: state is in the database)
     console.log(cs.started ? '📜 Certificate release sweeper: running (every 60 s)' : `⚠️  Certificate release sweeper NOT running: ${cs.reason}`);
     startOlympiadSweeper(); // auto-submits Olympiad attempts whose timer has expired

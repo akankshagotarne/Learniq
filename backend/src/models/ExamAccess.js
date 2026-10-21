@@ -20,6 +20,8 @@ const grantSchema = new mongoose.Schema({
   standard: { type: Number },                              // the standard of the authorised exam (the admin-selected target)
   registeredStandard: { type: Number },                    // the student's registered standard when granted (never changed by the grant)
   status: { type: String, enum: ['ACTIVE'], default: 'ACTIVE' },
+  // EXAM (default; a missing value reads as EXAM) or INTERVIEW. An INTERVIEW grant unlocks only the interview, never the exam.
+  component: { type: String, enum: ['EXAM', 'INTERVIEW'] },
   includesInterview: { type: Boolean, default: true },     // the exam + teacher-interview package, exactly like the paid one
   // CREDIT_REDEMPTION: the entitlement was unlocked by the STUDENT redeeming one exam credit (services/credits.js). It is not a payment
   // and not an administrator exception; admin-only reason codes (REASON_CODES.grant) are unchanged.
@@ -31,7 +33,7 @@ const grantSchema = new mongoose.Schema({
   grantedByName: { type: String },
 }, { timestamps: true });
 // ONE active grant per student + exam: repeated clicks / retries / two admins can never create a second one
-grantSchema.index({ student: 1, exam: 1 }, { unique: true, partialFilterExpression: { status: 'ACTIVE' }, name: 'one_active_grant_per_student_exam' });
+grantSchema.index({ student: 1, exam: 1, component: 1 }, { unique: true, partialFilterExpression: { status: 'ACTIVE' }, name: 'one_active_grant_per_student_exam_component' });
 
 const historySchema = new mongoose.Schema({
   originalAttempt: { type: mongoose.Schema.Types.ObjectId, required: true },

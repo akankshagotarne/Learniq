@@ -36,6 +36,7 @@ const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
 // automated-test page: exists only in the `vite build --mode e2e` bundle (same flag as the proctoring test hook)
 const LiveStageHarness = import.meta.env.VITE_PROCTOR_TEST_HOOKS === 'true' ? lazy(() => import('./pages/e2e/LiveStageHarness')) : null;
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
+const StudentLeaderboardPage = lazy(() => import('./pages/student/StudentLeaderboardPage'));
 const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
 const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 const OlympiadExamPage = lazy(() => import('./pages/student/OlympiadExamPage'));
@@ -74,6 +75,7 @@ const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
 const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
 const AdminOlympiad = lazy(() => import('./pages/admin/AdminOlympiad'));
 const AdminOlympiadAnalytics = lazy(() => import('./pages/admin/AdminOlympiadAnalytics'));
+const AdminOlympiadResults = lazy(() => import('./pages/admin/AdminOlympiadResults'));
 const AdminOlympiadExamManagement = lazy(() => import('./pages/admin/AdminOlympiadExamManagement'));
 const AdminInterviews = lazy(() => import('./pages/admin/AdminInterviews'));
 const AdminInterviewSchedule = lazy(() => import('./pages/admin/AdminInterviewSchedule'));
@@ -214,6 +216,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/progress" element={
         <ProtectedRoute roles={['student']}>
           <StudentProgress />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/leaderboard" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentLeaderboardPage />
         </ProtectedRoute>
       } />
       <Route path="/student/exams" element={
@@ -404,6 +411,12 @@ const AppRoutes: React.FC = () => (
           <AdminLiveConsole />
         </ProtectedRoute>
       } />
+      {/* "Join Live Meeting": the administrator enters the real room as a labelled moderator (same screen as students / teachers) */}
+      <Route path="/admin/live/:code/meeting" element={
+        <ProtectedRoute roles={['admin']}>
+          <LiveSessionPage adminMode />
+        </ProtectedRoute>
+      } />
       <Route path="/admin/payments" element={
         <ProtectedRoute roles={['admin']}>
           <AdminPayments />
@@ -417,6 +430,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/admin/olympiad/exam-management" element={
         <ProtectedRoute roles={['admin']}>
           <AdminOlympiadExamManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/olympiad/results" element={
+        <ProtectedRoute roles={['admin']}>
+          <AdminOlympiadResults />
         </ProtectedRoute>
       } />
       <Route path="/admin/olympiad/analytics" element={

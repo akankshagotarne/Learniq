@@ -28,6 +28,7 @@ router.get('/live-classes', ...adminAuth, liveAdminCtrl.list);
 router.get('/live-classes/:code', ...adminAuth, liveAdminCtrl.detail);
 router.get('/live-classes/:code/audit', ...adminAuth, liveAdminCtrl.auditTrail);
 router.post('/live-classes/:code/mark-ended', ...adminAuth, liveAdminCtrl.markEnded);
+router.post('/live-classes/:code/join', ...adminAuth, liveAdminCtrl.joinMeeting);
 
 // Stats
 router.get('/stats', ...adminAuth, userCtrl.getAdminStats);

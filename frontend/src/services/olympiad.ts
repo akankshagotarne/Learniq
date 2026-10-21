@@ -17,6 +17,15 @@ export const olympiadErrorMessage = (err: any, fallback = 'Something went wrong.
 export const olympiadErrorCode = (err: any): string | undefined => err?.response?.data?.code;
 export const isNetworkError = (err: any): boolean => !err?.response;
 
+/** The two independently unlockable parts of an Olympiad (each Rs 10 or 1 credit). The server decides every price and entitlement. */
+export type ExamComponent = 'EXAM' | 'INTERVIEW';
+
+/** A component unlocked by a credit: not a payment, never revenue (amountCollected is always 0). */
+export interface CreditUnlockRow {
+  _id: string; student: { name: string; email: string } | null; exam: { _id: string; title: string; standard: number } | null;
+  component: ExamComponent; paymentMethod: 'EXAM_CREDIT'; amountCollected: 0; status: 'UNLOCKED_BY_CREDIT'; creditTransaction: string | null; createdAt: string;
+}
+
 export interface RazorpayOrderResponse {
   keyId: string;
   paymentId: string;
@@ -34,13 +43,13 @@ export const olympiadApi = {
   listExams: async (): Promise<OlympiadExam[]> => (await api.get('/olympiad/exams')).data.exams || [],
   getExam: async (id: string): Promise<OlympiadExam> => (await api.get(`/olympiad/exams/${id}`)).data.exam,
 
-  createOrder: async (id: string): Promise<RazorpayOrderResponse> => (await api.post(`/olympiad/exams/${id}/payment/order`)).data,
+  createOrder: async (id: string, component: ExamComponent = 'EXAM'): Promise<RazorpayOrderResponse> => (await api.post(`/olympiad/exams/${id}/payment/order`, { component })).data,
   verifyPayment: async (
     id: string,
     payload: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }
   ) => (await api.post(`/olympiad/exams/${id}/payment/verify`, payload)).data,
-  paymentStatus: async (id: string): Promise<{ paymentStatus: string; unlocked: boolean }> =>
-    (await api.get(`/olympiad/exams/${id}/payment/status`)).data,
+  paymentStatus: async (id: string, component: ExamComponent = 'EXAM'): Promise<{ paymentStatus: string; unlocked: boolean }> =>
+    (await api.get(`/olympiad/exams/${id}/payment/status`, { params: { component } })).data,
 
   start: async (id: string): Promise<OlympiadAttemptPayload> => (await api.post(`/olympiad/exams/${id}/start`)).data,
   getAttempt: async (id: string): Promise<OlympiadAttemptPayload> => (await api.get(`/olympiad/exams/${id}/attempt`)).data,
@@ -65,9 +74,9 @@ export const olympiadApi = {
     return { payments: data.payments || [], historyCount: data.historyCount || 0 };
   },
   /** Every Olympiad payment across all exams; pass a standard (1–10) to narrow, omit / 'all' for everything. */
-  adminAllPayments: async (standard: number | 'all' = 'all', view: 'active' | 'history' = 'active', event?: string): Promise<{ payments: any[]; summary: OlympiadPaymentSummary }> => {
+  adminAllPayments: async (standard: number | 'all' = 'all', view: 'active' | 'history' = 'active', event?: string): Promise<{ payments: any[]; summary: OlympiadPaymentSummary; creditUnlocks: CreditUnlockRow[] }> => {
     const { data } = await api.get('/olympiad/admin/payments', { params: { standard, view, ...(event ? { event } : {}) } });
-    return { payments: data.payments || [], summary: data.summary };
+    return { payments: data.payments || [], summary: data.summary, creditUnlocks: data.creditUnlocks || [] };
   },
   // teacher
   teacherExams: async (): Promise<OlympiadExam[]> => (await api.get('/olympiad/teacher/exams')).data.exams || [],

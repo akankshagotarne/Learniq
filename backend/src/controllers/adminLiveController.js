@@ -4,7 +4,7 @@
  * classes, shows one class, and serves the audit trail. All routes are admin-only (routes/admin.js) and read-only except `markEnded`.
  */
 const mongoose = require('mongoose');
-const { LiveSession } = require('../models/LiveSession');
+const { LiveSession, LiveChatMessage } = require('../models/LiveSession');
 const LiveMcq = require('../models/LiveMcq');
 const { LiveAdminAudit } = require('../models/LiveAdminAudit');
 const runtime = require('../services/live/runtime');
@@ -27,6 +27,7 @@ const liveInfo = (manager, code) => {
     students: manager.students(room).length,
     waiting: Object.keys(room.waitingRoom).length,
     consoles: Object.keys(room.adminConsoles).length,
+    admins: manager.admins(room).length,
     locked: !!room.config.locked,
     mode: room.config.mode,
     mcq: mcq && ['open', 'closing', 'ranking'].includes(mcq.state) ? { state: mcq.state, closesAt: mcq.closesAt, submitted: mcq.responses.size } : null,
@@ -43,7 +44,7 @@ const rowOf = (s, manager) => {
     host: o.teacher && o.teacher._id ? { id: String(o.teacher._id), name: o.teacher.name } : { id: String(o.teacher || ''), name: '' },
     course: o.course && o.course.title ? { id: String(o.course._id), title: o.course.title } : null,
     visibilityMode: cfg.mode, audience: audienceRules.summarize(cfg), connectedStudents: live ? live.students : 0, waiting: live ? live.waiting : 0, hostPresent: live ? live.hostPresent : false,
-    activeMcq: live ? live.mcq : null, consoles: live ? live.consoles : 0,
+    activeMcq: live ? live.mcq : null, consoles: live ? live.consoles : 0, adminsInMeeting: live ? live.admins : 0,
     // a class marked live in the database that has no room in memory (the server restarted, or the host never came back) is "stale"
     stale: o.status === 'live' && !live,
   };
@@ -130,4 +131,26 @@ const markEnded = async (req, res) => {
   }
 };
 
-module.exports = { list, detail, auditTrail, markEnded, rowOf };
+// POST /api/admin/live-classes/:code/join   (admin only - routes/admin.js)
+// The HTTP half of "Join Live Meeting": it checks that the signed-in account is an administrator (middleware, from the database) and that the
+// class can be joined, and returns what the meeting screen needs (title, chat history). It creates NO attendance record and NO second room:
+// the admin then enters the SAME room over the live socket (`join-live-session` with asAdmin), where the role is checked again.
+const joinMeeting = async (req, res) => {
+  try {
+    if (!CODE_RE.test(req.params.code)) return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Class not found.' });
+    const s = await LiveSession.findOne({ sessionCode: req.params.code }).populate('teacher', 'name');
+    if (!s) return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Class not found.' });
+    if (s.status === 'ended' || s.status === 'cancelled') return res.status(410).json({ success: false, code: 'ENDED', message: 'This class has ended, so it cannot be joined.' });
+    if (s.status !== 'live') return res.status(409).json({ success: false, code: 'NOT_ACTIVE', message: 'This class has not started yet.' });
+    const chatHistory = await LiveChatMessage.find({ session: s._id, isDeleted: false }).sort({ createdAt: -1 }).limit(50);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true, session: { _id: String(s._id), title: s.title, subject: s.subject, standard: s.standard, sessionCode: s.sessionCode, teacher: s.teacher && s.teacher._id ? { _id: String(s.teacher._id), name: s.teacher.name } : null },
+      chatHistory: chatHistory.reverse(),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, code: 'FAILED', message: 'Could not open the class. Please try again.' });
+  }
+};
+
+module.exports = { list, detail, auditTrail, markEnded, rowOf, joinMeeting };

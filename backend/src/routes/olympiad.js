@@ -6,6 +6,8 @@ const ctrl = require('../controllers/olympiadController');
 const analytics = require('../controllers/olympiadAnalyticsController');
 const management = require('../controllers/olympiadExamManagementController');
 const events = require('../controllers/olympiadEventController');
+const resultsCtrl = require('../controllers/olympiadResultsController');
+const leaderboardCtrl = require('../controllers/studentLeaderboardController');
 
 const perUser = (max, windowMs = 60 * 1000) =>
   rateLimit({
@@ -22,6 +24,10 @@ const teacherAuth = [protect, authorize('teacher', 'admin')];
 
 // Razorpay server-to-server webhook (authenticated by HMAC signature, not by JWT)
 router.post('/payments/webhook', ctrl.razorpayWebhook);
+
+// Student leaderboard (read-only; the standard always comes from the authenticated student's database record)
+router.get('/student/leaderboard/exams', protect, authorize('student'), perUser(60), leaderboardCtrl.exams);
+router.get('/student/leaderboard', protect, authorize('student'), perUser(120), leaderboardCtrl.board);
 
 // Admin
 router.get('/admin/exams', ...adminAuth, ctrl.adminListExams);
@@ -51,6 +57,9 @@ router.get('/admin/exam-management/:id', ...adminAuth, perUser(120), management.
 router.patch('/admin/exam-management/:id', ...adminAuth, perUser(30), management.update);
 
 // Olympiad Student Analytics (read-only; admin only)
+// Olympiad Results & Rankings (admin only, read-only). The PDF / Excel downloads use /api/admin/exports/olympiad-rankings.
+router.get('/admin/results', ...adminAuth, perUser(120), resultsCtrl.list);
+router.get('/admin/results/students/:studentId', ...adminAuth, perUser(120), resultsCtrl.detail);
 router.get('/admin/analytics', ...adminAuth, perUser(120), analytics.getAnalytics);
 router.get('/admin/analytics/export', ...adminAuth, perUser(10), analytics.exportReport);
 router.get('/admin/analytics/students/:studentId', ...adminAuth, perUser(120), analytics.getStudent);

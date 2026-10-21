@@ -78,6 +78,50 @@ const olympiadResults = async (query) => {
   };
 };
 
+// ── Olympiad › Results & Rankings (Admin > Olympiad > Results): rank-ordered, same service as the screen ─────────────────
+const olympiadRankings = async (query) => {
+  const svc = require('../olympiadResults');
+  let d;
+  try { d = await svc.exportData(query); } catch (e) { if (e instanceof svc.ResultsError) throw new ExportError(e.status, e.code, e.message); throw e; }
+  const pct = (v) => (v === null || v === undefined ? '-' : `${Number(v).toFixed(2)}%`);
+  const marks = (got, max) => (got === null || got === undefined ? 'Pending' : `${got} / ${max}`);
+  const rk = (v) => (v === null || v === undefined ? '-' : String(v));
+  const INTERVIEW = { NOT_ELIGIBLE: 'Exam not submitted', NOT_STARTED: 'Not started', REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In progress', AWAITING_EVALUATION: 'Awaiting evaluation', COMPLETED: 'Completed' };
+  const RESULT = { PENDING: 'Pending', PROVISIONAL: 'Provisional', FINALIZED: 'Finalized', PUBLISHED: 'Published' };
+  const rows = d.rows.map((r) => ({
+    eventRank: r.eventRank, standardRank: r.standardRank, name: r.name, standard: standardLabel(r.standard), event: d.eventName,
+    examMarks: r.examMarks, examMax: r.examMax, examPct: r.examPct, interviewMarks: r.interviewMarks, interviewMax: r.interviewMax, interviewPct: r.interviewPct,
+    overallMarks: r.overallMarks, overallMax: r.overallMax, overallPct: r.overallPct,
+    interviewStatus: INTERVIEW[r.interviewStatus] || r.interviewStatus, resultStatus: RESULT[r.resultStatus] || r.resultStatus, finalizedAt: r.finalizedAt,
+  }));
+  const pdfRows = d.rows.map((r) => ({
+    eventRank: rk(r.eventRank), standardRank: rk(r.standardRank), name: r.name, standard: String(r.standard),
+    exam: marks(r.examMarks, r.examMax), examPct: pct(r.examPct), interview: r.interviewMarks === null ? (INTERVIEW[r.interviewStatus] || 'Pending') : marks(r.interviewMarks, r.interviewMax), interviewPct: pct(r.interviewPct),
+    overall: marks(r.overallMarks, r.overallMax), overallPct: pct(r.overallPct), result: RESULT[r.resultStatus] || r.resultStatus,
+  }));
+  return {
+    title: `LearnIQ Olympiad Results Report — ${d.eventName}`, sheetName: 'Olympiad results', fileBase: `learniq-olympiad-results-${String(d.eventName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'event'}${d.f.standard === 'all' ? '' : `-std-${d.f.standard}`}`,
+    filters: d.filterList,
+    columns: [
+      col('eventRank', 'Overall Event Rank', 10, 'number', { align: 'right' }), col('standardRank', 'Standard Rank', 10, 'number', { align: 'right' }),
+      col('name', 'Student Name', 24), col('standard', 'Standard', 11), col('event', 'Event Name', 26),
+      col('examMarks', 'Exam Marks Obtained', 10, 'number'), col('examMax', 'Exam Maximum Marks', 10, 'number'), col('examPct', 'Exam Percentage', 10, 'number'),
+      col('interviewMarks', 'Interview Marks Obtained', 11, 'number'), col('interviewMax', 'Interview Maximum Marks', 11, 'number'), col('interviewPct', 'Interview Percentage', 11, 'number'),
+      col('overallMarks', 'Overall Marks Obtained', 10, 'number'), col('overallMax', 'Overall Maximum Marks', 10, 'number'), col('overallPct', 'Overall Percentage', 10, 'number'),
+      col('interviewStatus', 'Interview Status', 18), col('resultStatus', 'Result Status', 12), col('finalizedAt', 'Result Finalized Date', 17, 'datetime'),
+    ],
+    rows,
+    pdf: {
+      columns: [
+        col('eventRank', 'Event Rank', 6, 'text', { align: 'right' }), col('standardRank', 'Std Rank', 6, 'text', { align: 'right' }),
+        col('name', 'Student Name', 22), col('standard', 'Std', 4), col('exam', 'Exam Marks', 10), col('examPct', 'Exam %', 8),
+        col('interview', 'Interview Marks', 12), col('interviewPct', 'Interview %', 9), col('overall', 'Overall Marks', 10), col('overallPct', 'Overall %', 8), col('result', 'Result Status', 10),
+      ],
+      rows: pdfRows,
+    },
+  };
+};
+
 // ── Olympiad › payments by student (Admin > Olympiad > Payments tab) ───────────────────────────────────
 const olympiadPayments = async (query) => {
   const mongoose = require('mongoose');
@@ -103,10 +147,11 @@ const olympiadPayments = async (query) => {
   return {
     title: 'LearnIQ Olympiad — Student Payments', sheetName: 'Olympiad payments', fileBase: 'learniq-olympiad-payments',
     filters: [{ label: 'Section', value: 'Admin › Olympiad › Payments' }, { label: 'Scope', value: label }, { label: 'View', value: history ? 'Payment history (incl. not confirmed / archived)' : 'Active payments' }],
-    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('standard', 'Standard', 10), col('exam', 'Exam', 24), col('amount', 'Amount (₹)', 11, 'number', { align: 'right' }), col('status', 'Status', 12), col('created', 'Created', 17, 'datetime')],
+    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('standard', 'Standard', 10), col('exam', 'Exam', 24), col('component', 'Component', 12), col('method', 'Method', 10), col('amount', 'Collected (₹)', 12, 'number', { align: 'right' }), col('status', 'Status', 12), col('created', 'Created', 17, 'datetime')],
     rows: pays.map((p) => ({
       name: p.student ? p.student.name : (p.deletedStudent && p.deletedStudent.name ? `${p.deletedStudent.name} (deleted)` : 'Unknown'),
       email: p.student ? maskEmail(p.student.email) : '', standard: p.exam ? standardLabel(p.exam.standard) : '', exam: p.exam ? p.exam.title : '',
+      component: p.component === 'EXAM' ? 'Exam' : p.component === 'INTERVIEW' ? 'Interview' : 'Package (legacy)', method: 'Razorpay',
       amount: typeof p.amount === 'number' ? p.amount : null, status: p.status === 'UNCONFIRMED' ? 'Not confirmed' : statusWord(p.status), created: p.createdAt,
     })),
   };
@@ -219,7 +264,7 @@ const payments = async (query) => {
 };
 
 const SECTIONS = {
-  students, payments, 'olympiad-students': olympiadStudents, 'olympiad-results': olympiadResults, 'olympiad-payments': olympiadPayments,
+  students, payments, 'olympiad-students': olympiadStudents, 'olympiad-results': olympiadResults, 'olympiad-rankings': olympiadRankings, 'olympiad-payments': olympiadPayments,
   interviews, referrals, 'referral-students': referralStudents, 'engineering-requests': engineeringRequests, 'engineering-results': engineeringResults, certificates,
 };
 

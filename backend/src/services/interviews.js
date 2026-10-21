@@ -98,10 +98,11 @@ const checkEligibility = async (studentId, examId) => {
   if (exam.examType !== 'olympiad' || !(exam.standard >= 1 && exam.standard <= 10)) {
     return { eligible: false, code: 'NOT_OLYMPIAD', message: 'Interviews are available for Olympiad exams only.', exam };
   }
-  // the ₹20 package = exam + teacher interview. An administrator exception counts only if it was granted WITH the interview.
-  const ent = await examAccess.entitlementFor(studentId, exam._id);
-  const payment = ent.payment || (ent.grant && ent.grant.includesInterview ? { _id: undefined, grant: ent.grant } : null);
-  if (!payment) return { eligible: false, code: 'NOT_PAID', message: ent.grant ? 'The interview is not included in your exam access.' : 'Complete the Olympiad payment first.', exam };
+  // The interview is its own component: unlocked by a Rs 10 interview payment, one credit, a legacy Rs 20 bundle, or an administrator
+  // exception that includes it. Exam access alone never unlocks it (and the reverse).
+  const ent = await examAccess.interviewEntitlementFor(studentId, exam._id);
+  const payment = ent.payment || (ent.grant ? { _id: undefined, grant: ent.grant } : null);
+  if (!payment) return { eligible: false, code: 'NOT_PAID', message: 'Unlock the interview (₹10 or 1 credit) to attend it.', exam };
   const attempt = await OlympiadAttempt.findOne({ student: studentId, exam: exam._id });
   if (!attempt || attempt.status !== 'COMPLETED' || !attempt.submittedAt) {
     return { eligible: false, code: 'NOT_SUBMITTED', message: 'Submit your Olympiad exam to unlock the interview.', exam, payment, attempt };
@@ -744,8 +745,8 @@ const eligibleRows = async () => {
   if (!examById.size) return [];
   const attempts = await OlympiadAttempt.find({ exam: { $in: [...examById.keys()] }, status: 'COMPLETED', submittedAt: { $exists: true } });
   if (!attempts.length) return [];
-  const payments = await OlympiadPayment.find({ exam: { $in: [...examById.keys()] }, status: 'SUCCESS' });
-  const grants = await OlympiadAccessGrant.find({ exam: { $in: [...examById.keys()] }, status: 'ACTIVE', includesInterview: true });
+  const payments = await OlympiadPayment.find({ exam: { $in: [...examById.keys()] }, status: 'SUCCESS', component: examAccess.INTERVIEW_PAY });
+  const grants = await OlympiadAccessGrant.find({ exam: { $in: [...examById.keys()] }, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { includesInterview: true }] });
   const paid = new Set([...payments, ...grants].map((p) => `${oid(p.student)}:${oid(p.exam)}`));
   const eligible = attempts.filter((a) => paid.has(`${oid(a.student)}:${oid(a.exam)}`));
   const studentIds = [...new Set(eligible.map((a) => oid(a.student)))];
@@ -904,8 +905,8 @@ const studentWorkflow = (wf, released) => {
 
 const studentOverview = async (student) => {
   const [paid, grants, interviews] = await Promise.all([
-    OlympiadPayment.find({ student: student._id, status: 'SUCCESS' }),
-    OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE', includesInterview: true }),
+    OlympiadPayment.find({ student: student._id, status: 'SUCCESS', component: examAccess.INTERVIEW_PAY }),
+    OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { includesInterview: true }] }),
     TeacherInterview.find({ student: student._id }),
   ]);
   // one entry per exam the student is entitled to (verified payment, or an administrator exception that includes the interview)

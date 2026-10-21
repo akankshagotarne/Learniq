@@ -24,14 +24,16 @@ const tabFromState = (state: string): ExamTab | null => {
 };
 
 export const olympiadTab = (
-  exam: { state: string; accessMode?: string; tab?: ExamTab },
+  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean },
   interview?: InterviewInfo,
 ): ExamTab | null => {
   const tab = exam.tab || tabFromState(exam.state);
   if (tab !== 'completed') return tab;
   const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
-  if (!needsInterview || interview!.workflowComplete) return 'completed';
-  return 'available';
+  if (needsInterview && !interview!.workflowComplete) return 'available';
+  // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
+  if (exam.accessMode !== 'approval' && exam.interviewUnlocked === false) return 'available';
+  return 'completed';
 };
 
 /**

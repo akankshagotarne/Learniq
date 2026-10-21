@@ -153,6 +153,9 @@ export interface AdminCertificateList {
   summary: { total: number; valid: number; revoked: number };
 }
 
+/** How a component was unlocked. LEGACY_PACKAGE = the earlier Rs 20 exam + interview purchase. */
+export type UnlockVia = 'PAYMENT' | 'CREDIT' | 'LEGACY_PACKAGE' | 'OTHER';
+
 export interface OlympiadExam {
   _id: string;
   eventId?: string;
@@ -194,6 +197,12 @@ export interface OlympiadExam {
   registered?: boolean;
   message: string | null;
   paymentStatus: OlympiadPaymentStatus;
+  /** Separate, backend-decided entitlements: the exam and the interview are unlocked independently (Rs 10 or 1 credit each). */
+  examUnlocked?: boolean;
+  examVia?: UnlockVia | null;
+  interviewUnlocked?: boolean;
+  interviewVia?: UnlockVia | null;
+  prices?: { EXAM: number; INTERVIEW: number; currency: string };
   attemptStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
   result: OlympiadResultView | null;
   completion?: OlympiadCompletion | null;

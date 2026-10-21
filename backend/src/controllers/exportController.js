@@ -58,7 +58,9 @@ const exportSection = async (req, res) => {
     const generatedAt = new Date();
     const base = { title: data.title, filters: data.filters, columns: data.columns, generatedAt, recordCount: data.rows.length };
     const buffer = format === 'pdf'
-      ? await renderTablePdf({ ...base, rows: toPdfRows(data.columns, data.rows) })
+      ? await renderTablePdf(data.pdf
+        ? { ...base, columns: data.pdf.columns, rows: toPdfRows(data.pdf.columns, data.pdf.rows) } // a provider may supply a compact PDF layout (same records, same order)
+        : { ...base, rows: toPdfRows(data.columns, data.rows) })
       : await buildXlsx({ ...base, sheetName: data.sheetName, rows: data.rows });
     await audit(req, section, format, data.rows.length, 'SUCCESS');
     res.set({

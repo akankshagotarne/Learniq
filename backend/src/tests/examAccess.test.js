@@ -132,15 +132,15 @@ test('A: invalid ids, missing / incomplete reasons and wrong targets are rejecte
 });
 
 // ── B/E. free access + payment regression ───────────────────────────────────────────────────
-test('B/E: an ordinary unpaid student still pays 20 rupees (2000 paise) and cannot start without it', async () => {
+test('B/E: an ordinary unpaid student still pays 10 rupees (1000 paise) and cannot start without it', async () => {
   const stu = await mkUser();
   assert.equal((await stateOf(stu, S.exam)).state, 'pay');
   assert.equal((await start(stu, S.exam)).body.code, 'PAYMENT_REQUIRED');
   const order = await call('POST', `/api/olympiad/exams/${S.exam._id}/payment/order`, { token: stu.token });
   assert.equal(order.status, 200, order.text);
-  assert.equal(rzp.created.at(-1).amount, 2000);
+  assert.equal(rzp.created.at(-1).amount, 1000);
   assert.equal(rzp.created.at(-1).currency, 'INR');
-  assert.equal((await stateOf(stu, S.exam)).fee, 20);
+  assert.equal((await stateOf(stu, S.exam)).fee, 10);
 });
 
 test('B: a grant authorises only that student and that exam; no payment record; student sees an ordinary Start; exam is not completed for them', async () => {
@@ -157,7 +157,7 @@ test('B: a grant authorises only that student and that exam; no payment record; 
   assert.equal(card.state, 'ready', 'the normal exam card offers the start action');
   assert.equal(card.paymentStatus, 'NONE', 'the API does not pretend a payment happened');
   assert.equal(card.attemptStatus, 'NOT_STARTED', 'granting does not complete anything');
-  assert.equal(card.fee, 20, 'price unchanged');
+  assert.equal(card.fee, 10, 'price unchanged');
   const body = JSON.stringify(await examsOf(S.g));
   assert.doesNotMatch(body, /grant|free|exception|admin/i, 'nothing admin-related reaches the student API');
 
@@ -394,7 +394,7 @@ test('G: the cross-standard student sees and starts exactly the granted exam, fr
   assert.equal((await stateOf(s, e8)).state, 'in_progress', 'persists across reload');
   assert.equal((await start(s, own)).status, 402, 'own-standard exam is still payment protected');
   assert.equal(fake.OlympiadPayment.docs.filter((p) => String(p.student) === String(s.user._id)).length, 0, 'no fake payment');
-  assert.equal(rzp.created.filter((o) => o.amount !== 2000).length, 0);
+  assert.equal(rzp.created.filter((o) => o.amount !== 1000).length, 0);
 });
 
 test('G: cross-standard interview follows the checkbox and a valid submission; audit holds both standards', async () => {
@@ -425,7 +425,7 @@ test('G: duplicate cross-standard grants are idempotent and the student payment 
   assert.equal(fake.OlympiadAccessGrant.docs.filter((g) => String(g.student) === String(s.user._id)).length, 1);
   const own = await mkStdExam(3);
   const o = await call('POST', `/api/olympiad/exams/${own._id}/payment/order`, { token: s.token });
-  assert.equal(o.status, 200); assert.equal(rzp.created[rzp.created.length - 1].amount, 2000);
+  assert.equal(o.status, 200); assert.equal(rzp.created[rzp.created.length - 1].amount, 1000);
 });
 
 // ── overview + student leak check ────────────────────────────────────────────────────────────

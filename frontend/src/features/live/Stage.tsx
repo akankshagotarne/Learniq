@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, MicOff, Monitor, Loader, VideoOff, Radio, Pin } from 'lucide-react';
+import { Crown, MicOff, Monitor, Loader, VideoOff, Radio, Pin, ShieldCheck } from 'lucide-react';
 import { StreamVideo } from './media';
 import { initials, StageChoice, stageState } from './logic';
 import type { RoomParticipant } from './types';
@@ -28,7 +28,8 @@ export const Tile: React.FC<TileProps> = ({ p, stream, isSelf, selfStream, selfC
       )}
       <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 px-1.5 py-1 bg-gradient-to-t from-black/70 to-transparent text-white">
         {p.isHost && <Crown className="w-3 h-3 text-amber-300 flex-shrink-0" aria-label="Teacher" />}
-        <span className="truncate text-[11px] font-medium">{isSelf ? 'You' : p.name}</span>
+        {p.isAdmin && <ShieldCheck className="w-3 h-3 text-sky-300 flex-shrink-0" aria-label="Admin moderator" />}
+        <span className="truncate text-[11px] font-medium">{isSelf ? 'You' : p.name}{p.isAdmin ? ' · Admin' : ''}</span>
         {!micOn && <MicOff className="w-3 h-3 text-rose-300 ml-auto flex-shrink-0" aria-label="Microphone off" />}
       </div>
     </div>
