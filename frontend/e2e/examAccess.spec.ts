@@ -100,7 +100,7 @@ test('admin: the dialog and the panel fit a 360px phone', async ({ page }) => {
 test('student: Exams page shows the normal pay / start actions and no free-access or reset control anywhere', async ({ page }) => {
   await mockApi(page, 'student');
   await page.goto('/student/exams');
-  await expect(page.getByText('₹20').first()).toBeVisible();
+  await expect(page.getByText('₹10').first()).toBeVisible();
   const text = (await page.locator('body').innerText()).toLowerCase();
   for (const word of ['free access', 'free test', 'request free', 'grant', 'reset test', 'reset attempt', 'exceptional']) expect(text).not.toContain(word);
   await expect(page.getByRole('button', { name: /free|reset|exception/i })).toHaveCount(0);

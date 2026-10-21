@@ -30,7 +30,7 @@ const VIA_TEXT: Record<UnlockVia, string> = {
  * (exam.interviewUnlocked / interviewVia and the interview workflow) - unlocking never starts the interview.
  */
 const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance, unlocking, onUseCredit, onPay, interviewBusy, onStartInterview }) => {
-  const unlocked = !!exam.interviewUnlocked;
+  const unlocked = !!exam.interviewUnlocked || !!interview; // /interviews/mine only lists exams whose interview the backend has unlocked
   const price = exam.prices ? exam.prices.INTERVIEW : 10;
   const examSubmitted = exam.state === 'completed';
 
