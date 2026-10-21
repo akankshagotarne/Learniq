@@ -16,6 +16,8 @@ import toast from 'react-hot-toast';
 import { olympiadTab } from '../../utils/examTabs';
 import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
+import OlympiadInterviewCard from '../../components/olympiad/OlympiadInterviewCard';
+import { referralApi } from '../../services/referrals';
 import { useExamCheckout } from '../../components/olympiad/useExamCheckout';
 import { standardLabel } from '../../constants/standards';
 
@@ -38,6 +40,10 @@ const StudentExamsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [interviews, setInterviews] = useState<Record<string, StudentExamInterview>>({});
   const [interviewBusyId, setInterviewBusyId] = useState<string | null>(null);
+
+  const [creditBalance, setCreditBalance] = useState(0);
+  const loadBalance = async () => { try { setCreditBalance(await referralApi.balance()); } catch { /* credits are optional: buttons fall back to paying */ } };
+  useEffect(() => { loadBalance(); }, [user]);
 
   const loadInterviews = async () => {
     try { setInterviews((await interviewApi.mine()).byExam || {}); } catch { /* the card simply shows no interview offer */ }
@@ -96,8 +102,10 @@ const StudentExamsPage: React.FC = () => {
     }
   };
 
-  const { checkout, busyId: payingId, dialog: checkoutDialog } = useExamCheckout((examId) => {
-    navigate(`/student/olympiad/${examId}`);
+  // Each component is unlocked on its own. The server returns the authoritative state; we only refresh it.
+  const { unlockWithCredit, unlockWithPayment, busyId: payingId, dialog: checkoutDialog } = useExamCheckout(async (examId, component) => {
+    if (component === 'EXAM') { navigate(`/student/olympiad/${examId}`); return; }
+    await Promise.all([fetchOlympiad(), loadInterviews(), loadBalance()]);
   });
 
   const hasOlympiad = olympiadExams.length > 0;
@@ -338,15 +346,29 @@ const StudentExamsPage: React.FC = () => {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4 sm:gap-5">
               {filteredOlympiad.map(o => (
-                <OlympiadExamCard
-                  key={o._id}
-                  exam={o}
-                  paying={payingId === o._id}
-                  onPay={checkout}
-                  interview={interviews[o._id]}
-                  interviewBusy={interviewBusyId === o._id}
-                  onStartInterview={startInterview}
-                />
+                <div key={o._id} className="min-w-0 flex flex-col gap-3" data-testid="olympiad-pair">
+                  <OlympiadExamCard
+                    exam={o}
+                    paying={payingId === `${o._id}:EXAM`}
+                    onPay={(e) => unlockWithPayment(e, 'EXAM')}
+                    onUseCredit={(e) => unlockWithCredit(e, 'EXAM')}
+                    creditBalance={creditBalance}
+                    creditBusy={payingId === `${o._id}:EXAM`}
+                    interview={interviews[o._id]}
+                  />
+                  {o.accessMode !== 'approval' && (
+                    <OlympiadInterviewCard
+                      exam={o}
+                      interview={interviews[o._id]}
+                      creditBalance={creditBalance}
+                      unlocking={payingId === `${o._id}:INTERVIEW`}
+                      onUseCredit={(e) => { unlockWithCredit(e, 'INTERVIEW').then(() => loadBalance()); }}
+                      onPay={(e) => unlockWithPayment(e, 'INTERVIEW')}
+                      interviewBusy={interviewBusyId === o._id}
+                      onStartInterview={startInterview}
+                    />
+                  )}
+                </div>
               ))}
               {visibleRegular.map(exam => {
                 const isUpcoming = exam.availability === 'upcoming';

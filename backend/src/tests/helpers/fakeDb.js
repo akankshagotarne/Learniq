@@ -189,12 +189,14 @@ class FakeModel {
   }
 
   checkUnique(candidate) {
+    // `component` is a non-sparse index key in MongoDB: a missing value indexes as null (legacy bundle / exam grant)
+    const val = (d, f) => { const v = getPath(d, f); return f === 'component' && v === undefined ? null : v; };
     for (const u of this.unique) {
       if (u.where && !u.where(candidate)) continue;
       const clash = this.docs.find((d) =>
         !eq(d._id, candidate._id) && (!u.where || u.where(d)) &&
-        u.fields.every((f) => getPath(d, f) !== undefined && eq(getPath(d, f), getPath(candidate, f))));
-      if (clash && u.fields.every((f) => getPath(candidate, f) !== undefined)) throw dupError(`${this.name} ${u.fields.join('+')}`, u.fields);
+        u.fields.every((f) => val(d, f) !== undefined && eq(val(d, f), val(candidate, f))));
+      if (clash && u.fields.every((f) => val(candidate, f) !== undefined)) throw dupError(`${this.name} ${u.fields.join('+')}`, u.fields);
     }
   }
 
@@ -335,8 +337,8 @@ class FakeModel {
 
 const createFakeDb = () => {
   const registry = {};
-  const uniqueSuccess = { fields: ['student', 'exam'], where: (d) => d.status === 'SUCCESS' };
-  const uniquePending = { fields: ['exam', 'student'], where: (d) => d.status === 'PENDING' };
+  const uniqueSuccess = { fields: ['student', 'exam', 'component'], where: (d) => d.status === 'SUCCESS' };
+  const uniquePending = { fields: ['exam', 'student', 'component'], where: (d) => d.status === 'PENDING' };
 
   const OlympiadExam = new FakeModel('OlympiadExam', {
     registry, unique: [{ fields: ['slug'] }],
@@ -425,7 +427,7 @@ const createFakeDb = () => {
   const InterviewReminder = new FakeModel('InterviewReminder', { registry, unique: [{ fields: ['dedupeKey'] }], defaults: () => ({ status: 'PENDING', attempts: 0 }) });
   const scheduleModels = { ...require('../../models/InterviewSchedule'), InterviewSchedule, InterviewSlot, InterviewReminder };
   // admin exam exceptions (models/ExamAccess.js) - same unique indexes as the real schema
-  const OlympiadAccessGrant = new FakeModel('OlympiadAccessGrant', { registry, refs: { student: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam'], where: (d) => d.status === 'ACTIVE' }], defaults: () => ({ status: 'ACTIVE', includesInterview: true }) });
+  const OlympiadAccessGrant = new FakeModel('OlympiadAccessGrant', { registry, refs: { student: 'User', exam: 'OlympiadExam' }, unique: [{ fields: ['student', 'exam', 'component'], where: (d) => d.status === 'ACTIVE' }], defaults: () => ({ status: 'ACTIVE', includesInterview: true }) });
   const OlympiadAttemptHistory = new FakeModel('OlympiadAttemptHistory', { registry, unique: [{ fields: ['originalAttempt'] }], defaults: () => ({ resetAt: new Date() }) });
   const ExamAdminAudit = new FakeModel('ExamAdminAudit', { registry, unique: [{ fields: ['dedupeKey'] }], defaults: () => ({ at: new Date() }) });
   const OlympiadClearance = new FakeModel('OlympiadClearance', { registry, defaults: () => ({ clearedAt: new Date() }) });

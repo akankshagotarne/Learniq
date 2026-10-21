@@ -181,7 +181,7 @@ const myOverview = async (user) => {
       rejected: refs.filter((r) => r.status === 'REJECTED').length,
       creditsEarned: t('REFERRAL_REWARD'),
       creditsFromAdmin: t('ADMIN_GRANT'),
-      creditsUsed: -t('EXAM_REDEMPTION'),
+      creditsUsed: -t('EXAM_REDEMPTION') - t('INTERVIEW_REDEMPTION'),
       adjustments: t('ADMIN_ADJUSTMENT') + t('REVERSAL') + sysUndo,
       available: balance,
     },
@@ -202,7 +202,7 @@ const myReferrals = async (user, q) => {
   };
 };
 
-const TX_LABEL = { REFERRAL_REWARD: 'Referral reward', ADMIN_GRANT: 'Admin credit grant', EXAM_REDEMPTION: 'Exam credit used', ADMIN_ADJUSTMENT: 'Credit adjustment', REVERSAL: 'Credit reversal' };
+const TX_LABEL = { REFERRAL_REWARD: 'Referral reward', ADMIN_GRANT: 'Admin credit grant', EXAM_REDEMPTION: 'Exam credit used', INTERVIEW_REDEMPTION: 'Interview credit used', ADMIN_ADJUSTMENT: 'Credit adjustment', REVERSAL: 'Credit reversal' };
 const myCredits = async (user, q) => {
   const { page, limit, skip } = pageOf(q);
   const filter = { student: user._id };
@@ -210,7 +210,7 @@ const myCredits = async (user, q) => {
   const total = await CreditTransaction.countDocuments(filter);
   return {
     page, limit, total, balance: await credits.getBalance(user._id),
-    transactions: rows.map((t) => ({ id: idStr(t), at: t.createdAt, type: t.type, label: TX_LABEL[t.type] || t.type, delta: t.delta, description: t.reason || TX_LABEL[t.type], examTitle: t.examTitle || null })),
+    transactions: rows.map((t) => ({ id: idStr(t), at: t.createdAt, type: t.type, label: TX_LABEL[t.type] || t.type, delta: t.delta, description: t.reason || TX_LABEL[t.type], examTitle: t.examTitle || null, component: t.component || (t.type === 'EXAM_REDEMPTION' ? 'EXAM' : null) })),
   };
 };
 
@@ -316,7 +316,7 @@ const overview = async ({ days = 30 } = {}) => {
     Referral.aggregate([{ $match: { registeredAt: { $gte: since } } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$registeredAt', timezone: 'Asia/Kolkata' } }, n: { $sum: 1 } } }]),
     Referral.aggregate([{ $match: { rewardStatus: 'REWARDED' } }, { $group: { _id: '$referrer', n: { $sum: 1 }, credits: { $sum: '$credits' } } }]),
     CreditTransaction.aggregate([{ $match: { createdAt: { $gte: since }, delta: { $gt: 0 }, type: { $in: ['REFERRAL_REWARD', 'ADMIN_GRANT'] } } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } }, n: { $sum: '$delta' } } }]),
-    CreditTransaction.aggregate([{ $match: { createdAt: { $gte: since }, type: 'EXAM_REDEMPTION' } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } }, n: { $sum: '$delta' } } }]),
+    CreditTransaction.aggregate([{ $match: { createdAt: { $gte: since }, type: { $in: ['EXAM_REDEMPTION', 'INTERVIEW_REDEMPTION'] } } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } }, n: { $sum: '$delta' } } }]),
     Referral.countDocuments({}),
   ]);
   const n = (rows, k) => (rows.find((r) => r._id === k) || { n: 0 }).n;
@@ -337,7 +337,7 @@ const overview = async ({ days = 30 } = {}) => {
       referralCreditsAwarded: t('REFERRAL_REWARD'),
       adminGrantedCredits: t('ADMIN_GRANT'),
       adjustmentsNet: t('ADMIN_ADJUSTMENT') + t('REVERSAL'),
-      creditsRedeemed: -t('EXAM_REDEMPTION'),
+      creditsRedeemed: -t('EXAM_REDEMPTION') - t('INTERVIEW_REDEMPTION'),
       availableCredits: accountSum[0] ? accountSum[0].total : 0,
       successRate: totalAll ? Math.round((successful / totalAll) * 1000) / 10 : 0,
     },
@@ -357,7 +357,7 @@ const txFilter = (q) => {
   const f = {};
   if (q.studentId && validId(String(q.studentId))) f.student = q.studentId;
   else if (clip(q.student)) f.studentName = { $regex: esc(clip(q.student)), $options: 'i' };
-  if (['REFERRAL_REWARD', 'ADMIN_GRANT', 'EXAM_REDEMPTION', 'ADMIN_ADJUSTMENT', 'REVERSAL'].includes(q.type)) f.type = q.type;
+  if (['REFERRAL_REWARD', 'ADMIN_GRANT', 'EXAM_REDEMPTION', 'INTERVIEW_REDEMPTION', 'ADMIN_ADJUSTMENT', 'REVERSAL'].includes(q.type)) f.type = q.type;
   if (['REFERRAL', 'ADMIN', 'EXAM', 'SYSTEM'].includes(q.source)) f.source = q.source;
   if (q.adminId && validId(String(q.adminId))) f.actor = q.adminId;
   if (q.examId && validId(String(q.examId))) f.exam = q.examId;
@@ -367,7 +367,7 @@ const txFilter = (q) => {
 };
 const txRow = (t) => ({
   id: idStr(t), at: t.createdAt, studentId: idStr(t.student), studentName: t.studentName || null, type: t.type, delta: t.delta, source: t.source, status: t.status,
-  reason: t.reason || null, examTitle: t.examTitle || null, examId: t.exam ? idStr(t.exam) : null, referralId: t.referral ? idStr(t.referral) : null,
+  reason: t.reason || null, examTitle: t.examTitle || null, component: t.component || null, creditTransactionId: idStr(t), examId: t.exam ? idStr(t.exam) : null, referralId: t.referral ? idStr(t.referral) : null,
   batchId: t.batchId || null, performedBy: t.actorName || (t.source === 'REFERRAL' ? 'System (referral)' : t.source === 'EXAM' ? 'Student' : 'System'),
 });
 const listTransactions = async (q) => {

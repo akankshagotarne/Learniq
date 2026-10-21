@@ -21,7 +21,8 @@ const { Certificate } = require('../models/Certificate');
  * Nothing here writes to the database.
  */
 
-const ACTIVE_PAYMENTS = { status: { $ne: 'UNCONFIRMED' }, $or: [{ archivedAt: null }, { status: 'SUCCESS' }] };
+// registrations are EXAM unlocks: an interview-only purchase/grant is not an exam registration
+const ACTIVE_PAYMENTS = { component: { $ne: 'INTERVIEW' }, status: { $ne: 'UNCONFIRMED' }, $or: [{ archivedAt: null }, { status: 'SUCCESS' }] };
 const MAX_ROWS = 50000;
 const OID_RE = /^[a-f0-9]{24}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -151,7 +152,7 @@ const loadRegistrations = async (filters) => {
 
   const [payments, grants, attempts, clearances] = await Promise.all([
     OlympiadPayment.find({ exam: { $in: examIds }, ...ACTIVE_PAYMENTS }).select('student exam status verifiedAt createdAt deletedStudent'),
-    OlympiadAccessGrant.find({ exam: { $in: examIds }, status: 'ACTIVE' }).select('student exam createdAt'),
+    OlympiadAccessGrant.find({ exam: { $in: examIds }, status: 'ACTIVE', component: { $ne: 'INTERVIEW' } }).select('student exam createdAt'),
     OlympiadAttempt.find({ exam: { $in: examIds } }).select('student exam payment status startedAt createdAt submittedAt evaluatedAt score totalMarks percentage'),
     OlympiadClearance.find({ exam: { $in: examIds } }).select('student exam clearedAt'),
   ]);
@@ -347,7 +348,7 @@ const studentDetail = async (studentId, query = {}) => {
   }
   const [payments, grants, attempts, history, certificates, clearances, clearState] = await Promise.all([
     OlympiadPayment.find({ student: studentId, ...ACTIVE_PAYMENTS }).select('exam status verifiedAt createdAt deletedStudent').sort({ createdAt: 1 }),
-    OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' }),
+    OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE', component: { $ne: 'INTERVIEW' } }),
     OlympiadAttempt.find({ student: studentId }),
     OlympiadAttemptHistory.find({ student: studentId }).sort({ resetAt: 1 }),
     Certificate.find({ student: studentId }),

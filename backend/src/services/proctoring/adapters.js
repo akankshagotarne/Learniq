@@ -126,7 +126,7 @@ const olympiadAdapter = {
         return { eligible: true, resume: false, exam };
       }
       const paid = (await require('../examAccess').entitlementFor(user._id, exam._id)).entitled; // verified payment OR an administrator exception
-      if (!paid) return { eligible: false, code: 'PAYMENT_REQUIRED', message: `Please complete the ₹${exam.fee} payment before starting the examination.`, exam };
+      if (!paid) return { eligible: false, code: 'PAYMENT_REQUIRED', message: `Please unlock the examination (₹10 or 1 credit) before starting.`, exam };
       return { eligible: true, resume: false, exam };
     } catch (err) {
       if (err && err.status && err.code) return { eligible: false, code: err.code, message: err.message };

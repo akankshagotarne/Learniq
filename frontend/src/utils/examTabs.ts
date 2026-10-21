@@ -17,13 +17,15 @@ export type ExamTab = 'available' | 'upcoming' | 'completed';
 const AVAILABLE_STATES = ['pay', 'ready', 'in_progress', 'closed', 'request', 'pending', 'rejected', 'disabled'];
 
 export const olympiadTab = (
-  exam: { state: string; accessMode?: string },
+  exam: { state: string; accessMode?: string; interviewUnlocked?: boolean },
   interview?: { stage?: string; workflowComplete?: boolean } | null,
 ): ExamTab | null => {
   if (exam.state === 'upcoming') return 'upcoming';
   if (exam.state === 'completed') {
     const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
     if (needsInterview && !interview!.workflowComplete) return 'available';
+    // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
+    if (exam.accessMode !== 'approval' && exam.interviewUnlocked === false) return 'available';
     return 'completed';
   }
   return AVAILABLE_STATES.includes(exam.state) ? 'available' : null;

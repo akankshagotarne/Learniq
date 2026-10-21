@@ -69,7 +69,7 @@ const accountSchema = new Schema({
 accountSchema.index({ student: 1 }, { unique: true, name: 'one_credit_account_per_student' });
 
 // ── ledger ────────────────────────────────────────────────────────────────────────────────────
-const TX_TYPES = ['REFERRAL_REWARD', 'ADMIN_GRANT', 'EXAM_REDEMPTION', 'ADMIN_ADJUSTMENT', 'REVERSAL'];
+const TX_TYPES = ['REFERRAL_REWARD', 'ADMIN_GRANT', 'EXAM_REDEMPTION', 'INTERVIEW_REDEMPTION', 'ADMIN_ADJUSTMENT', 'REVERSAL'];
 const BLOCKED = ['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndDelete', 'findOneAndReplace', 'deleteOne', 'deleteMany', 'replaceOne'];
 const txSchema = new Schema({
   student: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -81,6 +81,7 @@ const txSchema = new Schema({
   idempotencyKey: { type: String, required: true },
   referral: { type: Schema.Types.ObjectId, ref: 'Referral' },
   exam: { type: Schema.Types.ObjectId, ref: 'OlympiadExam' },
+  component: { type: String, enum: ['EXAM', 'INTERVIEW'] },   // set on EXAM_REDEMPTION / INTERVIEW_REDEMPTION
   examTitle: { type: String },
   batch: { type: Schema.Types.ObjectId, ref: 'CreditGrantBatch' },
   batchId: { type: String },

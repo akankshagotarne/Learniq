@@ -37,7 +37,7 @@ const attemptCounts = async (exam, now) => {
   const [running, submitted, registered] = await Promise.all([
     OlympiadAttempt.find({ exam: exam._id, status: 'IN_PROGRESS' }).select('deadline'),
     OlympiadAttempt.countDocuments({ exam: exam._id, status: 'COMPLETED' }),
-    OlympiadPayment.countDocuments({ exam: exam._id, status: 'SUCCESS' }),
+    OlympiadPayment.countDocuments({ exam: exam._id, status: 'SUCCESS', component: { $ne: 'INTERVIEW' } }),
   ]);
   const active = running.filter((a) => a.deadline && new Date(a.deadline) > now).length;
   return { registered, startedNotSubmitted: running.length, activeNow: active, submitted };

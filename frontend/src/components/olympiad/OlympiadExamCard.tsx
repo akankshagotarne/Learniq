@@ -11,14 +11,19 @@ import { formatISTDateTime, formatISTRange, formatRupees } from '../../utils/oly
 interface Props {
   exam: OlympiadExam;
   paying: boolean;
+  /** Unlock the EXAM with Rs 10 (Razorpay). Never also charges for the interview. */
   onPay: (exam: OlympiadExam) => void;
-  /** Teacher interview state for this exam (from the backend). Absent = no interview offer for this card. */
+  /** Unlock the EXAM with 1 credit. */
+  onUseCredit?: (exam: OlympiadExam) => void;
+  /** Authoritative credit balance (server). */
+  creditBalance?: number;
+  creditBusy?: boolean;
+  /** Teacher interview state, used only for the combined 'Exam submitted - interview ...' badge. */
   interview?: StudentExamInterview;
-  interviewBusy?: boolean;
-  onStartInterview?: (exam: OlympiadExam) => void;
 }
 
-const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, interviewBusy, onStartInterview }) => {
+const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, creditBalance = 0, creditBusy, interview }) => {
+  const examPrice = exam.prices ? exam.prices.EXAM : exam.fee;
   const { state } = exam;
   const approval = exam.accessMode === 'approval';   // BE Engineering mock test: free, admin-approved
   // "This examination opens on 17 October 2026." -> "17 October 2026" (the server wording is the single source of the date)
@@ -50,7 +55,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
       case 'ready':
         return (
           <span className="badge-success text-[10px] py-0.5 px-2 flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> {approval ? 'Approved' : 'Payment Verified'}
+            <CheckCircle className="w-3 h-3" /> {approval ? 'Approved' : 'Exam Unlocked'}
           </span>
         );
       case 'pending':
@@ -136,7 +141,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           </div>
           <div className="flex items-center gap-1.5 min-w-0 text-text-secondary">
             <IndianRupee className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
-            <span className="min-w-0">Fee: {exam.fee > 0 ? formatRupees(exam.fee) : 'FREE'}</span>
+            <span className="min-w-0">Exam: {exam.fee > 0 ? formatRupees(examPrice) : 'FREE'}</span>
           </div>
         </div>
 
@@ -172,18 +177,19 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
 
       <div className="pt-3 border-t border-border-subtle">
         {state === 'pay' && (
-          <button
-            type="button"
-            onClick={() => onPay(exam)}
-            disabled={paying}
-            className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {paying ? (
-              <><Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" aria-hidden="true" /> Processing…</>
-            ) : (
-              <><Sparkles className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> <span className="min-w-0">Pay {formatRupees(exam.fee)} &amp; Start Exam</span> <ChevronRight className="w-4 h-4 flex-shrink-0" aria-hidden="true" /></>
+          <div className="space-y-2" data-testid="exam-unlock-options">
+            <p className="text-[11px] text-text-secondary" data-testid="exam-credit-balance">Your credits: <b>{creditBalance}</b> · 1 credit unlocks the exam only</p>
+            {creditBalance >= 1 && onUseCredit && (
+              <button type="button" onClick={() => onUseCredit(exam)} disabled={paying || creditBusy}
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl border-2 border-brand-primary bg-brand-primary/5 text-sm sm:text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed" data-testid="exam-use-credit">
+                {creditBusy ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Using credit…</> : <><Sparkles className="w-4 h-4" aria-hidden="true" /> Use 1 Credit — Free</>}
+              </button>
             )}
-          </button>
+            <button type="button" onClick={() => onPay(exam)} disabled={paying || creditBusy}
+              className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed" data-testid="exam-unlock-pay">
+              {paying ? <><Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" aria-hidden="true" /> Processing…</> : <><IndianRupee className="w-4 h-4 flex-shrink-0" aria-hidden="true" /> <span className="min-w-0">Unlock Exam — {formatRupees(examPrice)}</span></>}
+            </button>
+          </div>
         )}
         {(state === 'request' || state === 'rejected') && (
           <Link
@@ -225,80 +231,6 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           >
             <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> View Result
           </Link>
-        )}
-        {interview && !approval && (
-          <div className="mt-2" data-testid="interview-action" data-stage={interview.stage}>
-            {interview.schedule?.configured && interview.schedule.when && !interview.locked && !interview.workflowComplete && (
-              <p className="mb-2 text-[11px] text-text-secondary text-center" data-testid="interview-when">
-                Interview: <span className="font-semibold text-text-primary">{interview.schedule.when}</span>
-              </p>
-            )}
-            {interview.stage === 'COMPLETED' ? (
-              <Link
-                to="/student/interview-results"
-                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-border-subtle text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
-                data-testid="interview-results-link"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> {interview.resultsReleased === false ? 'Interview Completed — Results Announcement' : 'Interview Completed — View Results'} <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            ) : interview.interview && ['REQUESTED', 'IN_PROGRESS', 'EVALUATION_PENDING'].includes(interview.stage) ? (
-              <Link
-                to={`/student/interview/${interview.interview._id}`}
-                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt hover:bg-surface border border-brand-primary/40 text-text-primary text-sm sm:text-xs font-bold text-center flex items-center justify-center gap-2 transition-all"
-                data-testid="interview-view"
-              >
-                <Video className="w-3.5 h-3.5 text-brand-primary" />
-                {interview.stage === 'REQUESTED' ? 'Waiting for Teacher Approval' : interview.stage === 'IN_PROGRESS' ? 'Interview In Progress — Open' : 'Evaluation Pending'}
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            ) : interview.locked ? (
-              <>
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
-                  data-testid="interview-locked"
-                >
-                  <Lock className="w-3.5 h-3.5" /> Start Interview — Locked
-                </button>
-                <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message || 'Submit your Olympiad exam to unlock the interview.'}</p>
-              </>
-            ) : interview.eligible && interview.interviewOpen === false ? (
-              <>
-                <p className="mb-2 p-3 rounded-xl bg-[#6C63F2]/10 border border-[#6C63F2]/30 text-[11px] text-text-secondary" data-testid="interview-scheduled-note">
-                  {interview.interviewWindow === 'closed'
-                    ? 'The interview window has closed. New interview requests are no longer accepted.'
-                    : `Your teacher interview opens on ${interview.interviewOpensOn || '18 October 2026'} at 9:00 AM IST. Please check your WhatsApp group for your interview instructions.`}
-                </p>
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
-                  data-testid="interview-scheduled"
-                >
-                  <Clock className="w-3.5 h-3.5" /> {interview.interviewWindow === 'closed' ? 'Interview Window Closed' : `Scheduled — ${interview.interviewOpensOn || '18 October 2026'}, 9:00 AM IST`}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onStartInterview?.(exam)}
-                  disabled={interviewBusy || !interview.eligible}
-                  className="btn-primary w-full min-h-[44px] py-2.5 px-4 rounded-xl text-sm sm:text-xs font-bold flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                  data-testid="interview-start"
-                >
-                  {interviewBusy
-                    ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Requesting…</>
-                    : <><Video className="w-3.5 h-3.5" /> Start Interview <ChevronRight className="w-3.5 h-3.5" /></>}
-                </button>
-                {interview.eligible && interview.interviewOpen === true && <p className="text-[11px] text-text-muted mt-1.5 text-center" data-testid="interview-open-hint">Check your WhatsApp group for your assigned interview time, then request when it is your turn.</p>}
-                {!interview.eligible && interview.message && <p className="text-[11px] text-text-muted mt-1.5 text-center">{interview.message}</p>}
-              </>
-            )}
-          </div>
         )}
         {disabled && (
           <button

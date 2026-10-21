@@ -86,7 +86,7 @@ const ReferAndEarnPage: React.FC = () => {
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto" data-testid="refer-page">
           <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Rewards</p>
           <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary flex items-center gap-2"><Gift className="w-6 h-6 text-[#FFC24B]" aria-hidden /> Refer &amp; Earn</h1>
-          <p className="text-text-secondary text-sm mt-1 mb-6">Invite your friends to LearnIQ. When a friend joins with your code, you earn an exam credit that you can use to open an Olympiad exam without paying.</p>
+          <p className="text-text-secondary text-sm mt-1 mb-6">Invite your friends to LearnIQ. When a friend joins with your code, you earn an exam credit. One credit unlocks either your Olympiad exam or your interview (₹10 each if you pay instead).</p>
 
           {error && (
             <div className="rounded-xl border border-[#F9A8C0] bg-[#FFE4EC] p-4 mb-5 text-sm text-[#9D174D]" role="alert" data-testid="refer-error">
@@ -138,7 +138,7 @@ const ReferAndEarnPage: React.FC = () => {
                 <StatCard testId="stat-total" icon={Users} label="Total referrals" value={s.totalReferrals} hint="Friends who joined with your code" tone="bg-[#E0E7FF] text-[#4338CA]" />
                 <StatCard testId="stat-successful" icon={BadgeCheck} label="Successful referrals" value={s.successful} hint="Credit awarded" tone="bg-[#DCFCE7] text-[#16A34A]" />
                 <StatCard testId="stat-earned" icon={Ticket} label="Credits earned" value={s.creditsEarned} hint={s.creditsFromAdmin ? `+ ${s.creditsFromAdmin} from LearnIQ` : 'From referrals'} tone="bg-[#FEF3C7] text-[#D97706]" />
-                <StatCard testId="stat-available" icon={Wallet} label="Available credits" value={s.available} hint={s.creditsUsed ? `${s.creditsUsed} used for exams` : '1 credit = 1 exam'} tone="bg-[#CCFBF1] text-[#0D9488]" />
+                <StatCard testId="stat-available" icon={Wallet} label="Available credits" value={s.available} hint={s.creditsUsed ? `${s.creditsUsed} used for exams / interviews` : '1 credit = 1 exam or 1 interview'} tone="bg-[#CCFBF1] text-[#0D9488]" />
               </div>
               {(s.pending > 0 || s.underReview > 0) && (
                 <p className="text-xs text-text-secondary -mt-2 mb-5" data-testid="stat-notes">
@@ -153,7 +153,7 @@ const ReferAndEarnPage: React.FC = () => {
                   {[
                     { icon: Share2, t: 'Share your code', d: 'Send your code or link to a friend who is not on LearnIQ yet.' },
                     { icon: UserPlus, t: 'Your friend registers', d: 'They create a new student account using your code.' },
-                    { icon: GraduationCap, t: 'You earn a credit', d: `You get ${data.creditsPerReferral} exam credit${data.creditsPerReferral === 1 ? '' : 's'}. Use 1 credit to open 1 paid Olympiad exam.` },
+                    { icon: GraduationCap, t: 'You earn a credit', d: `You get ${data.creditsPerReferral} exam credit${data.creditsPerReferral === 1 ? '' : 's'}. Use 1 credit to unlock the exam OR the interview — 2 credits unlock both.` },
                   ].map((st, i) => (
                     <li key={st.t} className="card-soft rounded-card border border-border-subtle p-4 flex gap-3">
                       <span className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary text-white text-sm font-bold flex items-center justify-center" aria-hidden>{i + 1}</span>
@@ -205,7 +205,7 @@ const ReferAndEarnPage: React.FC = () => {
                         {hist.rows.map(t => (
                           <tr key={t.id} className="border-b border-border-subtle last:border-0" data-testid="history-row">
                             <td className="px-3 py-2.5 whitespace-nowrap">{formatISTDate(t.at)}</td>
-                            <td className="px-3 py-2.5"><span className="font-semibold text-text-primary">{t.label}</span>{t.examTitle ? <span className="block text-xs text-text-secondary">{t.examTitle}</span> : null}</td>
+                            <td className="px-3 py-2.5"><span className="font-semibold text-text-primary">{t.label}</span>{t.component ? <span className="sr-only"> ({t.component === 'INTERVIEW' ? 'interview' : 'exam'})</span> : null}{t.examTitle ? <span className="block text-xs text-text-secondary">{t.examTitle}</span> : null}</td>
                             <td className={`px-3 py-2.5 font-bold ${t.delta > 0 ? 'text-[#15803D]' : 'text-[#B91C1C]'}`}>{t.delta > 0 ? `+${t.delta}` : t.delta}</td>
                           </tr>
                         ))}

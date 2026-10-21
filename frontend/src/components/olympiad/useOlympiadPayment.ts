@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { loadRazorpayScript, resolveCheckoutKey, PAYMENTS_NOT_CONFIGURED_MESSAGE } from '../../utils/razorpay';
-import { olympiadApi, olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
+import { olympiadApi, olympiadErrorCode, olympiadErrorMessage, ExamComponent } from '../../services/olympiad';
 
 interface PayableExam {
   _id: string;
@@ -29,10 +29,10 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
   }, []);
 
   /** After a verify failure caused by the network, ask the backend to reconcile with Razorpay. */
-  const confirmViaStatus = useCallback(async (examId: string): Promise<boolean> => {
+  const confirmViaStatus = useCallback(async (examId: string, component: ExamComponent): Promise<boolean> => {
     for (let i = 0; i < 4; i++) {
       try {
-        const st = await olympiadApi.paymentStatus(examId);
+        const st = await olympiadApi.paymentStatus(examId, component);
         if (st.unlocked) return true;
       } catch { /* keep trying */ }
       await sleep(1500 * (i + 1));
@@ -40,10 +40,11 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
     return false;
   }, []);
 
-  const pay = useCallback(async (exam: PayableExam) => {
+  const pay = useCallback(async (exam: PayableExam, component: ExamComponent = 'EXAM') => {
+    const label = component === 'INTERVIEW' ? 'interview' : 'examination';
     if (busy.current) return;
     busy.current = true;
-    setPayingId(exam._id);
+    setPayingId(`${exam._id}:${component}`);
 
     try {
       const loaded = await loadRazorpayScript();
@@ -55,10 +56,10 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
 
       let orderRes;
       try {
-        orderRes = await olympiadApi.createOrder(exam._id);
+        orderRes = await olympiadApi.createOrder(exam._id, component);
       } catch (err: any) {
         if (olympiadErrorCode(err) === 'ALREADY_PAID') {
-          toast.success('Your payment is already complete. You can start the examination.');
+          toast.success(`Your ${label} is already unlocked. Nothing was charged.`);
           finish();
           onUnlocked(exam._id);
           return;
@@ -80,10 +81,10 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
         amount: order.amount,
         currency: order.currency || 'INR',
         name: 'LearnIQ',
-        description: exam.title,
+        description: `${component === 'INTERVIEW' ? 'Interview' : 'Exam'} - ${exam.title}`,
         order_id: order.id,
         prefill: { name: user?.name || '', email: user?.email || '', contact: user?.phone || '' },
-        notes: { examId: exam._id, studentId: user?._id || '' },
+        notes: { examId: exam._id, component },
         theme: { color: '#6C63F2' },
         handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
           toast.loading('Verifying your payment securely…', { id: 'oly-verify' });
@@ -93,16 +94,16 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
             });
-            toast.success('Payment verified! You can now start the examination.', { id: 'oly-verify' });
+            toast.success(component === 'INTERVIEW' ? 'Payment verified! Your interview is unlocked.' : 'Payment verified! Your examination is unlocked.', { id: 'oly-verify' });
             finish();
             onUnlocked(exam._id);
           } catch (err: any) {
             if (!err?.response) {
               // network failure — money may have been taken; let the backend confirm with Razorpay
               toast.loading('Confirming your payment…', { id: 'oly-verify' });
-              const ok = await confirmViaStatus(exam._id);
+              const ok = await confirmViaStatus(exam._id, component);
               if (ok) {
-                toast.success('Payment confirmed! You can now start the examination.', { id: 'oly-verify' });
+                toast.success(`Payment confirmed! Your ${label} is unlocked.`, { id: 'oly-verify' });
                 finish();
                 onUnlocked(exam._id);
                 return;

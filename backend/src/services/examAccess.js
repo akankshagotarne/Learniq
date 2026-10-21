@@ -39,14 +39,42 @@ const parseReason = (kind, body) => {
 };
 
 // ── lookups ──────────────────────────────────────────────────────────────────────────────────
-const activeGrantExamIds = async (studentId) => (await OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' })).map((g) => g.exam);
-const activeGrant = (studentId, examId) => OlympiadAccessGrant.findOne({ student: studentId, exam: examId, status: 'ACTIVE' });
-const successPayment = (studentId, examId) => OlympiadPayment.findOne({ student: studentId, exam: examId, status: 'SUCCESS' });
+// Exam and interview access are independent. A record with no `component` is a legacy bundle / exam grant, so `$ne: 'INTERVIEW'`
+// is "unlocks the EXAM" and `$ne: 'EXAM'` (payments) is "unlocks the INTERVIEW". Nothing here ever infers one from the other.
+const EXAM_PAY = { $ne: 'INTERVIEW' };      // EXAM or legacy PACKAGE / unset
+const INTERVIEW_PAY = { $ne: 'EXAM' };      // INTERVIEW or legacy PACKAGE / unset
+const activeGrantExamIds = async (studentId) => (await OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE', component: EXAM_PAY })).map((g) => g.exam);
+const activeGrant = (studentId, examId) => OlympiadAccessGrant.findOne({ student: studentId, exam: examId, status: 'ACTIVE', component: EXAM_PAY });
+const successPayment = (studentId, examId) => OlympiadPayment.findOne({ student: studentId, exam: examId, status: 'SUCCESS', component: EXAM_PAY });
+const interviewPayment = (studentId, examId) => OlympiadPayment.findOne({ student: studentId, exam: examId, status: 'SUCCESS', component: INTERVIEW_PAY });
+/** An active grant that unlocks the interview: an INTERVIEW-component grant, or a legacy / admin exam grant that includes it. */
+const interviewGrant = (studentId, examId) => OlympiadAccessGrant.findOne({
+  student: studentId, exam: examId, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { component: EXAM_PAY, includesInterview: true }],
+});
 
-/** The one place that answers "may this student take this exam without paying now?" (payment first, then an administrator grant). */
+/** The one place that answers "may this student take this exam without paying now?" (payment first, then an administrator / credit grant). */
 const entitlementFor = async (studentId, examId) => {
   const [payment, grant] = await Promise.all([successPayment(studentId, examId), activeGrant(studentId, examId)]);
   return { payment: payment || null, grant: grant || null, entitled: !!(payment || grant) };
+};
+
+/**
+ * The same question for the INTERVIEW component. `via`: PAYMENT (Razorpay), CREDIT (one exam credit), LEGACY_PACKAGE (old Rs 20 bundle),
+ * ADMIN_GRANT. Backend-only truth: the browser's flags are never consulted.
+ */
+const interviewEntitlementFor = async (studentId, examId) => {
+  const [payment, grant] = await Promise.all([interviewPayment(studentId, examId), interviewGrant(studentId, examId)]);
+  let via = null;
+  if (payment) via = payment.component === 'INTERVIEW' ? 'PAYMENT' : 'LEGACY_PACKAGE';
+  else if (grant) via = grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
+  return { payment: payment || null, grant: grant || null, entitled: !!(payment || grant), via };
+};
+
+/** How the EXAM component was unlocked (PAYMENT / CREDIT / LEGACY_PACKAGE / ADMIN_GRANT) - display and reporting only. */
+const examVia = ({ payment, grant }) => {
+  if (payment) return payment.component === 'EXAM' ? 'PAYMENT' : 'LEGACY_PACKAGE';
+  if (grant) return grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
+  return null;
 };
 
 const loadTarget = async (studentId, examId) => {
@@ -190,7 +218,7 @@ const overviewForStudent = async (studentId) => {
   if (!student || student.role !== 'student') throw new ExamAccessError(404, 'STUDENT_NOT_FOUND', 'Student not found.');
   const isStd = (e) => e.examType === 'olympiad' && e.accessMode !== 'approval' && e.standard >= 1 && e.standard <= 10;
   const allExams = (await OlympiadExam.find({ examType: 'olympiad' })).filter(isStd);
-  const activeGrants = await OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE' });
+  const activeGrants = await OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE', component: EXAM_PAY });
   const grantedIds = new Set(activeGrants.map((g) => String(g.exam)));
   const creditIds = new Set(activeGrants.filter((g) => g.source === 'CREDIT').map((g) => String(g.exam)));
   const attemptedIds = new Set((await OlympiadAttempt.find({ student: student._id })).map((a) => String(a.exam)));
@@ -227,7 +255,7 @@ const overviewForStudent = async (studentId) => {
   }
   const audit = await ExamAdminAudit.find({ student: student._id }).sort('-at').limit(20);
   // catalog: every Standard 1-10 examination with this student's purchase state, for the Standard -> Examination selectors
-  const paidIds = new Set((await OlympiadPayment.find({ student: student._id, status: 'SUCCESS' })).map((x) => String(x.exam)));
+  const paidIds = new Set((await OlympiadPayment.find({ student: student._id, status: 'SUCCESS', component: EXAM_PAY })).map((x) => String(x.exam)));
   const catalog = allExams.sort((a, b) => a.standard - b.standard || new Date(a.startDate) - new Date(b.startDate)).map((e) => ({
     examId: oid(e), title: e.title, standard: e.standard, fee: e.fee, windowClosed: now > e.endDate,
     purchase: paidIds.has(String(e._id)) ? 'PAID' : grantedIds.has(String(e._id)) ? (creditIds.has(String(e._id)) ? 'CREDIT_USED' : 'EXCEPTIONAL_ACCESS') : 'NOT_PURCHASED',
@@ -240,4 +268,4 @@ const overviewForStudent = async (studentId) => {
   };
 };
 
-module.exports = { ExamAccessError, entitlementFor, activeGrant, activeGrantExamIds, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };
+module.exports = { ExamAccessError, entitlementFor, interviewEntitlementFor, examVia, interviewGrant, interviewPayment, EXAM_PAY, INTERVIEW_PAY, activeGrant, activeGrantExamIds, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };

@@ -12,7 +12,7 @@ import ExportToolbar from '../../components/admin/ExportToolbar';
 import EventSelector from '../../components/olympiad/EventSelector';
 import { useOlympiadEvent } from '../../hooks/useOlympiadEvent';
 import AdminCertificatesPanel from '../../components/olympiad/AdminCertificatesPanel';
-import { olympiadApi, olympiadErrorMessage } from '../../services/olympiad';
+import { olympiadApi, olympiadErrorMessage, CreditUnlockRow } from '../../services/olympiad';
 import { OlympiadAdminStats, OlympiadExam, OlympiadPaymentSummary } from '../../types/olympiad';
 import { formatDuration, formatISTDateTime, formatISTRange, formatRupees } from '../../utils/olympiadFormat';
 
@@ -41,6 +41,8 @@ const AdminOlympiad: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string>('');
   const [attempts, setAttempts] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [creditUnlocks, setCreditUnlocks] = useState<CreditUnlockRow[]>([]);
+  const componentLabel = (c?: string) => (c === 'EXAM' ? 'Exam' : c === 'INTERVIEW' ? 'Interview' : 'Package (legacy ₹20)');
   const [summary, setSummary] = useState<OlympiadPaymentSummary | null>(null);
   const [detailError, setDetailError] = useState(false);
   // 'active' = normal list; 'history' = every record incl. Not confirmed / archived (kept for audit, never revenue)
@@ -91,13 +93,13 @@ const AdminOlympiad: React.FC = () => {
     let cancelled = false; // ignore a slow response for a previously selected exam
     // Clear whatever the previous selection loaded, so a failed / 404 request can never leave another exam's records on screen
     setAttempts([]);
-    setPayments([]);
+    setPayments([]); setCreditUnlocks([]);
     setSummary(null);
     setHistoryCount(0);
     setDetailError(false);
     setDetailLoading(true);
     const request = selectedId === ALL
-      ? olympiadApi.adminAllPayments('all', view, eventId || undefined).then(({ payments: p, summary: sum }) => { if (!cancelled) { setPayments(p); setSummary(sum); setHistoryCount(sum?.historyCount || 0); } })
+      ? olympiadApi.adminAllPayments('all', view, eventId || undefined).then(({ payments: p, summary: sum, creditUnlocks: cu }) => { if (!cancelled) { setPayments(p); setCreditUnlocks(cu); setSummary(sum); setHistoryCount(sum?.historyCount || 0); } })
       : Promise.all([olympiadApi.adminAttempts(selectedId), olympiadApi.adminPayments(selectedId, view)])
         .then(([a, p]) => { if (!cancelled) { setAttempts(a); setPayments(p.payments); setHistoryCount(p.historyCount); } });
     request
@@ -349,7 +351,8 @@ const AdminOlympiad: React.FC = () => {
                         <tr className="text-left">
                           <th className="p-3 font-semibold">Student</th>
                           {isAll && <th className="p-3 font-semibold">Standard</th>}
-                          <th className="p-3 font-semibold">Amount</th>
+                          <th className="p-3 font-semibold">Component</th>
+                          <th className="p-3 font-semibold">Collected (Razorpay)</th>
                           <th className="p-3 font-semibold">Status</th>
                           <th className="p-3 font-semibold">Order ID</th>
                           <th className="p-3 font-semibold">Payment ID</th>
@@ -359,11 +362,11 @@ const AdminOlympiad: React.FC = () => {
                       </thead>
                       <tbody>
                         {detailLoading ? (
-                          <tr><td colSpan={isAll ? 8 : 7} className="p-6 text-center text-text-muted">Loading…</td></tr>
+                          <tr><td colSpan={isAll ? 9 : 8} className="p-6 text-center text-text-muted">Loading…</td></tr>
                         ) : detailError ? (
-                          <tr><td colSpan={isAll ? 8 : 7} className="p-6 text-center text-[#E1447A]">Could not load payments. Press Refresh to try again.</td></tr>
+                          <tr><td colSpan={isAll ? 9 : 8} className="p-6 text-center text-[#E1447A]">Could not load payments. Press Refresh to try again.</td></tr>
                         ) : payments.length === 0 ? (
-                          <tr><td colSpan={isAll ? 8 : 7} className="p-6 text-center text-text-muted">No payments yet.</td></tr>
+                          <tr><td colSpan={isAll ? 9 : 8} className="p-6 text-center text-text-muted">No payments yet.</td></tr>
                         ) : payments.map(p => (
                           <tr key={p._id} className="border-t border-border-subtle">
                             <td className="p-3">
@@ -375,6 +378,7 @@ const AdminOlympiad: React.FC = () => {
                                 {p.exam ? `Std ${p.exam.standard}` : 'Unknown exam'}
                               </td>
                             )}
+                            <td className="p-3 text-text-secondary whitespace-nowrap" data-testid="payment-component">{componentLabel(p.component)}</td>
                             <td className="p-3 text-text-primary font-semibold">{formatRupees(p.amount)}</td>
                             <td className="p-3">
                               <span
@@ -394,6 +398,27 @@ const AdminOlympiad: React.FC = () => {
                     </table>
                   )}
                 </div>
+                {isAll && creditUnlocks.length > 0 && (
+                  <div className="mt-4 overflow-x-auto" data-testid="credit-unlocks">
+                    <p className="text-xs font-semibold text-text-primary mb-1">Unlocked with credits <span className="font-normal text-text-muted">— not payments; ₹0 collected, never counted as revenue</span></p>
+                    <table className="w-full text-xs min-w-[640px]">
+                      <thead className="bg-surface-alt text-text-muted"><tr className="text-left">
+                        <th className="p-3 font-semibold">Student</th><th className="p-3 font-semibold">Exam</th><th className="p-3 font-semibold">Component</th>
+                        <th className="p-3 font-semibold">Method</th><th className="p-3 font-semibold">Collected</th><th className="p-3 font-semibold">Credit transaction</th><th className="p-3 font-semibold">When</th>
+                      </tr></thead>
+                      <tbody>{creditUnlocks.map(c => (
+                        <tr key={c._id} className="border-t border-border-subtle">
+                          <td className="p-3"><p className="font-semibold text-text-primary">{c.student?.name || 'Unknown'}</p><p className="text-text-muted">{c.student?.email}</p></td>
+                          <td className="p-3 text-text-secondary">{c.exam ? `Std ${c.exam.standard} · ${c.exam.title}` : '—'}</td>
+                          <td className="p-3 text-text-secondary">{componentLabel(c.component)}</td>
+                          <td className="p-3 text-text-secondary">Exam credit</td>
+                          <td className="p-3 text-text-primary font-semibold">{formatRupees(0)}</td>
+                          <td className="p-3 text-text-secondary font-mono">{c.creditTransaction || '—'}</td>
+                          <td className="p-3 text-text-secondary">{formatISTDateTime(c.createdAt)}</td>
+                        </tr>))}</tbody>
+                    </table>
+                  </div>
+                )}
               </div>
               )}
             </>

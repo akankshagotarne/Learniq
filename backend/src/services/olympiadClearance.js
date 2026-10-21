@@ -54,8 +54,8 @@ const latestClearance = (list) => list.reduce((m, c) => (!m || when(c.clearedAt)
 /** Everything about ONE student's registrations, grouped per exam (read-only). Used by the profile and by the delete itself. */
 const stateForStudent = async (studentId, { examId = null, now = new Date() } = {}) => {
   const [payments, grants, attempts, history, clearances, certs, interviews] = await Promise.all([
-    OlympiadPayment.find({ student: studentId, status: 'SUCCESS' }).select('exam status verifiedAt createdAt'),
-    OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE' }).select('exam createdAt'),
+    OlympiadPayment.find({ student: studentId, status: 'SUCCESS', component: { $ne: 'INTERVIEW' } }).select('exam status verifiedAt createdAt'),
+    OlympiadAccessGrant.find({ student: studentId, status: 'ACTIVE', component: { $ne: 'INTERVIEW' } }).select('exam createdAt'),
     OlympiadAttempt.find({ student: studentId }).select('exam status startedAt deadline submittedAt createdAt score totalMarks'),
     OlympiadAttemptHistory.find({ student: studentId }).select('exam originalAttempt'),
     OlympiadClearance.find({ student: studentId }).select('exam clearedAt'),

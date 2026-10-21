@@ -8,7 +8,7 @@ export interface ReferralStats {
 }
 export interface MyReferralOverview { code: string; link: string; enabled: boolean; creditsPerReferral: number; stats: ReferralStats }
 export interface MyReferralRow { no: number; name: string; registeredAt: string; status: 'Successful' | 'Pending' | 'Under review' | 'Rejected'; credits: number; rewardedAt: string | null }
-export interface CreditTx { id: string; at: string; type: string; label: string; delta: number; description: string; examTitle: string | null }
+export interface CreditTx { id: string; at: string; type: string; label: string; delta: number; description: string; examTitle: string | null; component?: 'EXAM' | 'INTERVIEW' | null }
 export interface Page { page: number; limit: number; total: number }
 
 export interface AdminOverview {
@@ -49,7 +49,8 @@ export interface ReferralSettings {
   enabled: boolean; creditsPerReferral: number; maxBulkSize: number; maxCreditsPerStudent: number; rewardUnderReview: boolean; flagAfterPerHour: number;
   expiration: 'NONE'; updatedAt: string | null; updatedByName: string | null;
 }
-export interface ExamCreditInfo { balance: number; canUse: boolean; blockedReason: string | null; message: string | null; creditsPerExam: number; enabled: boolean }
+export interface ComponentCreditInfo { canUse: boolean; blockedReason: string | null; message: string | null }
+export interface ExamCreditInfo extends ComponentCreditInfo { balance: number; creditsPerExam: number; creditsPerComponent?: number; enabled: boolean; components?: { EXAM: ComponentCreditInfo; INTERVIEW: ComponentCreditInfo }; prices?: { EXAM: number; INTERVIEW: number; currency: string } }
 
 export type Filters = Record<string, string | number | undefined>;
 const clean = (f?: Filters) => Object.fromEntries(Object.entries(f || {}).filter(([, v]) => v !== undefined && v !== '' && v !== 'all'));
@@ -77,8 +78,9 @@ export const referralApi = {
   myCredits: async (page = 1, limit = 10): Promise<Page & { balance: number; transactions: CreditTx[] }> => (await api.get('/referrals/me/credits', { params: { page, limit } })).data,
   balance: async (): Promise<number> => (await api.get('/referrals/me/balance')).data.balance,
   examCredit: async (examId: string): Promise<ExamCreditInfo> => (await api.get(`/olympiad/exams/${encodeURIComponent(examId)}/credit`)).data,
-  redeem: async (examId: string): Promise<{ message: string; balance: number; charged: boolean; alreadyUnlocked: boolean }> =>
-    (await api.post(`/olympiad/exams/${encodeURIComponent(examId)}/credit/redeem`)).data,
+  /** Spend ONE credit on ONE component (exam or interview). Never both; the server refuses to charge an already-unlocked component. */
+  redeem: async (examId: string, component: 'EXAM' | 'INTERVIEW' = 'EXAM'): Promise<{ message: string; balance: number; charged: boolean; alreadyUnlocked: boolean; component: 'EXAM' | 'INTERVIEW' }> =>
+    (await api.post(`/olympiad/exams/${encodeURIComponent(examId)}/credit/redeem`, { component })).data,
 };
 
 export const adminReferralApi = {

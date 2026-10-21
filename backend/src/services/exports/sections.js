@@ -147,10 +147,11 @@ const olympiadPayments = async (query) => {
   return {
     title: 'LearnIQ Olympiad — Student Payments', sheetName: 'Olympiad payments', fileBase: 'learniq-olympiad-payments',
     filters: [{ label: 'Section', value: 'Admin › Olympiad › Payments' }, { label: 'Scope', value: label }, { label: 'View', value: history ? 'Payment history (incl. not confirmed / archived)' : 'Active payments' }],
-    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('standard', 'Standard', 10), col('exam', 'Exam', 24), col('amount', 'Amount (₹)', 11, 'number', { align: 'right' }), col('status', 'Status', 12), col('created', 'Created', 17, 'datetime')],
+    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('standard', 'Standard', 10), col('exam', 'Exam', 24), col('component', 'Component', 12), col('method', 'Method', 10), col('amount', 'Collected (₹)', 12, 'number', { align: 'right' }), col('status', 'Status', 12), col('created', 'Created', 17, 'datetime')],
     rows: pays.map((p) => ({
       name: p.student ? p.student.name : (p.deletedStudent && p.deletedStudent.name ? `${p.deletedStudent.name} (deleted)` : 'Unknown'),
       email: p.student ? maskEmail(p.student.email) : '', standard: p.exam ? standardLabel(p.exam.standard) : '', exam: p.exam ? p.exam.title : '',
+      component: p.component === 'EXAM' ? 'Exam' : p.component === 'INTERVIEW' ? 'Interview' : 'Package (legacy)', method: 'Razorpay',
       amount: typeof p.amount === 'number' ? p.amount : null, status: p.status === 'UNCONFIRMED' ? 'Not confirmed' : statusWord(p.status), created: p.createdAt,
     })),
   };

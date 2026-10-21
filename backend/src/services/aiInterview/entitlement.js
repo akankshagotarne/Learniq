@@ -16,7 +16,7 @@ const resolveEntitlement = async (user, examId) => {
   const exam = await OlympiadExam.findOne({ _id: examId, isPublished: true }).lean();
   if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
 
-  const payment = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS' }).lean();
+  const payment = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS', component: { $ne: 'INTERVIEW' } }).lean();
   if (!payment) {
     throw new ApiError(403, 'AI Interview access requires a successful exam purchase.', 'PURCHASE_REQUIRED');
   }

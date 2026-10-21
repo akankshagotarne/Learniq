@@ -70,12 +70,12 @@ test.describe('student exams page on a phone', () => {
   test('exam card: Pay / Start Exam sit inside the card, and the Olympiad card offers no AI Interview', async ({ page }) => {
     const log = await mockApi(page, 'student');
     await page.goto('/student/exams');
-    const payCard = page.getByTestId('olympiad-card').filter({ hasText: 'Pay ₹20' });
-    const pay = payCard.getByRole('button', { name: /Pay ₹20 & Start Exam/ });
+    const payCard = page.getByTestId('olympiad-card').filter({ hasText: 'Unlock Exam' });
+    const pay = payCard.getByTestId('exam-unlock-pay');
     await expectInside(pay, payCard);
     expect((await pay.boundingBox())!.height).toBeGreaterThanOrEqual(44); // touch target
 
-    const readyCard = page.getByTestId('olympiad-card').filter({ hasText: 'Payment Verified' });
+    const readyCard = page.getByTestId('olympiad-card').filter({ hasText: 'Exam Unlocked' });
     const start = readyCard.getByRole('link', { name: /Start Exam/ });
     await expectInside(start, readyCard);
     await expect(start).toHaveAttribute('href', '/student/olympiad/oly-ready');
@@ -117,7 +117,7 @@ test.describe('student exams page on a phone', () => {
         };`,
     }));
     await page.goto('/student/exams');
-    const pay = page.getByRole('button', { name: /Pay ₹20 & Start Exam/ });
+    const pay = page.getByTestId('exam-unlock-pay');
     await pay.dblclick();
     await page.waitForURL('**/student/olympiad/oly-pay');
     expect(await page.evaluate(() => (window as any).__rzpOpened)).toBe(1);
