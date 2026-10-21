@@ -154,7 +154,7 @@ export interface AdminCertificateList {
 }
 
 /** How a component was unlocked. LEGACY_PACKAGE = the earlier Rs 20 exam + interview purchase. */
-export type UnlockVia = 'PAYMENT' | 'CREDIT' | 'LEGACY_PACKAGE' | 'GRANTED';
+export type UnlockVia = 'PAYMENT' | 'CREDIT' | 'LEGACY_PACKAGE' | 'OTHER';
 
 export interface OlympiadExam {
   _id: string;

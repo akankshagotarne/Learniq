@@ -22,7 +22,7 @@ const VIA_TEXT: Record<UnlockVia, string> = {
   PAYMENT: 'Unlocked with a ₹10 payment',
   CREDIT: 'Unlocked with 1 credit',
   LEGACY_PACKAGE: 'Included in your earlier ₹20 package',
-  GRANTED: 'Unlocked by LearnIQ',
+  OTHER: 'Unlocked by LearnIQ',
 };
 
 /**

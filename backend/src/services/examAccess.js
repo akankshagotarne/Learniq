@@ -66,14 +66,14 @@ const interviewEntitlementFor = async (studentId, examId) => {
   const [payment, grant] = await Promise.all([interviewPayment(studentId, examId), interviewGrant(studentId, examId)]);
   let via = null;
   if (payment) via = payment.component === 'INTERVIEW' ? 'PAYMENT' : 'LEGACY_PACKAGE';
-  else if (grant) via = grant.source === 'CREDIT' ? 'CREDIT' : 'GRANTED';
+  else if (grant) via = grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
   return { payment: payment || null, grant: grant || null, entitled: !!(payment || grant), via };
 };
 
 /** How the EXAM component was unlocked (PAYMENT / CREDIT / LEGACY_PACKAGE / ADMIN_GRANT) - display and reporting only. */
 const examVia = ({ payment, grant }) => {
   if (payment) return payment.component === 'EXAM' ? 'PAYMENT' : 'LEGACY_PACKAGE';
-  if (grant) return grant.source === 'CREDIT' ? 'CREDIT' : 'GRANTED';
+  if (grant) return grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
   return null;
 };
 

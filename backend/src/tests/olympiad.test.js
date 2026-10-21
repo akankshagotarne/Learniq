@@ -371,7 +371,7 @@ test('an open order created at the old ₹1 fee is retired; the student gets a f
   assert.equal(oldAfter.amount, 1, 'the historical record keeps its amount');
   const open = await M.OlympiadPayment.find({ student: T.user._id, exam: S.exam._id, status: 'PENDING' });
   assert.equal(open.length, 1);
-  assert.equal(open[0].amount, 20);
+  assert.equal(open[0].amount, 10);
 });
 
 test('duplicate / parallel "Pay" clicks reuse the same open order (idempotent)', async () => {
