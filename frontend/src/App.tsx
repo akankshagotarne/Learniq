@@ -36,6 +36,7 @@ const LiveSessionPage = lazy(() => import('./pages/student/LiveSessionPage'));
 // automated-test page: exists only in the `vite build --mode e2e` bundle (same flag as the proctoring test hook)
 const LiveStageHarness = import.meta.env.VITE_PROCTOR_TEST_HOOKS === 'true' ? lazy(() => import('./pages/e2e/LiveStageHarness')) : null;
 const StudentProgress = lazy(() => import('./pages/student/StudentProgress'));
+const StudentLeaderboardPage = lazy(() => import('./pages/student/StudentLeaderboardPage'));
 const StudentExamsPage = lazy(() => import('./pages/student/StudentExamsPage'));
 const ExamTakerPage = lazy(() => import('./pages/student/ExamTakerPage'));
 const OlympiadExamPage = lazy(() => import('./pages/student/OlympiadExamPage'));
@@ -215,6 +216,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/progress" element={
         <ProtectedRoute roles={['student']}>
           <StudentProgress />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/leaderboard" element={
+        <ProtectedRoute roles={['student']}>
+          <StudentLeaderboardPage />
         </ProtectedRoute>
       } />
       <Route path="/student/exams" element={
