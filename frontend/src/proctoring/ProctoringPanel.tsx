@@ -29,7 +29,8 @@ const ProctoringPanel: React.FC<{ ctl: ProctoringController; policy: ProctoringP
   });
 
   const c = state?.counts; const L = state?.limits;
-  const faceVisible = live.faceCount === 1;
+  // faceCount -1 = no face reading (the policy needs no face model, or monitoring is still starting)
+  const faceVisible = live.faceCount === 1 || (live.monitoring && live.faceCount < 0);
   const statusText = !policy.cameraRequired ? 'Fullscreen & tab monitoring'
     : !live.monitoring ? 'Starting monitoring…'
       : live.faceCount === 0 ? 'Face not visible'

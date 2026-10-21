@@ -151,3 +151,83 @@ for (const w of [360, 412]) {
     } finally { await close(); }
   });
 }
+
+// ── What an exam actually downloads follows ITS policy (face / multi-face -> face model, phone detection -> phone model) ──
+const watchPayload = (page: Page) => {
+  const bytes: Record<string, number> = {};
+  page.on('response', async (res) => {
+    const name = res.url().split('/').pop()!.split('?')[0];
+    if (!/face_landmarker\.task|efficientdet_lite0\.tflite|vision_wasm.*\.wasm/.test(name)) return;
+    try { bytes[name.replace(/-[A-Za-z0-9_]{6,}\.wasm$/, '.wasm')] = (await res.body()).length; } catch { /* ignore */ }
+  });
+  return bytes;
+};
+const names = (b: Record<string, number>) => Object.keys(b).sort();
+const mb = (b: Record<string, number>) => (Object.values(b).reduce((a, c) => a + c, 0) / 1048576).toFixed(2);
+
+test('L: policy = face + multi-face monitoring, NO phone detection -> the phone model is never downloaded', async ({ playwright, baseURL }) => {
+  const { page, close } = await phone(playwright, baseURL!);
+  try {
+    test.setTimeout(120000);
+    const got = watchPayload(page);
+    await open(page, new MockProctorServer({ phoneDetection: false }));
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 60000 });
+    expect(names(got).some((n) => /face_landmarker/.test(n))).toBe(true);
+    expect(names(got).some((n) => /wasm/.test(n))).toBe(true);
+    expect(names(got).some((n) => /efficientdet/.test(n))).toBe(false);
+    console.log(`[payload] no-phone policy: ${names(got).join(', ')} = ${mb(got)} MB decoded`);
+  } finally { await close(); }
+});
+
+test('M: policy = phone detection only (face + multi-face off) -> the face model is never downloaded and phone monitoring still starts', async ({ playwright, baseURL }) => {
+  const { page, close } = await phone(playwright, baseURL!);
+  try {
+    test.setTimeout(120000);
+    const got = watchPayload(page);
+    const server = await open(page, new MockProctorServer({ faceMonitoring: false, multiFaceMonitoring: false }));
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 60000 });
+    expect(names(got).some((n) => /efficientdet/.test(n))).toBe(true);
+    expect(names(got).some((n) => /face_landmarker/.test(n))).toBe(false);
+    await camera(page);
+    await page.getByTestId('start-secure-exam').click();
+    await expect(page.getByTestId('proctoring-panel')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('proctoring-panel')).toContainText('Monitoring active', { timeout: 20000 }); // real phone detector is running; no face reading is invented
+    expect(server.startCalls).toBe(1);
+    console.log(`[payload] phone-only policy: ${names(got).join(', ')} = ${mb(got)} MB decoded`);
+  } finally { await close(); }
+});
+
+test('N: policy = camera / fullscreen / tab rules only (no AI feature) -> NOTHING is downloaded, no spinner, Start works once camera + consent are done', async ({ playwright, baseURL }) => {
+  const { page, close } = await phone(playwright, baseURL!);
+  try {
+    test.setTimeout(120000);
+    const got = watchPayload(page);
+    const server = await open(page, new MockProctorServer({ faceMonitoring: false, multiFaceMonitoring: false, phoneDetection: false }));
+    await expect(page.getByTestId('monitoring-not-required')).toBeVisible();
+    await expect(models(page)).toHaveAttribute('data-state', 'ok');
+    await expect(page.getByTestId('models-loading')).toHaveCount(0);
+    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();           // camera + consent are still mandatory
+    await camera(page);
+    await expect(page.getByTestId('start-secure-exam')).toBeEnabled();
+    await page.getByTestId('start-secure-exam').dblclick();
+    await expect(page.getByTestId('proctoring-panel')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('proctoring-panel')).toContainText('Monitoring active', { timeout: 20000 });
+    expect(server.startCalls).toBe(1);
+    expect(names(got)).toEqual([]);                                               // no wasm, no model: 0 MB
+    expect((await findOverflow(page)).offenders).toEqual([]);
+    console.log('[payload] no-AI policy: 0 monitoring files downloaded');
+  } finally { await close(); }
+});
+
+test('O: default policy (all three AI features on) still downloads the runtime + both models and cannot start before they are running', async ({ playwright, baseURL }) => {
+  const { page, close } = await phone(playwright, baseURL!);
+  try {
+    test.setTimeout(120000);
+    const got = watchPayload(page);
+    await open(page);
+    await expect(page.getByTestId('start-secure-exam')).toBeDisabled();
+    await expect(page.getByTestId('camera-ready-message')).toHaveText('Monitoring system ready.', { timeout: 60000 });
+    expect(names(got).some((n) => /face_landmarker/.test(n)) && names(got).some((n) => /efficientdet/.test(n)) && names(got).some((n) => /wasm/.test(n))).toBe(true);
+    console.log(`[payload] full policy: ${names(got).join(', ')} = ${mb(got)} MB decoded`);
+  } finally { await close(); }
+});

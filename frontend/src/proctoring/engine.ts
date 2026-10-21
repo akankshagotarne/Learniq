@@ -14,11 +14,12 @@ import wasmLoaderNoSimd from '@mediapipe/tasks-vision/vision_wasm_nosimd_interna
 import wasmBinaryNoSimd from '@mediapipe/tasks-vision/vision_wasm_nosimd_internal.wasm?url';
 import { detectorScoreFloor } from './episodes';
 
-export interface Reading { faceCount: number; phoneScore: number | null; inferenceMs: number }
+/** faceCount is null when the policy needs no face model (phone-only monitoring): there is no face reading at all. */
+export interface Reading { faceCount: number | null; phoneScore: number | null; inferenceMs: number }
 
 export interface Detector {
   name: string;
-  /** Run the face model (and the phone model when `withPhone`) on the current video frame. */
+  /** Run the face model (when loaded) and the phone model (when loaded and `withPhone`) on the current video frame. */
   detect(video: HTMLVideoElement, withPhone: boolean): Promise<Reading>;
   close(): void;
 }
@@ -40,7 +41,8 @@ let monotonic = 0;
 const nextTimestamp = () => { monotonic = Math.max(monotonic + 1, Math.round(performance.now())); return monotonic; };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Loading the monitoring components (~20 MB: WebAssembly runtime + two models).
+// Loading the monitoring components - only those the exam's policy needs (see plan.ts): the WebAssembly runtime (~12 MB decoded) plus
+// the face model (~3.8 MB) and/or the phone model (~4.6 MB).
 //
 // Every attempt ends in a defined outcome - ready, or a DetectorLoadError with a code the screen can explain:
 //   unsupported  this browser cannot run the monitoring (no WebAssembly)
@@ -59,6 +61,9 @@ export class DetectorLoadError extends Error {
 }
 export interface LoadProgress { phase: 'download' | 'start'; loadedBytes: number; totalBytes: number | null }
 export interface LoadOptions {
+  /** load the face model (face-visibility / multiple-face monitoring) */
+  face: boolean;
+  /** load the phone model (mobile-phone detection) */
   phone: boolean; phoneConfidence?: number;
   onProgress?: (p: LoadProgress) => void;
   /** aborts the attempt (the screen was left) */
@@ -140,14 +145,17 @@ const buildDetector = async (opts: LoadOptions, lim: typeof LIMITS, signal: Abor
   const binaryUrl = simd ? wasmBinarySimd : wasmBinaryNoSimd;
 
   // 1. download everything in parallel, with progress and a stall watchdog
-  const urls = [loaderUrl, binaryUrl, FACE_MODEL, ...(opts.phone ? [PHONE_MODEL] : [])];
+  if (!opts.face && !opts.phone) throw new DetectorLoadError('init', 'no monitoring model was requested');
+  const urls = [loaderUrl, binaryUrl, ...(opts.face ? [FACE_MODEL] : []), ...(opts.phone ? [PHONE_MODEL] : [])];
   let loaded = 0; let totalKnown = true; const sizes = new Map<string, number>();
   const sumTotal = () => [...sizes.values()].reduce((a, b) => a + b, 0);
   const report = () => opts.onProgress?.({ phase: 'download', loadedBytes: Math.max(0, loaded), totalBytes: totalKnown && sizes.size === urls.length ? sumTotal() : null });
   const onBytes = (n: number) => { loaded += n; report(); };
   // the content length of a compressed response may be unknown: then only the bytes so far are shown
   const results = await Promise.all(urls.map((u) => fetchWithRetry(u, lim, signal, onBytes, (n) => { sizes.set(u, n); report(); }).catch((e) => { totalKnown = false; throw e; })));
-  const [, binary, faceBytes, phoneBytes] = results;
+  const binary = results[1];
+  const faceBytes = opts.face ? results[2] : null;
+  const phoneBytes = opts.phone ? results[opts.face ? 3 : 2] : null;
   if (signal.aborted) throw new DetectorLoadError('timeout', 'cancelled');
 
   // 2. start the models (CPU / WebAssembly: predictable on every phone and laptop; the GPU delegate was slower where Chrome uses software WebGL)
@@ -162,26 +170,27 @@ const buildDetector = async (opts: LoadOptions, lim: typeof LIMITS, signal: Abor
     }
   };
   try {
-    const face = await start(() => vision.FaceLandmarker.createFromOptions(fileset, {
+    const face = faceBytes ? await start(() => vision.FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetBuffer: faceBytes, delegate: 'CPU' }, runningMode: 'VIDEO', numFaces: 4,
       minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
-    })); created.push(face);
-    const objects = opts.phone ? await start(() => vision.ObjectDetector.createFromOptions(fileset, {
+    })) : null;
+    if (face) created.push(face);
+    const objects = phoneBytes ? await start(() => vision.ObjectDetector.createFromOptions(fileset, {
       baseOptions: { modelAssetBuffer: phoneBytes, delegate: 'CPU' }, runningMode: 'VIDEO', categoryAllowlist: ['cell phone'],
       scoreThreshold: detectorScoreFloor(opts.phoneConfidence), maxResults: 3,
     })) : null;
     if (objects) created.push(objects);
     return {
-      name: `mediapipe-CPU${objects ? '+phone-CPU' : ''}`,
+      name: `mediapipe-CPU${face ? '+face' : ''}${objects ? '+phone' : ''}`,
       async detect(video, withPhone) {
         const t0 = performance.now();
-        const fr = face.detectForVideo(video, nextTimestamp());
+        const faceCount = face ? face.detectForVideo(video, nextTimestamp()).faceLandmarks.length : null;
         let phoneScore: number | null = null;
         if (withPhone && objects) {
           const od = objects.detectForVideo(video, nextTimestamp());
           phoneScore = od.detections.reduce((best, d) => Math.max(best, d.categories[0]?.score ?? 0), 0);
         }
-        return { faceCount: fr.faceLandmarks.length, phoneScore, inferenceMs: performance.now() - t0 };
+        return { faceCount, phoneScore, inferenceMs: performance.now() - t0 };
       },
       close() { for (const c of created) { try { c.close(); } catch { /* already closed */ } } },
     };
