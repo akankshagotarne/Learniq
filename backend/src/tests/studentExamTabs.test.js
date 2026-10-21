@@ -141,7 +141,7 @@ test('F: a running attempt is Available (resume); G: an open exam is Available; 
   assert.equal(t(S.live[10]), 'available'); assert.equal(r.find((x) => x._id === String(S.live[10]._id)).state, 'in_progress');
   assert.equal(t(S.soon[10]), 'upcoming');
   const fresh = (await list(await mkUser('student', 10))).exams; const f = (e) => fresh.find((x) => x._id === String(e._id)).tab;
-  assert.equal(f(S.live[10]), 'available'); assert.equal(f(S.soon[10]), 'available', 'existing rule: an unpaid student may pay in advance, so it stays Available (state "pay")');
+  assert.equal(f(S.live[10]), 'available'); assert.equal(f(S.soon[10]), 'upcoming', 'a future exam is Upcoming even while the student may still pay (register) in advance');
 });
 test('I: events are independent - a 17 Oct submission never makes the 24 Oct exam Completed', async () => {
   const u = await mkUser('student', 10); await submitted(u, S.past[10]);

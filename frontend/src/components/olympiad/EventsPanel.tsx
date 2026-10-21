@@ -27,7 +27,7 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
   const [saving, setSaving] = useState(false); const [errors, setErrors] = useState<Record<string, string>>({}); const [formError, setFormError] = useState('');
 
   const toggle = (n: number) => setStandards(s => (s.includes(n) ? s.filter(x => x !== n) : [...s, n].sort((a, b) => a - b)));
-  const submit = async () => {
+  const submit = async (publishNow = false) => {
     if (saving) return;
     const local: Record<string, string> = {};
     if (name.trim().length < 3) local.name = 'Enter an event name (at least 3 characters).';
@@ -46,7 +46,14 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
       copyFromEventId: copyFrom || undefined, copyQuestions: !!copyFrom && copyQuestions,
     };
     setSaving(true);
-    try { const r = await eventsApi.create(body); toast.success('Olympiad event created as a draft. Add questions, then publish it.'); onCreated(r.event); }
+    try {
+      const r = await eventsApi.create(body);
+      if (publishNow) {
+        try { await eventsApi.publish(r.event._id); toast.success('Event created and published. Students of the selected standards can now see it under Upcoming.'); }
+        catch (pe) { toast.error(`Saved as a draft, but it could not be published: ${olympiadErrorMessage(pe, 'Add questions to every exam first.')}`); }
+      } else toast.success('Saved as a draft. Students cannot see it until you publish it.');
+      onCreated(r.event);
+    }
     catch (err: any) {
       const e = errorsOf(err);
       setErrors({ name: e.name || '', standards: e.standards || '', startDate: e['schedule.startDate'] || '', endDate: e['schedule.endDate'] || '', durationMinutes: e['schedule.durationMinutes'] || '', fee: e['schedule.fee'] || '', registrationClosesAt: e.registrationClosesAt || '' });
@@ -86,7 +93,8 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
         {formError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800" data-testid="create-error">{formError}</div>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="btn-secondary text-sm px-4 py-2 min-h-[44px]">Cancel</button>
-          <button type="button" onClick={submit} disabled={saving} className="btn-primary text-sm px-5 py-2 min-h-[44px] disabled:opacity-50" data-testid="ev-create">{saving ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Creating…</span> : 'Create event (as draft)'}</button>
+          <button type="button" onClick={() => submit(false)} disabled={saving} className="btn-secondary text-sm px-5 py-2 min-h-[44px] disabled:opacity-50" data-testid="ev-create">{saving ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Creating…</span> : 'Save as Draft'}</button>
+          <button type="button" onClick={() => submit(true)} disabled={saving || !(copyFrom && copyQuestions)} title={copyFrom && copyQuestions ? undefined : 'Publishing needs questions: copy the question bank from an earlier event, or save as a draft and add questions first.'} className="btn-primary text-sm px-5 py-2 min-h-[44px] disabled:opacity-50" data-testid="ev-create-publish">Create &amp; Publish</button>
         </div>
       </div>
     </Modal>
@@ -230,7 +238,7 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
                 <p className="text-xs text-text-muted">{e.examDateIST} · Std {e.standards.join(', ')}{e.isLegacy ? ' · original event' : ''}</p></div>
               <EventBadge status={e.status} />
             </div>
-            <p className="text-xs text-text-secondary mt-2">Opens {e.startDateIST} · Closes {e.endDateIST} · Registration {e.registration === 'open' ? 'open' : e.registration === 'closed' ? 'closed' : 'not open yet'} · {e.examCount} exam{e.examCount === 1 ? '' : 's'}</p>
+            <p className="text-xs text-text-secondary mt-2">Opens {e.startDateIST} · Closes {e.endDateIST} · {e.registration === 'draft' ? 'Not published - students cannot see it' : e.registration === 'cancelled' ? 'Cancelled' : `Registration ${e.registration === 'open' ? 'open' : e.registration === 'closed' ? 'closed' : 'not open yet'}`} · {e.examCount} exam{e.examCount === 1 ? '' : 's'}</p>
             <p className="text-xs text-text-secondary">Registered students {String(e.students ?? 0)} · Registrations {String(e.registrations ?? 0)} · Submitted {String(e.submissions ?? 0)}</p>
             <div className="flex flex-wrap gap-2 mt-3">
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5" onClick={() => setDialog({ id: e._id, editable: false })}><Eye className="w-3.5 h-3.5" /> View</button>
@@ -239,6 +247,7 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5" onClick={() => go('/admin/olympiad/analytics', e._id)}><BarChart2 className="w-3.5 h-3.5" /> View Analytics</button>
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" onClick={() => go('/admin/olympiad', e._id)}>View Results</button>
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" onClick={() => go('/admin/olympiad', e._id)}>View Certificates</button>
+              {e.state === 'draft' && <button type="button" className="btn-primary text-xs px-3 py-2 min-h-[40px]" data-testid="act-publish-visible" onClick={() => setPending({ kind: 'publish', event: e })}>Publish Event</button>}
               <span className="relative">
                 <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" aria-haspopup="menu" onClick={() => setOpenMenu(openMenu === e._id ? null : e._id)}>More</button>
                 {openMenu === e._id && (

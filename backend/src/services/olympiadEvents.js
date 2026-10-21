@@ -268,7 +268,9 @@ const eventView = (event, exams, counts, now = new Date()) => {
     _id: oid(event), name: event.name, slug: event.slug, reference: event.reference || '', description: event.description || '',
     examDate: event.examDate, examDateIST: istDay(event.examDate),
     standards: (event.standards && event.standards.length ? event.standards : exams.map((e) => e.standard)).slice().sort((a, b) => a - b),
-    state: event.state, status: deriveStatus(event, exams, now), registration: registrationState(event, exams, now),
+    state: event.state, status: deriveStatus(event, exams, now),
+    // a draft is NOT "registration closed": registration simply cannot open until the event is published
+    registration: event.state === 'draft' ? 'draft' : event.state === 'cancelled' ? 'cancelled' : registrationState(event, exams, now),
     startDate: start, endDate: end, startDateIST: formatIST(start), endDateIST: formatIST(end),
     registrationOpensAt: event.registrationOpensAt || null, registrationClosesAt: event.registrationClosesAt || null,
     registrationOpensAtIST: event.registrationOpensAt ? formatIST(event.registrationOpensAt) : '', registrationClosesAtIST: event.registrationClosesAt ? formatIST(event.registrationClosesAt) : '',

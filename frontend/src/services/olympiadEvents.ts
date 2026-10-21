@@ -4,7 +4,7 @@ export type EventStatus = 'draft' | 'upcoming' | 'registration_open' | 'registra
 export interface OlympiadEventRow {
   _id: string; name: string; slug: string; reference: string; description: string;
   examDate: string; examDateIST: string; standards: number[]; state: 'draft' | 'published' | 'cancelled'; status: EventStatus;
-  registration: 'not_open' | 'open' | 'closed'; startDate: string | null; endDate: string | null; startDateIST: string; endDateIST: string;
+  registration: 'draft' | 'cancelled' | 'not_open' | 'open' | 'closed'; startDate: string | null; endDate: string | null; startDateIST: string; endDateIST: string;
   registrationOpensAt: string | null; registrationClosesAt: string | null; registrationOpensAtIST: string; registrationClosesAtIST: string;
   examCount: number; isLegacy: boolean; cancelReason: string; updatedAt: string | null;
   students?: number; registrations?: number; submissions?: number; needsReview?: number; [k: string]: unknown;

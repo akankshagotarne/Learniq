@@ -432,7 +432,7 @@ const buildState = async (exam, userId, now = new Date()) => {
     else if (win === 'upcoming') { state = 'upcoming'; message = opensOn(exam); } // paid (or authorised) in advance: scheduled, NOT startable until the exam day
     else state = 'ready';
   } else if (regBlock === 'cancelled') { state = 'closed'; message = 'This Olympiad event has been cancelled.'; }
-  else if (regBlock === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
+  else if (regBlock === 'closed') { state = 'closed'; message = evt.registrationClosesAt ? `Registration closed on ${istDate(evt.registrationClosesAt)} at ${istTime(evt.registrationClosesAt)} IST.` : 'Registration is closed.'; }
   else if (regBlock === 'not_open') { state = 'upcoming'; message = `Registration opens on ${istDate(evt.registrationOpensAt)} at ${istTime(evt.registrationOpensAt)} IST.`; }
   else if (win === 'upcoming') { state = 'pay'; message = `You can unlock the exam for ₹${priceFor('EXAM', exam)} now. ${opensOn(exam)}`; } // paying early is allowed; payment alone never unlocks the exam
   else if (win === 'closed') { state = 'closed'; message = 'Registration is closed.'; }
@@ -442,6 +442,10 @@ const buildState = async (exam, userId, now = new Date()) => {
     window: win,
     state,
     message,
+    // registration is its own concept (separate from the exam window): registered | open | not_open | closed | cancelled
+    registration: paid ? 'registered' : regBlock === 'cancelled' ? 'cancelled' : regBlock || (win === 'closed' ? 'closed' : 'open'),
+    registrationOpensAt: evt && evt.state === 'published' ? evt.registrationOpensAt || null : null,
+    registrationClosesAt: evt && evt.state === 'published' ? evt.registrationClosesAt || null : null,
     registered: paid, // registered = a verified payment or an administrator exception (what the Expired card wording depends on)
     paymentStatus: payment ? payment.status : 'NONE',
     // Separate, backend-decided component entitlements (the browser never infers one from the other)
@@ -486,7 +490,15 @@ const listExams = handler(async (req, res) => {
     const st = await buildState(exam, req.user._id, now);
     const cls = studentTabs.classifyOlympiad({ state: st.state, examStandard: exam.standard, studentStandard });
     if (!cls) continue; // another standard's exam that is closed and was never attempted: not shown anywhere
-    out.push({ ...examPublic(exam), ...label, ...st, tab: cls.tab, ownStandard: cls.ownStandard });
+    let tab = cls.tab;
+    if (exam.accessMode !== 'approval' && st.window) {
+      // Expired means the exam itself is over (or its event was cancelled). Registration closing early while the exam is still ahead / running
+      // keeps the card where it belongs - Upcoming or Available - with the registration action disabled and the accurate reason shown.
+      if (tab === 'expired' && st.window !== 'closed' && st.registration !== 'cancelled') tab = st.window === 'upcoming' ? 'upcoming' : 'available';
+      // an exam that has not opened yet is Upcoming even while its registration is open (the student may register early, never start early)
+      if (tab === 'available' && st.window === 'upcoming') tab = 'upcoming';
+    }
+    out.push({ ...examPublic(exam), ...label, ...st, tab, ownStandard: cls.ownStandard });
   }
   res.json({ success: true, exams: out, standardResolved: true, standard: studentStandard, serverNow: now.toISOString() });
 });
