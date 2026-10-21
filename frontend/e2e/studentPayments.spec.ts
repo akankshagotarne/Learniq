@@ -45,7 +45,7 @@ async function setup(page: Page, opts: { rows?: any[]; failList?: () => boolean 
 const open = async (page: Page) => { await page.setViewportSize({ width: 1280, height: 900 }); await page.goto('/student/payments'); await expect(page.getByTestId('tx-table')).toBeVisible(); };
 
 test('sidebar entry (student only) opens the page; summary keeps money and credits apart', async ({ page }) => {
-  await setup(page); await page.setViewportSize({ width: 1280, height: 900 }); await page.goto('/student');
+  await setup(page); await page.setViewportSize({ width: 1280, height: 900 }); await page.goto('/student'); await page.locator('aside nav a').first().waitFor();
   const labels = (await page.locator('aside nav a').allInnerTexts()).map((t) => t.trim());
   expect(labels.filter((l) => l === 'Payments & Transactions')).toHaveLength(1);
   await page.locator('aside nav a', { hasText: 'Payments & Transactions' }).click();
@@ -59,13 +59,13 @@ test('sidebar entry (student only) opens the page; summary keeps money and credi
 
 test('tabs show payments only / credits only; credit rows have a statement, never a receipt', async ({ page }) => {
   await setup(page); await open(page);
-  await expect(page.getByTestId('tx-row')).toHaveCount(5);
-  await page.getByTestId('tab-payments').click(); await expect(page.getByTestId('tx-row')).toHaveCount(3);
-  await page.getByTestId('tab-credits').click(); await expect(page.getByTestId('tx-row')).toHaveCount(2);
-  await expect(page.getByTestId('tx-receipt')).toHaveCount(0); await expect(page.getByTestId('tx-statement')).toHaveCount(2);
-  await expect(page.getByTestId('tx-row').first()).toContainText('+1 Credit');
+  await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(5);
+  await page.getByTestId('tab-payments').click(); await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(3);
+  await page.getByTestId('tab-credits').click(); await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(2);
+  await expect(page.getByTestId('tx-table').getByTestId('tx-receipt')).toHaveCount(0); await expect(page.getByTestId('tx-table').getByTestId('tx-statement')).toHaveCount(2);
+  await expect(page.getByTestId('tx-table').getByTestId('tx-row').first()).toContainText('+1 Credit');
   await page.getByTestId('tab-all').click();
-  await expect(page.getByTestId('tx-receipt')).toHaveCount(2); // pending payment has none
+  await expect(page.getByTestId('tx-table').getByTestId('tx-receipt')).toHaveCount(2); // pending payment has none
 });
 
 test('filters and search are sent to the server and reset the page', async ({ page }) => {
@@ -73,15 +73,15 @@ test('filters and search are sent to the server and reset the page', async ({ pa
   await page.getByTestId('f-status').selectOption('SUCCESS'); await page.getByTestId('f-range').selectOption('current_month'); await page.getByTestId('f-method').selectOption('upi');
   await page.getByTestId('tx-search').fill('ABCDE1');
   await expect.poll(() => calls.some((c) => c.includes('status=SUCCESS') && c.includes('range=current_month') && c.includes('method=upi') && c.includes('search=ABCDE1') && c.includes('page=1'))).toBe(true);
-  await expect(page.getByTestId('tx-row')).toHaveCount(1);
+  await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(1);
   await page.getByTestId('f-range').selectOption('custom'); await page.getByTestId('f-from').fill('2026-10-01'); await page.getByTestId('f-to').fill('2026-10-31');
   await expect.poll(() => calls.some((c) => c.includes('from=2026-10-01') && c.includes('to=2026-10-31') && !c.includes('range='))).toBe(true);
-  await page.getByTestId('f-reset').click(); await expect(page.getByTestId('tx-row')).toHaveCount(5);
+  await page.getByTestId('f-reset').click(); await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(5);
 });
 
 test('details modal for a payment and a credit; receipt downloads a real PDF file', async ({ page }) => {
   const { downloads } = await setup(page); await open(page);
-  await page.getByTestId('tx-view').first().click();
+  await page.getByTestId('tx-table').getByTestId('tx-view').first().click();
   const dlg = page.getByTestId('tx-detail');
   await expect(dlg).toContainText('Razorpay order ID'); await expect(dlg).toContainText('order_X1'); await expect(dlg).toContainText('UPI via Razorpay'); await expect(dlg).not.toContainText(/signature/i);
   const [file] = await Promise.all([page.waitForEvent('download'), page.getByTestId('tx-detail-receipt').click()]);
@@ -89,7 +89,7 @@ test('details modal for a payment and a credit; receipt downloads a real PDF fil
   const buf = await (await import('fs')).promises.readFile((await file.path())!); expect(buf.slice(0, 5).toString()).toBe('%PDF-');
   expect(downloads.some((d) => d.endsWith('/receipt'))).toBe(true);
   await page.keyboard.press('Escape'); await expect(dlg).toHaveCount(0);
-  await page.getByTestId('tab-credits').click(); await page.getByTestId('tx-view').first().click();
+  await page.getByTestId('tab-credits').click(); await page.getByTestId('tx-table').getByTestId('tx-view').first().click();
   await expect(page.getByTestId('tx-detail')).toContainText('₹0.00'); await expect(page.getByTestId('tx-detail')).not.toContainText('Razorpay');
   const [st] = await Promise.all([page.waitForEvent('download'), page.getByTestId('tx-detail-statement').click()]);
   expect(st.suggestedFilename()).toContain('Credit_Statement');
@@ -99,7 +99,7 @@ test('bulk download: only receipt-eligible rows are selectable, one combined PDF
   const { downloads } = await setup(page); await open(page);
   await page.getByTestId('tab-payments').click();
   await expect(page.getByTestId('bulk-download')).toBeDisabled();
-  const boxes = page.getByTestId('tx-select'); await expect(boxes).toHaveCount(3);
+  const boxes = page.getByTestId('tx-table').getByTestId('tx-select'); await expect(boxes).toHaveCount(3);
   await expect(boxes.nth(2)).toBeDisabled(); // the pending payment
   await boxes.nth(0).check(); await boxes.nth(1).check(); await expect(page.getByTestId('sel-count')).toHaveText('2 selected');
   const [file] = await Promise.all([page.waitForEvent('download'), page.getByTestId('bulk-download').click()]);
@@ -109,8 +109,8 @@ test('bulk download: only receipt-eligible rows are selectable, one combined PDF
 
 test('receipt failure keeps the payment and shows a safe message', async ({ page }) => {
   await setup(page); await page.route('**/api/student-transactions/*/receipt', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ success: false, message: "We couldn't generate your receipt right now. Your verified payment remains recorded. Please try again." }) }));
-  await open(page); await page.getByTestId('tx-receipt').first().click();
-  await expect(page.getByText("We couldn't generate your receipt right now.")).toBeVisible(); await expect(page.getByTestId('tx-row')).toHaveCount(5);
+  await open(page); await page.getByTestId('tx-table').getByTestId('tx-receipt').first().click();
+  await expect(page.getByText("We couldn't generate your receipt right now.")).toBeVisible(); await expect(page.getByTestId('tx-table').getByTestId('tx-row')).toHaveCount(5);
 });
 
 test('states: empty, no matches, error with retry', async ({ page }) => {
@@ -126,6 +126,6 @@ for (const w of [320, 360, 390, 430, 768]) {
     await setup(page); await page.setViewportSize({ width: w, height: 900 }); await page.goto('/student/payments');
     if (w < 768) await expect(page.getByTestId('tx-cards')).toBeVisible(); else await expect(page.getByTestId('tx-table')).toBeVisible();
     const rep = await findOverflow(page); expect(rep.offenders, JSON.stringify(rep.offenders)).toEqual([]);
-    if (w < 768) { await page.getByTestId('tx-view').first().click(); await expect(page.getByTestId('tx-detail')).toBeVisible(); const rep2 = await findOverflow(page); expect(rep2.offenders, JSON.stringify(rep2.offenders)).toEqual([]); }
+    if (w < 768) { await page.getByTestId('tx-cards').getByTestId('tx-view').first().click(); await expect(page.getByTestId('tx-detail')).toBeVisible(); const rep2 = await findOverflow(page); expect(rep2.offenders, JSON.stringify(rep2.offenders)).toEqual([]); }
   });
 }
