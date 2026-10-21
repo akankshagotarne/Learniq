@@ -1,7 +1,7 @@
 /** Exams-page tab rules for Olympiad cards (exam + teacher interview).   npm run test:unit */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { olympiadTab } from '../src/utils/examTabs.ts';
+import { olympiadTab, regularTabs, hasValidStandard } from '../src/utils/examTabs.ts';
 
 const done = { state: 'completed' };
 const iv = (stage: string) => ({ stage, workflowComplete: stage === 'COMPLETED' });
@@ -27,4 +27,31 @@ test('exams without an interview (engineering mock test, or no interview info) k
 });
 test('a refresh gives the same answer: the result depends only on the backend status', () => {
   assert.equal(olympiadTab(done, iv('REQUESTED')), olympiadTab(done, iv('REQUESTED')));
+});
+
+test('closed + never attempted -> Expired (never Available)', () => {
+  assert.equal(olympiadTab({ state: 'closed' }, undefined), 'expired');
+  assert.equal(olympiadTab({ state: 'closed' }, iv('LOCKED')), 'expired');
+  assert.equal(olympiadTab({ state: 'closed', tab: 'expired' }, undefined), 'expired');
+});
+test('a submitted exam stays Completed after its deadline; registration alone does not complete it', () => {
+  assert.equal(olympiadTab({ state: 'completed' }, undefined), 'completed');
+  assert.equal(olympiadTab({ state: 'closed', registered: true }, undefined), 'expired');
+});
+test('the backend tab wins when it is present', () => {
+  assert.equal(olympiadTab({ state: 'ready', tab: 'available' }, undefined), 'available');
+  assert.equal(olympiadTab({ state: 'upcoming', tab: 'upcoming' }, undefined), 'upcoming');
+});
+test('regularTabs: attempted exams are never Expired; unattempted expired ones are', () => {
+  assert.deepEqual(regularTabs({ availability: 'expired', myAttemptCount: 0 }), ['expired']);
+  assert.ok(!regularTabs({ availability: 'expired', myAttemptCount: 1 }).includes('expired'));
+  assert.ok(regularTabs({ availability: 'expired', myAttemptCount: 1 }).includes('completed'));
+  assert.deepEqual(regularTabs({ availability: 'upcoming', myAttemptCount: 0 }), ['upcoming']);
+});
+test('hasValidStandard accepts 1-10 and Others, rejects blanks', () => {
+  assert.equal(hasValidStandard(10), true);
+  assert.equal(hasValidStandard('3'), true);
+  assert.equal(hasValidStandard(undefined), false);
+  assert.equal(hasValidStandard(''), false);
+  assert.equal(hasValidStandard(null), false);
 });

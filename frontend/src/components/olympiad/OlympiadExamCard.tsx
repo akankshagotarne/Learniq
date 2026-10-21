@@ -23,6 +23,8 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
   const approval = exam.accessMode === 'approval';   // BE Engineering mock test: free, admin-approved
   // "This examination opens on 17 October 2026." -> "17 October 2026" (the server wording is the single source of the date)
   const upcomingOn = exam.message?.match(/opens on (\d{1,2} \w+ \d{4})/)?.[1];
+  // closed and never attempted -> lives in the Expired tab (the backend sets `tab`; an older response without it falls back to the state)
+  const expired = state === 'closed' && (exam.tab ? exam.tab === 'expired' : true);
   const disabled = state === 'upcoming' || state === 'closed' || state === 'disabled';
 
   const badge = (() => {
@@ -85,8 +87,8 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
         );
       case 'closed':
         return (
-          <span className="bg-surface-alt border border-border-subtle text-text-muted text-[10px] font-semibold py-0.5 px-2 rounded-full flex items-center gap-1">
-            <Lock className="w-3 h-3" /> Closed
+          <span className="bg-surface-alt border border-border-subtle text-text-muted text-[10px] font-semibold py-0.5 px-2 rounded-full flex items-center gap-1" data-testid={expired ? 'expired-badge' : undefined}>
+            <Lock className="w-3 h-3" /> {expired ? 'Expired' : 'Closed'}
           </span>
         );
       default:
@@ -165,7 +167,14 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
           </div>
         )}
 
-        {exam.message && (state === 'upcoming' || (state === 'pay' && exam.window === 'upcoming') || state === 'closed' || state === 'disabled' || state === 'rejected') && (
+        {expired && (
+          <p className="text-[11px] text-text-secondary mb-3" data-testid="expired-message">
+            {exam.registered
+              ? 'This examination has expired. You registered for it but did not attempt it before the deadline.'
+              : 'This examination has expired and is no longer available. You did not register for it.'}
+          </p>
+        )}
+        {!expired && exam.message && (state === 'upcoming' || (state === 'pay' && exam.window === 'upcoming') || state === 'closed' || state === 'disabled' || state === 'rejected') && (
           <p className="text-[11px] text-text-secondary mb-3">{exam.message}</p>
         )}
       </div>
@@ -226,7 +235,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
             <CheckCircle className="w-3.5 h-3.5 text-[#4ADE9A]" /> View Result
           </Link>
         )}
-        {interview && !approval && (
+        {interview && !approval && !expired && (
           <div className="mt-2" data-testid="interview-action" data-stage={interview.stage}>
             {interview.schedule?.configured && interview.schedule.when && !interview.locked && !interview.workflowComplete && (
               <p className="mb-2 text-[11px] text-text-secondary text-center" data-testid="interview-when">
@@ -305,7 +314,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, interview, int
             disabled
             className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center"
           >
-            {state === 'upcoming' ? 'Exam Not Started Yet' : state === 'disabled' ? 'Access Paused' : approval ? 'Exam Closed' : 'Registration Closed'}
+            {state === 'upcoming' ? 'Exam Not Started Yet' : state === 'disabled' ? 'Access Paused' : expired ? 'Exam Expired' : approval ? 'Exam Closed' : 'Registration Closed'}
           </button>
         )}
       </div>
