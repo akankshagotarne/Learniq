@@ -34,6 +34,7 @@ const studentNav: NavItem[] = [
   { label: 'Courses', href: '/courses', icon: BookOpen, courses: true },
   { label: 'Live Classes', href: '/live-sessions', icon: Radio },
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
+  { label: 'Leaderboard 🏆', href: '/student/leaderboard', icon: Trophy },
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
   { label: 'Payments & Transactions', href: '/student/payments', icon: Receipt },
   { label: 'Refer & Earn', href: '/student/refer', icon: Gift },

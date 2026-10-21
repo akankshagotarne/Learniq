@@ -13,6 +13,7 @@ const credits = require('../services/credits');
 const { priceFor, isComponent, pricing: pricingFor } = require('../config/olympiadPricing');
 const proctoringSvc = () => require('../services/proctoring/service'); // lazy: the proctoring adapters require this file
 const { STANDARD_OTHERS } = require('../constants/standards');
+const studentTabs = require('../services/studentExamTabs');
 const { istDate, istTime, INTERVIEW_OPENS_AT } = require('../config/schedule');
 const events = require('../services/olympiadEvents');
 
@@ -387,6 +388,7 @@ const buildApprovalState = async (exam, userId, now) => {
     window: win,
     state,
     message,
+    registered: !!request && request.status === 'APPROVED',
     paymentStatus: 'NONE',
     access: request ? {
       status: request.status, requestedAt: request.requestedAt, reviewedAt: request.reviewedAt || null,
@@ -440,6 +442,7 @@ const buildState = async (exam, userId, now = new Date()) => {
     window: win,
     state,
     message,
+    registered: paid, // registered = a verified payment or an administrator exception (what the Expired card wording depends on)
     paymentStatus: payment ? payment.status : 'NONE',
     // Separate, backend-decided component entitlements (the browser never infers one from the other)
     examUnlocked: paid,
@@ -461,15 +464,18 @@ const buildState = async (exam, userId, now = new Date()) => {
 // Exam listing / details
 // ──────────────────────────────────────────────
 // GET /api/olympiad/exams
+// Student-specific: the response contains ONLY exams of the authenticated student's own standard (plus the specific exams an administrator
+// authorised for them), each already classified into its tab (available / upcoming / completed / expired) from the exam's schedule AND this
+// student's own registration / attempt records. Nothing comes from the browser - the standard is read from the signed-in account.
 const listExams = handler(async (req, res) => {
   const now = new Date();
   if (req.user.role !== 'student') return res.json({ success: true, exams: [], serverNow: now.toISOString() });
-  // the student's own standard + the specific exams an administrator authorised for them (never a whole other standard)
+  const studentStandard = studentTabs.resolveStandard(req.user);
+  // a missing / invalid standard never falls back to "everything": the student is asked to complete the profile instead
+  if (studentStandard === null) return res.json({ success: true, exams: [], standardResolved: false, serverNow: now.toISOString() });
   const grantedIds = (await examAccess.activeGrantExamIds(req.user._id));
-  const conditions = [];
-  if (req.user.currentStandard) conditions.push({ standard: req.user.currentStandard });
+  const conditions = [{ standard: studentStandard }];
   if (grantedIds.length) conditions.push({ _id: { $in: grantedIds } });
-  if (!conditions.length) return res.json({ success: true, exams: [], serverNow: now.toISOString() });
   // exams of a draft / cancelled event are not offered to students (a student's finished attempts stay under /completed)
   const found = await OlympiadExam.find({ isPublished: true, $or: conditions }).sort({ startDate: 1 });
   const labels = await events.eventLabels(found); // one query, and none at all while no exam belongs to an event
@@ -477,9 +483,12 @@ const listExams = handler(async (req, res) => {
   const out = [];
   for (const exam of exams) {
     const { eventState, ...label } = labels.get(String(exam.event)) || {};
-    out.push({ ...examPublic(exam), ...label, ...(await buildState(exam, req.user._id, now)) });
+    const st = await buildState(exam, req.user._id, now);
+    const cls = studentTabs.classifyOlympiad({ state: st.state, examStandard: exam.standard, studentStandard });
+    if (!cls) continue; // another standard's exam that is closed and was never attempted: not shown anywhere
+    out.push({ ...examPublic(exam), ...label, ...st, tab: cls.tab, ownStandard: cls.ownStandard });
   }
-  res.json({ success: true, exams: out, serverNow: now.toISOString() });
+  res.json({ success: true, exams: out, standardResolved: true, standard: studentStandard, serverNow: now.toISOString() });
 });
 
 // GET /api/olympiad/exams/:id

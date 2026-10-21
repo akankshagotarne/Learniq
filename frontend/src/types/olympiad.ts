@@ -189,6 +189,12 @@ export interface OlympiadExam {
   // per-student journey state
   window: 'upcoming' | 'open' | 'closed';
   state: OlympiadState;
+  /** which Exams-page tab this exam belongs to for THIS student (set by the backend from the schedule + the student's own attempt records) */
+  tab?: 'available' | 'upcoming' | 'completed' | 'expired';
+  /** false = shown through an administrator's exceptional access to another standard's exam */
+  ownStandard?: boolean;
+  /** the student registered (verified payment or administrator exception) - wording of the Expired card */
+  registered?: boolean;
   message: string | null;
   paymentStatus: OlympiadPaymentStatus;
   /** Separate, backend-decided entitlements: the exam and the interview are unlocked independently (Rs 10 or 1 credit each). */

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ClipboardList, Clock, HelpCircle, CheckCircle2, AlertCircle,
   Calendar, Award, ChevronRight, Filter, Search, RotateCcw,
-  Sparkles, CheckCircle, Flame, BookOpen
+  Sparkles, CheckCircle, Flame, BookOpen, Lock
 } from 'lucide-react';
 import Sidebar from '../../components/layout/Sidebar';
 import api from '../../services/api';
@@ -13,7 +13,7 @@ import { olympiadApi } from '../../services/olympiad';
 import { interviewApi, interviewErrorMessage, StudentExamInterview } from '../../services/interview';
 import { useInterviewLive } from '../../hooks/useInterviewLive';
 import toast from 'react-hot-toast';
-import { olympiadTab } from '../../utils/examTabs';
+import { olympiadTab, regularTabs, hasValidStandard, type ExamTab } from '../../utils/examTabs';
 import { OlympiadExam, isResultReleased } from '../../types/olympiad';
 import OlympiadExamCard from '../../components/olympiad/OlympiadExamCard';
 import OlympiadInterviewCard from '../../components/olympiad/OlympiadInterviewCard';
@@ -35,7 +35,7 @@ const StudentExamsPage: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [olympiadExams, setOlympiadExams] = useState<OlympiadExam[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'available' | 'upcoming' | 'completed'>('available');
+  const [activeTab, setActiveTab] = useState<ExamTab>('available');
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [interviews, setInterviews] = useState<Record<string, StudentExamInterview>>({});
@@ -86,11 +86,8 @@ const StudentExamsPage: React.FC = () => {
     setLoading(true);
     try {
       const [res] = await Promise.all([
-        api.get('/exams', {
-          params: {
-            standard: user?.currentStandard,
-          },
-        }).catch(err => {
+        // the backend scopes this list to the signed-in student's own saved standard (nothing is sent from the browser)
+        api.get('/exams').catch(err => {
           console.error('Failed to fetch exams', err);
           return { data: { exams: [] } };
         }),
@@ -113,6 +110,8 @@ const StudentExamsPage: React.FC = () => {
   const olympiadAvailable = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'available');
   const olympiadUpcoming = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'upcoming');
   const olympiadCompleted = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'completed');
+  const olympiadExpired = olympiadExams.filter(o => olympiadTab(o, interviews[o._id]) === 'expired');
+  const standardMissing = !hasValidStandard(user?.currentStandard);
 
   // Unique subjects
   const subjects = ['All', ...(hasOlympiad ? ['Olympiad'] : []), ...Array.from(new Set(exams.map(e => e.subject)))];
@@ -125,18 +124,11 @@ const StudentExamsPage: React.FC = () => {
 
     if (!matchesSubject || !matchesSearch) return false;
 
-    if (activeTab === 'available') {
-      return e.availability === 'available' && (e.canAttempt || !e.myBestAttempt);
-    } else if (activeTab === 'upcoming') {
-      return e.availability === 'upcoming';
-    } else {
-      // completed
-      return (e.myAttemptCount || 0) > 0;
-    }
+    return regularTabs(e).includes(activeTab); // same rules as the backend (an attempted exam is never Expired)
   });
 
   // Olympiad cards follow the same tab / subject / search controls
-  const tabOlympiad = activeTab === 'available' ? olympiadAvailable : activeTab === 'upcoming' ? olympiadUpcoming : olympiadCompleted;
+  const tabOlympiad = activeTab === 'available' ? olympiadAvailable : activeTab === 'upcoming' ? olympiadUpcoming : activeTab === 'expired' ? olympiadExpired : olympiadCompleted;
   const q = searchQuery.trim().toLowerCase();
   const filteredOlympiad = tabOlympiad.filter(o =>
     (selectedSubject === 'All' || selectedSubject === 'Olympiad') &&
@@ -151,8 +143,11 @@ const StudentExamsPage: React.FC = () => {
     exams.filter(e => e.myBestAttempt).reduce((sum, e) => sum + (e.myBestAttempt?.percentage || 0), 0) +
     olympiadCompleted.reduce((sum, o) => sum + (isResultReleased(o.result) ? o.result.percentage : 0), 0);
   const avgScore = completedCount > 0 ? Math.round(percentageSum / completedCount) : 0;
-  const availableCount = exams.filter(e => e.availability === 'available').length + olympiadAvailable.length;
-  const upcomingCount = exams.filter(e => e.availability === 'upcoming').length + olympiadUpcoming.length;
+  // counts are the real number of cards in each tab (before search / subject filters), from the same rules the lists use
+  const regularIn = (tab: ExamTab) => exams.filter(e => regularTabs(e).includes(tab)).length;
+  const availableCount = regularIn('available') + olympiadAvailable.length;
+  const upcomingCount = regularIn('upcoming') + olympiadUpcoming.length;
+  const expiredCount = regularIn('expired') + olympiadExpired.length;
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -233,15 +228,25 @@ const StudentExamsPage: React.FC = () => {
             </div>
           </div>
 
+          {standardMissing && (
+            <div className="mb-4 p-4 rounded-2xl border border-[#FFC24B]/40 bg-[#FFC24B]/10 flex items-start gap-3" role="status" data-testid="standard-missing">
+              <AlertCircle className="w-4 h-4 mt-0.5 text-[#B7791F] flex-shrink-0" aria-hidden="true" />
+              <p className="text-xs text-text-secondary min-w-0">
+                Your standard is not set on your profile, so we cannot show the exams meant for you. Please complete your profile in <Link to="/student/profile" className="font-semibold text-brand-primary underline">My Profile</Link> or contact the administrator.
+              </p>
+            </div>
+          )}
+
           {/* Controls: status tabs, search and subject filter */}
           <div className="space-y-3 sm:space-y-4 mb-6">
             <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
-              {/* Status tabs: three equal segments on phones (the count drops under the label if space runs out) */}
-              <div role="tablist" aria-label="Exam status" className="grid grid-cols-3 sm:inline-flex w-full sm:w-auto sm:self-start bg-surface-alt p-1 rounded-xl border border-border-subtle gap-1">
+              {/* Status tabs: four equal segments on phones (the count drops under the label if space runs out) */}
+              <div role="tablist" aria-label="Exam status" className="grid grid-cols-4 sm:inline-flex w-full sm:w-auto sm:self-start bg-surface-alt p-1 rounded-xl border border-border-subtle gap-1">
                 {([
                   ['available', 'Available', availableCount],
                   ['upcoming', 'Upcoming', upcomingCount],
                   ['completed', 'Completed', completedCount],
+                  ['expired', 'Expired', expiredCount],
                 ] as const).map(([key, label, count]) => {
                   const active = activeTab === key;
                   return (
@@ -251,7 +256,7 @@ const StudentExamsPage: React.FC = () => {
                       role="tab"
                       aria-selected={active}
                       onClick={() => setActiveTab(key)}
-                      className={`min-w-0 min-h-[44px] px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold leading-tight transition-all flex flex-wrap items-center justify-center gap-x-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${
+                      className={`min-w-0 min-h-[44px] px-1 sm:px-4 py-1.5 rounded-lg text-xs font-semibold leading-tight transition-all flex flex-wrap items-center justify-center gap-x-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${
                         active ? 'bg-brand-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-surface'
                       }`}
                     >
@@ -324,6 +329,8 @@ const StudentExamsPage: React.FC = () => {
                   ? 'There are no active exams available for your standard right now. Check back soon!'
                   : activeTab === 'upcoming'
                   ? 'No scheduled exams found. Teachers will post upcoming dates here.'
+                  : activeTab === 'expired'
+                  ? 'Nothing has expired. Exams you did not attempt before their deadline will appear here.'
                   : 'You have not completed any exams yet. Start by taking an available exam above!'}
               </p>
               {searchQuery.trim() || selectedSubject !== 'All' ? (
@@ -373,6 +380,7 @@ const StudentExamsPage: React.FC = () => {
               {visibleRegular.map(exam => {
                 const isUpcoming = exam.availability === 'upcoming';
                 const isCompleted = (exam.myAttemptCount || 0) > 0;
+                const isExpired = exam.availability === 'expired' && !isCompleted;
                 const bestAttempt = exam.myBestAttempt;
                 const teacherObj = typeof exam.teacher === 'object' ? exam.teacher : null;
 
@@ -391,6 +399,10 @@ const StudentExamsPage: React.FC = () => {
                         {isUpcoming ? (
                           <span className="badge-warning text-[10px] py-0.5 px-2 flex items-center gap-1">
                             <Clock className="w-3 h-3" /> Upcoming
+                          </span>
+                        ) : isExpired ? (
+                          <span className="bg-surface-alt border border-border-subtle text-text-muted text-[10px] font-semibold py-0.5 px-2 rounded-full flex items-center gap-1" data-testid="expired-badge">
+                            <Lock className="w-3 h-3" /> Expired
                           </span>
                         ) : isCompleted ? (
                           <span className="badge-success text-[10px] py-0.5 px-2 flex items-center gap-1">
@@ -447,7 +459,7 @@ const StudentExamsPage: React.FC = () => {
                         <div className="text-[11px] text-text-muted mb-3 flex items-start gap-1.5">
                           <Calendar className="w-3 h-3 mt-0.5 text-brand-primary flex-shrink-0" />
                           <span className="min-w-0">
-                            Starts: {new Date(exam.scheduledStart).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                            {isExpired && exam.scheduledEnd ? 'Closed' : 'Starts'}: {new Date(isExpired && exam.scheduledEnd ? exam.scheduledEnd : exam.scheduledStart).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                           </span>
                         </div>
                       )}
@@ -477,7 +489,16 @@ const StudentExamsPage: React.FC = () => {
                         )}
                       </div>
 
-                      {isUpcoming ? (
+                      {isExpired ? (
+                        <>
+                          <p className="text-[11px] text-text-secondary mb-3" data-testid="expired-message">
+                            This examination has expired and is no longer available. You did not attempt this examination before its deadline.
+                          </p>
+                          <button disabled className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center">
+                            Exam Expired
+                          </button>
+                        </>
+                      ) : isUpcoming ? (
                         <button
                           disabled
                           className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center"
