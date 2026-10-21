@@ -542,6 +542,7 @@ const markPaymentSuccess = async (paymentDoc, { razorpayPaymentId, razorpaySigna
         type: 'payment',
         link: '/student/exams',
       }).catch(() => {});
+      paymentMethod.captureMethod(OlympiadPayment, updated).catch(() => {}); // best effort: the receipt shows the gateway-reported method
       return { payment: updated, changed: true };
     }
     return { payment: await OlympiadPayment.findById(paymentDoc._id), changed: false };
@@ -559,6 +560,7 @@ const markPaymentSuccess = async (paymentDoc, { razorpayPaymentId, razorpaySigna
   }
 };
 
+const paymentMethod = require('../services/paymentMethod');
 const safeEqual = (a, b) => {
   const ba = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
@@ -762,6 +764,8 @@ const verifyPayment = handler(async (req, res) => {
     paymentStatus: updated ? updated.status : 'SUCCESS',
     duplicate: !!duplicate,
     component: updated && updated.component ? updated.component : 'PACKAGE',
+    // what the student needs to open the receipt later (ids only - no secrets); the receipt itself is generated on demand from the stored record
+    ...(updated && updated.status === 'SUCCESS' ? { transaction: { id: `pay_${updated._id}`, amount: updated.amount, currency: updated.currency || 'INR' } } : {}),
     message: updated && updated.component === 'INTERVIEW' ? 'Payment verified. Your interview is unlocked.' : 'Payment verified. Your examination is unlocked.',
   });
 });

@@ -136,6 +136,13 @@ const olympiadPaymentSchema = new mongoose.Schema({
     deletedAt: { type: Date },
   },
   reviewNote: { type: String, trim: true },         // why it was marked UNCONFIRMED
+  // Payment method reported by Razorpay (upi / card / netbanking / wallet / emi / paylater), read from the gateway after verification.
+  // Absent when it could not be read: receipts then say "Razorpay" and never guess.
+  method: { type: String, trim: true, lowercase: true },
+  // Receipt (services/studentTransactions.js): number assigned ONCE (atomic counter), details frozen at first issue so re-downloads never change.
+  receiptNumber: { type: String },
+  receiptIssuedAt: { type: Date },
+  receiptSnapshot: { type: mongoose.Schema.Types.Mixed },
   verifiedAt: { type: Date },
   verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },
   failureReason: { type: String },
@@ -163,6 +170,10 @@ const olympiadPaymentSchema = new mongoose.Schema({
 // The reconciler scans "stale PENDING" / "recently system-FAILED" records
 olympiadPaymentSchema.index({ status: 1, createdAt: 1 });
 olympiadPaymentSchema.index({ exam: 1, status: 1 }); // admin analytics: payments of an exam by status
+
+olympiadPaymentSchema.index({ student: 1, createdAt: -1 }); // student Payments & Transactions history
+// One receipt number → one payment
+olympiadPaymentSchema.index({ receiptNumber: 1 }, { unique: true, partialFilterExpression: { receiptNumber: { $type: 'string' } }, name: 'unique_receipt_number' });
 
 // One order id → one payment record
 olympiadPaymentSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });

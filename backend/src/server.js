@@ -104,6 +104,7 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.get('/api/profile-photos/:userId', require('./controllers/profileController').servePhoto); // a profile picture is public, like on any site
 app.use('/api/auth', authRoutes);
+app.use('/api/student-transactions', require('./routes/studentTransactions')); // student Payments & Transactions + PDF receipts
 app.use('/api', apiRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
