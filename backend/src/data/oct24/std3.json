@@ -49,7 +49,8 @@
     "2/4"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "fractions"
   },
   {
    "n": 2,
@@ -65,7 +66,8 @@
     "750 g"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "measurements"
   },
   {
    "n": 3,
@@ -75,13 +77,22 @@
    "visual": "│ (Vertical Standing Line)",
    "image": null,
    "options": [
-    "Horizontal",
+    "Horizontal (आडवी रेषा)",
     "Vertical (उभी रेषा)",
-    "Slanted",
-    "Curved"
+    "Slanted (तिरकी रेषा)",
+    "Curved (वक्र रेषा)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 4,
@@ -97,7 +108,8 @@
     "2"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 5,
@@ -113,7 +125,8 @@
     "10"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 6,
@@ -129,7 +142,8 @@
     "20 cm"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "measurements"
   },
   {
    "n": 7,
@@ -145,7 +159,8 @@
     "492"
    ],
    "answer": 0,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 8,
@@ -161,7 +176,8 @@
     "10"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 9,
@@ -177,7 +193,8 @@
     "20"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 10,
@@ -193,7 +210,8 @@
     "450"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 11,
@@ -203,13 +221,22 @@
    "visual": "🦴 (Skeletal System / मानवींगातील सांगाडा)",
    "image": null,
    "options": [
-    "Digestive",
+    "Digestive (पचनसंस्था)",
     "Skeletal System (अस्थिसंस्था)",
-    "Nervous",
-    "Respiratory"
+    "Nervous (चेतासंस्था)",
+    "Respiratory (श्वसनसंस्था)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 12,
@@ -219,13 +246,22 @@
    "visual": "[ Sun heating ocean water ➔ Vapour rising ]",
    "image": null,
    "options": [
-    "Freezing",
+    "Freezing (गोठणे)",
     "Evaporation (बाष्पीभवन)",
-    "Melting",
-    "Condensation"
+    "Melting (वितळणे)",
+    "Condensation (संघनन)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 13,
@@ -251,13 +287,22 @@
    "visual": "Deer Eating Grass 🦌",
    "image": null,
    "options": [
-    "Lion",
+    "Lion (सिंह)",
     "Deer (हरीण)",
-    "Tiger",
-    "Wolf"
+    "Tiger (वाघ)",
+    "Wolf (लांडगा)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 15,
@@ -267,13 +312,22 @@
    "visual": "🧊 (Ice Cube / स्थायू)",
    "image": null,
    "options": [
-    "Liquid",
+    "Liquid (द्रव)",
     "Solid (स्थायू)",
-    "Gas",
-    "Vapor"
+    "Gas (वायू)",
+    "Vapor (बाष्प)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 16,
@@ -283,13 +337,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Fins",
+    "Fins (पर)",
     "Feathers/Wings (पंख)",
-    "Gills",
-    "Claws"
+    "Gills (कल्ले)",
+    "Claws (नखे)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 17,
@@ -299,13 +362,22 @@
    "visual": "🔴 (Mars Planet)",
    "image": null,
    "options": [
-    "Earth",
+    "Earth (पृथ्वी)",
     "Mars (मंगळ)",
-    "Jupiter",
-    "Venus"
+    "Jupiter (गुरू)",
+    "Venus (शुक्र)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 18,
@@ -315,13 +387,22 @@
    "visual": "🛑 (STOP Sign)",
    "image": null,
    "options": [
-    "Go",
+    "Go (चला)",
     "STOP (थांबा)",
-    "No Entry",
-    "Turn Left"
+    "No Entry (प्रवेश बंद)",
+    "Turn Left (डावीकडे वळा)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 19,
@@ -331,13 +412,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Nitrogen",
+    "Nitrogen (नायट्रोजन)",
     "Carbon Dioxide (कार्बन डायऑक्साइड)",
-    "Hydrogen",
-    "Helium"
+    "Hydrogen (हायड्रोजन)",
+    "Helium (हेलियम)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 20,
@@ -347,13 +437,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Sandy Soil",
+    "Sandy Soil (वालुकामय माती)",
     "Loamy Soil / Topsoil (सुपीक माती)",
-    "Rocky Soil",
-    "Desert Soil"
+    "Rocky Soil (खडकाळ माती)",
+    "Desert Soil (वाळवंटी माती)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 21,
@@ -363,13 +462,22 @@
    "visual": "🍇🍇🍇 (A ______ of grapes)",
    "image": null,
    "options": [
-    "Herd",
+    "Herd (कळप)",
     "Bunch (घोस/घोंड)",
-    "Pack",
-    "Flock"
+    "Pack (टोळी)",
+    "Flock (थवा)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 22,
@@ -379,13 +487,22 @@
    "visual": "📖 (Boy Reading Book)",
    "image": null,
    "options": [
-    "Writing",
+    "Writing (लिहिणे)",
     "Reading (वाचणे)",
-    "Dancing",
-    "Cooking"
+    "Dancing (नाचणे)",
+    "Cooking (स्वयंपाक करणे)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 23,
@@ -395,13 +512,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Rohan",
+    "Rohan (रोहन)",
     "writes (लिहितो)",
-    "story",
-    "a"
+    "story (गोष्ट)",
+    "a (एक)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 24,
@@ -411,13 +537,22 @@
    "visual": "🐝 (Beehive / मधाचे पोळे)",
    "image": null,
    "options": [
-    "Nest",
+    "Nest (घरटे)",
     "Hive (पोळे)",
-    "Stable",
-    "Shed"
+    "Stable (अस्तबल)",
+    "Shed (शेड)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 25,
@@ -427,13 +562,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Slow",
+    "Slow (हळू)",
     "Fast (वेगवान)",
-    "Late",
-    "Quiet"
+    "Late (उशिरा)",
+    "Quiet (शांत)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 26,
@@ -449,7 +593,8 @@
     "Eroplane"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "spelling (non-word options)"
   },
   {
    "n": 27,
@@ -459,13 +604,23 @@
    "visual": null,
    "image": null,
    "options": [
-    "and",
-    "or",
-    "but",
-    "so"
+    "and (आणि)",
+    "or (किंवा)",
+    "but (पण)",
+    "so (म्हणून)"
    ],
    "answer": 0,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[1]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 28,
@@ -475,13 +630,22 @@
    "visual": "🪑🐈 (Cat UNDER the chair)",
    "image": null,
    "options": [
-    "On",
+    "On (वर)",
     "Under (खाली)",
-    "In",
-    "Over"
+    "In (आत)",
+    "Over (वरून)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 29,
@@ -492,7 +656,7 @@
    "image": null,
    "options": [
     "Toothss",
-    "Teeth (दांत)",
+    "Teeth",
     "Toothes",
     "Teethes"
    ],
@@ -501,11 +665,13 @@
    "provenance": {
     "kind": "duplicate-option-replaced",
     "fields": [
+     "options[1]",
      "options[3]"
     ],
     "original": "Toothes",
-    "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged."
-   }
+    "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged. The lone Marathi label '(दांत)' printed only on the correct option 'Teeth' was also removed: with non-word distractors that cannot be translated, it singled out the answer. The Marathi question text states the meaning."
+   },
+   "optionsMrExempt": "spelling (word forms)"
   },
   {
    "n": 30,
@@ -515,13 +681,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "Pretty",
+    "Pretty (सुंदर)",
     "Ugly (कुरूप)",
-    "Nice",
-    "Cute"
+    "Nice (छान)",
+    "Cute (गोंडस)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 31,
@@ -531,13 +706,22 @@
    "visual": "A) ⬛ | B) ◼️ | C) 🔴 (Circle) | D) ◾",
    "image": null,
    "options": [
-    "Square A",
-    "Square B",
+    "Square A (चौरस अ)",
+    "Square B (चौरस ब)",
     "Circle C (वर्तुळ)",
-    "Square D"
+    "Square D (चौरस ड)"
    ],
    "answer": 2,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[1]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 32,
@@ -553,7 +737,8 @@
     "1"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 33,
@@ -569,7 +754,8 @@
     "12"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "numerals"
   },
   {
    "n": 34,
@@ -579,13 +765,22 @@
    "visual": "🌡️ (Thermometer)",
    "image": null,
    "options": [
-    "Ruler",
+    "Ruler (पट्टी)",
     "Thermometer (तापमापक)",
-    "Scale",
-    "Clock"
+    "Scale (मापपट्टी)",
+    "Clock (घड्याळ)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 35,
@@ -595,13 +790,22 @@
    "visual": "🐈 🐱 ➔ (Kitten)",
    "image": null,
    "options": [
-    "Cub",
+    "Cub (छावा)",
     "Kitten (मांजरपिल्लू)",
-    "Calf",
-    "Kid"
+    "Calf (वासरू)",
+    "Kid (करडू)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 36,
@@ -617,7 +821,8 @@
     "L"
    ],
    "answer": 0,
-   "marks": 1
+   "marks": 1,
+   "optionsMrExempt": "single letters"
   },
   {
    "n": 37,
@@ -627,13 +832,22 @@
    "visual": "🐬 (Ganges River Dolphin)",
    "image": null,
    "options": [
-    "Whale",
+    "Whale (देवमासा)",
     "Ganges River Dolphin (डॉल्फिन)",
-    "Shark",
-    "Octopus"
+    "Shark (शार्क)",
+    "Octopus (ऑक्टोपस)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 38,
@@ -643,13 +857,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "East",
+    "East (पूर्व)",
     "South (दक्षिण)",
-    "West",
-    "Central"
+    "West (पश्चिम)",
+    "Central (मध्य)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 39,
@@ -659,13 +882,22 @@
    "visual": "🕌 (Taj Mahal / ताजमहाल)",
    "image": null,
    "options": [
-    "Qutub Minar",
+    "Qutub Minar (कुतुबमिनार)",
     "Taj Mahal (ताजमहाल)",
-    "Red Fort",
-    "Gateway of India"
+    "Red Fort (लाल किल्ला)",
+    "Gateway of India (गेटवे ऑफ इंडिया)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   },
   {
    "n": 40,
@@ -675,13 +907,22 @@
    "visual": null,
    "image": null,
    "options": [
-    "12",
+    "12 (बारा)",
     "24 (चौवीस)",
-    "30",
-    "48"
+    "30 (तीस)",
+    "48 (अठ्ठेचाळीस)"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "marathi-options-added",
+    "fields": [
+     "options[0]",
+     "options[2]",
+     "options[3]"
+    ],
+    "basis": "The source PDF prints a Marathi translation only on the correct answer line, so the other options were English-only. The missing Marathi labels were authored by LearnIQ (faithful, age-appropriate); existing source translations were kept."
+   }
   }
  ],
  "review": [],
@@ -693,10 +934,19 @@
    "question": 29,
    "kind": "duplicate-option-replaced",
    "fields": [
+    "options[1]",
     "options[3]"
    ],
    "original": "Toothes",
-   "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged."
+   "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged. The lone Marathi label '(दांत)' printed only on the correct option 'Teeth' was also removed: with non-word distractors that cannot be translated, it singled out the answer. The Marathi question text states the meaning."
+  },
+  {
+   "question": 0,
+   "kind": "marathi-options-added",
+   "fields": [
+    "25 questions"
+   ],
+   "basis": "Std 3: the source PDF gives a Marathi translation only for the correct option; Marathi labels were authored for the remaining answer options of 25 questions (76 options labelled)."
   }
  ]
 }

@@ -51,7 +51,7 @@ const PaperImportDialog: React.FC<{ event: OlympiadEventRow; onClose: () => void
           {report.rows.some(r => r.completions.length) && (
             <div className="rounded-xl border border-sky-300 bg-sky-50 text-sky-900 p-3" data-testid="paper-import-completions">
               <p className="font-semibold">Completed by LearnIQ — not text from the source PDF</p>
-              <ul className="list-disc pl-5 mt-1 text-xs">{report.rows.flatMap(r => r.completions.map(x => <li key={`c${r.standard}-${x.question}`}>Standard {r.standard}, question {x.question} ({x.kind === 'authored-completion' ? 'missing options and answer line authored' : 'duplicate wrong option replaced'}): {x.basis}</li>))}</ul>
+              <ul className="list-disc pl-5 mt-1 text-xs">{report.rows.flatMap(r => r.completions.map(x => <li key={`c${r.standard}-${x.kind}-${x.question}`}>Standard {r.standard}{x.kind === 'marathi-options-added' ? '' : `, question ${x.question}`} ({x.kind === 'authored-completion' ? 'missing options and answer line authored' : x.kind === 'marathi-options-added' ? 'Marathi labels added to answer options' : 'duplicate wrong option replaced'}): {x.basis}</li>))}</ul>
               <p className="text-xs mt-1">These are recorded corrections, not open items; they do not block publishing.</p>
             </div>)}
           {report.readiness && (
