@@ -448,7 +448,7 @@ const exportData = async (query) => {
 };
 
 module.exports = {
-  ResultsError, parseQuery, results, studentDetail, exportData,
+  ResultsError, parseQuery, results, studentDetail, exportData, loadEvent,
   // pure helpers (unit-tested)
   examComponent, interviewComponent, competitionRanks, pctOf, validMarks, sortRows, applyFilters,
   INTERVIEW_STATUSES, RESULT_STATUSES, SORTS, PAGE_SIZES,

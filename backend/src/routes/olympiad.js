@@ -7,6 +7,7 @@ const analytics = require('../controllers/olympiadAnalyticsController');
 const management = require('../controllers/olympiadExamManagementController');
 const events = require('../controllers/olympiadEventController');
 const resultsCtrl = require('../controllers/olympiadResultsController');
+const leaderboardCtrl = require('../controllers/studentLeaderboardController');
 
 const perUser = (max, windowMs = 60 * 1000) =>
   rateLimit({
@@ -23,6 +24,10 @@ const teacherAuth = [protect, authorize('teacher', 'admin')];
 
 // Razorpay server-to-server webhook (authenticated by HMAC signature, not by JWT)
 router.post('/payments/webhook', ctrl.razorpayWebhook);
+
+// Student leaderboard (read-only; the standard always comes from the authenticated student's database record)
+router.get('/student/leaderboard/exams', protect, authorize('student'), perUser(60), leaderboardCtrl.exams);
+router.get('/student/leaderboard', protect, authorize('student'), perUser(120), leaderboardCtrl.board);
 
 // Admin
 router.get('/admin/exams', ...adminAuth, ctrl.adminListExams);
