@@ -4,7 +4,7 @@ import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
-  Menu, X, Trophy, Award, Video, CalendarClock, Gift, ListOrdered
+  Menu, X, Trophy, Award, Video, CalendarClock, Gift, ListOrdered, Receipt
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -36,6 +36,7 @@ const studentNav: NavItem[] = [
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Leaderboard 🏆', href: '/student/leaderboard', icon: Trophy },
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
+  { label: 'Payments & Transactions', href: '/student/payments', icon: Receipt },
   { label: 'Refer & Earn', href: '/student/refer', icon: Gift },
   { label: 'Interview Results', href: '/student/interview-results', icon: Video },
   { label: 'Progress', href: '/student/progress', icon: BarChart2 },

@@ -1,3 +1,4 @@
+import { showPaymentSuccess } from '../payments/paymentSuccessToast';
 import { useCallback, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -89,12 +90,12 @@ export const useOlympiadPayment = (onUnlocked: (examId: string) => void) => {
         handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
           toast.loading('Verifying your payment securely…', { id: 'oly-verify' });
           try {
-            await olympiadApi.verifyPayment(exam._id, {
+            const verified = await olympiadApi.verifyPayment(exam._id, {
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
             });
-            toast.success(component === 'INTERVIEW' ? 'Payment verified! Your interview is unlocked.' : 'Payment verified! Your examination is unlocked.', { id: 'oly-verify' });
+            showPaymentSuccess(verified, exam.title, component === 'INTERVIEW' ? 'Payment verified! Your interview is unlocked.' : 'Payment verified! Your examination is unlocked.');
             finish();
             onUnlocked(exam._id);
           } catch (err: any) {

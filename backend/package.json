@@ -24,6 +24,7 @@
     "test:fee": "node --test src/tests/olympiadFee.test.js",
     "test:interviews": "node --test src/tests/interviews.test.js",
     "test:aiinterview": "node --test src/tests/aiInterview.test.js src/tests/aiInterviewLocalStt.test.js src/tests/aiInterviewOpenAiStt.test.js",
+    "test:transactions": "node --test src/tests/studentTransactions.test.js",
     "test:leaderboard": "node --test src/tests/studentLeaderboard.test.js",
     "test:analytics": "node --test src/tests/olympiadAnalytics.test.js",
     "test:clearance": "node --test src/tests/olympiadClearance.test.js",
