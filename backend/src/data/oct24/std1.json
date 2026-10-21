@@ -509,11 +509,19 @@
    "options": [
     "Boyes",
     "Boys",
-    "Boyes",
+    "Boyz",
     "Boies"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "duplicate-option-replaced",
+    "fields": [
+     "options[2]"
+    ],
+    "original": "Boyes",
+    "basis": "The source prints the wrong option 'Boyes' twice. The second copy was replaced by the distinct plausible distractor 'Boyz'; the correct answer and every other option are unchanged."
+   }
   },
   {
    "n": 31,
@@ -679,5 +687,16 @@
  "review": [],
  "sourceIssues": [],
  "totalQuestions": 40,
- "totalMarks": 40
+ "totalMarks": 40,
+ "completions": [
+  {
+   "question": 30,
+   "kind": "duplicate-option-replaced",
+   "fields": [
+    "options[2]"
+   ],
+   "original": "Boyes",
+   "basis": "The source prints the wrong option 'Boyes' twice. The second copy was replaced by the distinct plausible distractor 'Boyz'; the correct answer and every other option are unchanged."
+  }
+ ]
 }

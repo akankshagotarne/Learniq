@@ -494,10 +494,18 @@
     "Toothss",
     "Teeth (दांत)",
     "Toothes",
-    "Toothes"
+    "Teethes"
    ],
    "answer": 1,
-   "marks": 1
+   "marks": 1,
+   "provenance": {
+    "kind": "duplicate-option-replaced",
+    "fields": [
+     "options[3]"
+    ],
+    "original": "Toothes",
+    "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged."
+   }
   },
   {
    "n": 30,
@@ -679,5 +687,16 @@
  "review": [],
  "sourceIssues": [],
  "totalQuestions": 40,
- "totalMarks": 40
+ "totalMarks": 40,
+ "completions": [
+  {
+   "question": 29,
+   "kind": "duplicate-option-replaced",
+   "fields": [
+    "options[3]"
+   ],
+   "original": "Toothes",
+   "basis": "The source prints the wrong option 'Toothes' twice. The second copy was replaced by the distinct plausible distractor 'Teethes'; the correct answer and every other option are unchanged."
+  }
+ ]
 }

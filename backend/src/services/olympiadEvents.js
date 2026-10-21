@@ -525,6 +525,11 @@ const publishEvent = async (id, admin, now = new Date(), opts = {}) => {
     const empty = [];
     for (const e of exams) if ((await OlympiadQuestion.countDocuments({ exam: e._id })) < 1) empty.push(e.standard);
     if (empty.length) throw new EventError(422, `These exams have no questions yet, so the event cannot be published: Standard ${empty.join(', ')}.`, 'NOT_READY', { standards: empty });
+    // every paper must be complete and valid (options, one valid stored answer, expected count): blocking, never acknowledged away
+    const { validateExam } = require('./paperValidation');
+    const invalid = [];
+    for (const e of exams) { const v = await validateExam(e); if (!v.ok) invalid.push({ standard: v.standard, issues: v.issues.slice(0, 20) }); }
+    if (invalid.length) throw new EventError(422, `These question papers are not complete yet, so the event cannot be published: ${invalid.map((i) => `Standard ${i.standard} (${i.issues.slice(0, 3).map((x) => (x.question ? `Q${x.question}: ` : '') + x.issue).join(' ')})`).join('; ')}`, 'PAPER_INVALID', { invalid });
     // an imported paper that is incomplete in its source must be resolved (or explicitly accepted by an administrator) first
     const unresolved = exams.filter((e) => e.paperImport && e.paperImport.review && e.paperImport.review.length).map((e) => ({ standard: e.standard, review: e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) }));
     if (unresolved.length && !opts.acknowledgeReview) {

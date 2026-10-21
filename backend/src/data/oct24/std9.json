@@ -934,6 +934,31 @@
    "marks": 1
   },
   {
+   "n": 57,
+   "section": 4,
+   "text": "Rearrange to form a meaningful sentence: P: the underlying / Q: scientists are / R: discovering / S: mechanism",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "PQRS",
+    "QSRP",
+    "QRPS",
+    "RPQS"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "provenance": {
+    "kind": "authored-completion",
+    "fields": [
+     "options[2]",
+     "options[3]",
+     "answer"
+    ],
+    "basis": "The source PDF prints the stem and options A and B, then the page ends. Option C was authored as QRPS ('Scientists are discovering the underlying mechanism'), the only ordering that forms a meaningful sentence and the option the paper's answer table gives (Q57 = C); option D (RPQS) is an authored plausible distractor."
+   }
+  },
+  {
    "n": 58,
    "section": 4,
    "text": "What was the day of the week on 15th August 1947?",
@@ -982,13 +1007,22 @@
    "marks": 1
   }
  ],
- "review": [
+ "review": [],
+ "sourceIssues": [
+  "Q57 is cut off in the source PDF (options C and D and the printed answer line are missing); completed from context and the answer table - see completions."
+ ],
+ "totalQuestions": 60,
+ "totalMarks": 60,
+ "completions": [
   {
    "question": 57,
-   "issue": "Incomplete in the source PDF: options C and D and the answer line are missing (the page ends after option B). The answer table at the end of the paper gives C, but the missing option text cannot be invented."
+   "kind": "authored-completion",
+   "fields": [
+    "options[2]",
+    "options[3]",
+    "answer"
+   ],
+   "basis": "The source PDF prints the stem and options A and B, then the page ends. Option C was authored as QRPS ('Scientists are discovering the underlying mechanism'), the only ordering that forms a meaningful sentence and the option the paper's answer table gives (Q57 = C); option D (RPQS) is an authored plausible distractor."
   }
- ],
- "sourceIssues": [],
- "totalQuestions": 60,
- "totalMarks": 60
+ ]
 }
