@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { proctoringApi, errorCode, errorMessage, PrecheckResult } from './api';
 import { createEpisodeTracker, Episode, scanTiming } from './episodes';
 import { Detector, stopStream, openCamera, waitForFrames } from './engine';
+import { monitoringPlan } from './plan';
 import { ClientEvent, ClientEventType, ExamKind, ProctoringPolicy, SessionState } from './types';
 
 const HEARTBEAT_MS = 20000;
@@ -239,13 +240,16 @@ export const useProctoring = (opts: ProctoringOptions) => {
     let lastDiagnosticLog = 0; // dev: rate-limit no-phone log
     const loop = async () => {
       if (stoppedRef.current) return;
-      const v = videoRef.current; const det = detectorRef.current;
+      const v = videoRef.current; const det = detectorRef.current; // det is null when the policy needs no model
       try {
-        if (v && det && !document.hidden && v.readyState >= 2) {
+        if (v && !document.hidden && v.readyState >= 2) {
           const now = performance.now();
           if (v.currentTime !== lastVideoTime) { lastVideoTime = v.currentTime; lastAdvance = now; if (stalled) { stalled = false; report('CAMERA_RESTORED', { metadata: { detail: 'feed resumed' } }); } }
           else if (!stalled && now - lastAdvance > STALL_MS) { stalled = true; report('VIDEO_FEED_STALLED', { metadata: { durationMs: Math.round(now - lastAdvance) } }); }
-          if (!stalled) {
+          if (!stalled && !det) {
+            // policy needs no on-device model (camera / fullscreen / tab rules only): the feed is still watched for stalls above
+            setLive((l) => (l.monitoring ? l : { ...l, monitoring: true }));
+          } else if (!stalled && det) {
             const withPhone = p.phoneDetection && tick % PHONE_EVERY_N === 0;
             const r = await det.detect(v, withPhone);
             failures = 0;
@@ -265,7 +269,7 @@ export const useProctoring = (opts: ProctoringOptions) => {
               }
             }
             tracker.observe({ at: performance.now(), faceCount: r.faceCount, phoneScore: withPhone ? r.phoneScore : null }).forEach(episodeToEvent);
-            setLive((l) => ({ ...l, faceCount: r.faceCount, inferenceMs: Math.round(r.inferenceMs), monitoring: true }));
+            setLive((l) => ({ ...l, faceCount: r.faceCount ?? -1, inferenceMs: Math.round(r.inferenceMs), monitoring: true }));
           }
           tick += 1;
         }
@@ -341,6 +345,8 @@ export const useProctoring = (opts: ProctoringOptions) => {
    */
   const start = useCallback(async (attemptId: string, precheck: PrecheckResult, stream: MediaStream | null, detector: Detector | null) => {
     stoppedRef.current = false;
+    // a policy that switches face / multi-face / phone monitoring on cannot start without the matching, running detector
+    if (optsRef.current.policy.cameraRequired && monitoringPlan(optsRef.current.policy).detector && !detector) throw new Error('The monitoring system is not ready. Return to the checks and press Retry.');
     let res;
     try {
       res = await proctoringApi.startSession(kind, examId, attemptId, precheck);

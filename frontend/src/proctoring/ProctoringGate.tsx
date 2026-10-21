@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, CheckCircle2, Loader2, Maximize2, ShieldCheck, XCircle, AlertTriangle, MonitorSmartphone, Info, RotateCw } from 'lucide-react';
 import { proctoringApi, errorMessage, PrecheckResult } from './api';
+import { monitoringPlan } from './plan';
 import { checkDeviceSupport, describeLoadFailure, Detector, DetectorLoadError, LoadProgress, loadDetector, openCamera, stopStream, waitForFrames } from './engine';
 import { ExamKind, ProctoringPolicy } from './types';
 
@@ -65,8 +66,10 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
   const abortRef = useRef<AbortController | null>(null);
 
   const cameraNeeded = policy.cameraRequired;
+  // only the models this exam's rules need are downloaded (and WebAssembly is required only when one is needed)
+  const plan = monitoringPlan(policy);
   const deviceBlocked = (policy.desktopRequired && device.mobile)
-    || (cameraNeeded && (!device.camera || !device.wasm))
+    || (cameraNeeded && !device.camera) || (plan.detector && !device.wasm)
     || (policy.fullscreenRequired && !device.fullscreen);
 
   useEffect(() => {
@@ -88,7 +91,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
     const ctl = new AbortController(); abortRef.current = ctl;
     const t0 = performance.now();
     setModels({ state: 'working', message: 'Preparing the monitoring system…', progress: null });
-    loadDetector({ phone: policy.phoneDetection, phoneConfidence: policy.phoneConfidence, signal: ctl.signal,
+    loadDetector({ face: plan.face, phone: plan.phone, phoneConfidence: policy.phoneConfidence, signal: ctl.signal,
       onProgress: (p) => { if (id === attemptRef.current) setModels((m) => (m.state === 'working' ? { ...m, progress: p } : m)); } })
       .then((d) => {
         if (id !== attemptRef.current) { try { d.close(); } catch { /* ignore */ } return; }
@@ -102,10 +105,10 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
         setModels({ state: 'fail', message: describeLoadFailure(e), progress: null });
       })
       .finally(() => { if (id === attemptRef.current) loadingRef.current = false; });
-  }, [policy.phoneDetection, policy.phoneConfidence, device.mobile]);
+  }, [plan.face, plan.phone, policy.phoneConfidence, device.mobile]);
 
   // start downloading as soon as the screen opens (needs no camera and no consent: they are static files)
-  useEffect(() => { if (cameraNeeded && !deviceBlocked) loadModels(); }, [cameraNeeded, deviceBlocked, loadModels]);
+  useEffect(() => { if (plan.detector && !deviceBlocked) loadModels(); }, [plan.detector, deviceBlocked, loadModels]);
 
   // release everything if the student leaves this screen without starting
   useEffect(() => () => {
@@ -138,7 +141,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
 
   // The separate face-check step was removed: the student switches the camera on, then starts. Face absence / other-person
   // monitoring continues DURING the exam (useProctoring), using the detector loaded here.
-  const ready = eligible.state === 'ok' && !deviceBlocked && consent && (!cameraNeeded || (camera.state === 'ok' && models.state === 'ok'));
+  const ready = eligible.state === 'ok' && !deviceBlocked && consent && (!cameraNeeded || camera.state === 'ok') && (!plan.detector || models.state === 'ok');
 
   const startSecureExam = async () => {
     if (!ready || starting || startingRef.current) return;
@@ -251,7 +254,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
               <StepRow state={deviceBlocked ? 'fail' : 'ok'} title="Device and browser" testId="check-device">
                 {policy.desktopRequired && device.mobile ? <span className="text-[#E1447A]">This exam must be taken on a laptop or desktop computer with a webcam. Please switch devices; if you cannot, contact your teacher or support for an alternative arrangement.</span>
                   : policy.fullscreenRequired && !device.fullscreen ? <span className="text-[#E1447A]">This browser does not support fullscreen exams (common on iPhone). Use Chrome, Edge or Firefox on a laptop or desktop.</span>
-                    : cameraNeeded && (!device.camera || !device.wasm) ? <span className="text-[#E1447A]">This browser cannot run camera monitoring. Use the latest Chrome, Edge or Firefox.</span>
+                    : cameraNeeded && (!device.camera || (plan.detector && !device.wasm)) ? <span className="text-[#E1447A]">This browser cannot run camera monitoring. Use the latest Chrome, Edge or Firefox.</span>
                       : 'Supported.'}
               </StepRow>
               {cameraNeeded && (
@@ -265,7 +268,12 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                   {!consent && camera.state === 'idle' && <span className="block">Tick the agreement first.</span>}
                 </StepRow>
               )}
-              {cameraNeeded && (
+              {cameraNeeded && !plan.detector && (
+                <StepRow state="ok" title="Monitoring system" testId="check-camera-ready">
+                  <span data-testid="monitoring-not-required">No extra download needed: this exam checks only your camera, fullscreen and tab switching.</span>
+                </StepRow>
+              )}
+              {cameraNeeded && plan.detector && (
                 <StepRow state={models.state} title="Monitoring system" testId="check-camera-ready">
                   {models.state === 'fail' ? <span className="text-[#E1447A]" data-testid="models-error">Monitoring system could not initialize. {models.message}</span>
                     : models.state === 'working' ? (
@@ -275,7 +283,7 @@ const ProctoringGate: React.FC<Props> = ({ kind, examId, examTitle, durationMinu
                           <span className="block" data-testid="models-progress">
                             {(models.progress.loadedBytes / 1048576).toFixed(1)}{models.progress.totalBytes ? ` of ${(models.progress.totalBytes / 1048576).toFixed(1)}` : ''} MB downloaded{models.progress.totalBytes ? ` (${Math.min(100, Math.round(100 * models.progress.loadedBytes / models.progress.totalBytes))}%)` : ''}
                           </span>)}
-                        <span className="block text-text-muted">About 20 MB the first time, then kept on this device. You can turn on the camera meanwhile.</span>
+                        <span className="block text-text-muted">About {plan.approxMb} MB the first time, then kept on this device. You can turn on the camera meanwhile.</span>
                       </span>)
                       : models.state === 'ok' ? <span data-testid="camera-ready-message">Monitoring system ready.</span> : 'Preparing…'}
                   {models.state === 'ok' && models.message && <span className="block text-text-muted">{models.message}</span>}
