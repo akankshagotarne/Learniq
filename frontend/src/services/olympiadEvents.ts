@@ -7,7 +7,24 @@ export interface OlympiadEventRow {
   registration: 'draft' | 'cancelled' | 'not_open' | 'open' | 'closed'; startDate: string | null; endDate: string | null; startDateIST: string; endDateIST: string;
   registrationOpensAt: string | null; registrationClosesAt: string | null; registrationOpensAtIST: string; registrationClosesAtIST: string;
   examCount: number; isLegacy: boolean; cancelReason: string; updatedAt: string | null;
-  students?: number; registrations?: number; submissions?: number; needsReview?: number; [k: string]: unknown;
+  examFee?: number | null; interviewFee?: number | null; totalFee?: number | null;
+  interviewOpensAt?: string | null; interviewClosesAt?: string | null; interviewOpensAtIST?: string; interviewClosesAtIST?: string;
+  resultsPublishAt?: string | null; resultsPublishAtIST?: string; paperSet?: string | null;
+  students?: number; registrations?: number; submissions?: number; needsReview?: number; interviewEligible?: number; [k: string]: unknown;
+}
+
+export interface PaperImportRow {
+  standard: number; found: number; expected: number; examExists: boolean; created?: boolean;
+  inserted: number; updated: number; unchanged: number; removed: number; duplicatesAvoided: number; imagesAssociated: number;
+  review: { question: number; issue: string }[]; warnings: { question: number; issue: string }[]; problems: string[];
+  locked: boolean; lockedReason: string | null; durationInPdf: number | null; durationNow: number | null; sourceIssues: string[];
+}
+export interface PaperImportReport {
+  dryRun: boolean; paperSet: string; event: { _id: string; name: string; state: string };
+  settings: { field: string; current: unknown; target: unknown; changed: boolean }[];
+  rows: PaperImportRow[];
+  summary: { standards: number; found: number; inserted: number; updated: number; unchanged: number; duplicatesAvoided: number; manualReview: number; sourceWarnings: number; imagesAssociated: number; examsToCreate: number; locked: number };
+  blocking: { standard: number; problems: string[] }[]; canApply: boolean; note?: string;
 }
 export interface EventOption { _id: string; name: string; examDate: string; examDateIST: string; status: EventStatus; state: string; standards: number[]; isLegacy: boolean }
 export interface CreateEventPayload {
@@ -35,7 +52,9 @@ export const eventsApi = {
   detail: async (id: string): Promise<{ event: OlympiadEventRow; exams: unknown[] }> => (await api.get(`/olympiad/admin/events/${id}`)).data,
   create: async (body: CreateEventPayload): Promise<{ event: OlympiadEventRow }> => (await api.post('/olympiad/admin/events', body)).data,
   update: async (id: string, body: Record<string, unknown>): Promise<{ event: OlympiadEventRow; changed: string[] }> => (await api.patch(`/olympiad/admin/events/${id}`, body)).data,
-  publish: async (id: string) => (await api.post(`/olympiad/admin/events/${id}/publish`)).data,
+  publish: async (id: string, acknowledgeReview = false) => (await api.post(`/olympiad/admin/events/${id}/publish`, acknowledgeReview ? { acknowledgeReview: true } : {})).data,
+  paperPreview: async (id: string): Promise<PaperImportReport> => (await api.get(`/olympiad/admin/events/${id}/paper-import`)).data,
+  paperApply: async (id: string, applyDurations = false): Promise<PaperImportReport> => (await api.post(`/olympiad/admin/events/${id}/paper-import`, { applyDurations })).data,
   unpublish: async (id: string) => (await api.post(`/olympiad/admin/events/${id}/unpublish`)).data,
   cancel: async (id: string, reason: string) => (await api.post(`/olympiad/admin/events/${id}/cancel`, { reason })).data,
   remove: async (id: string) => (await api.delete(`/olympiad/admin/events/${id}`)).data,

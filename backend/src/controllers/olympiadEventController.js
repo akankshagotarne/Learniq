@@ -58,7 +58,7 @@ const action = (fn, message) => handler(async (req, res) => {
   noStore(res);
   res.json({ success: true, message, ...data });
 });
-const publish = action((req) => svc.publishEvent(req.params.id, req.user), 'Event published. Students can now see it.');
+const publish = action((req) => svc.publishEvent(req.params.id, req.user, new Date(), { acknowledgeReview: !!(req.body && req.body.acknowledgeReview === true) }), 'Event published. Students can now see it.');
 const unpublish = action((req) => svc.unpublishEvent(req.params.id, req.user), 'Event moved back to draft.');
 const cancel = action((req) => svc.cancelEvent(req.params.id, req.body, req.user), 'Event cancelled. All records are kept; students can no longer register or start.');
 
@@ -69,4 +69,26 @@ const remove = handler(async (req, res) => {
   res.json({ success: true, message: 'Draft event deleted.', ...data });
 });
 
-module.exports = { list, options, migrationReport, detail, create, update, publish, unpublish, cancel, remove };
+// GET /api/olympiad/admin/events/:id/paper-import   (READ-ONLY dry run of the 24 Oct question-paper import; never writes)
+const paperPreview = handler(async (req, res) => {
+  const standards = req.query.standards ? String(req.query.standards).split(',').map((s) => s.trim()).filter(Boolean) : undefined;
+  const data = await require('../services/paperImport').plan(req.params.id, { standards });
+  noStore(res);
+  res.json({ success: true, ...data });
+});
+
+// POST /api/olympiad/admin/events/:id/paper-import   body: { standards?: number[], applyDurations?: boolean }  (idempotent apply)
+const paperApply = handler(async (req, res) => {
+  const b = req.body && typeof req.body === 'object' ? req.body : {};
+  const data = await require('../services/paperImport').apply(req.params.id, req.user, { standards: b.standards, applyDurations: b.applyDurations === true });
+  noStore(res);
+  res.json({ success: true, message: 'Question papers imported and event settings applied.', ...data });
+});
+
+// GET /api/olympiad/admin/events/paper-import/candidates  (events that may receive the import)
+const paperCandidates = handler(async (req, res) => {
+  noStore(res);
+  res.json({ success: true, events: await require('../services/paperImport').candidates() });
+});
+
+module.exports = { paperPreview, paperApply, paperCandidates, list, options, migrationReport, detail, create, update, publish, unpublish, cancel, remove };

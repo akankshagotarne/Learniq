@@ -18,20 +18,27 @@ interface Props {
   onStartInterview?: (exam: OlympiadExam) => void;
 }
 
+/** Opening time of the interview in IST ("9:00 AM"), from the backend instant; falls back to the original 9:00 AM. */
+const openTime = (iso?: string): string => {
+  if (!iso) return '9:00 AM';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '9:00 AM' : d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\bam\b/, 'AM').replace(/\bpm\b/, 'PM');
+};
+
 const VIA_TEXT: Record<UnlockVia, string> = {
-  PAYMENT: 'Unlocked with a ₹10 payment',
+  PAYMENT: 'Unlocked with an online payment',
   CREDIT: 'Unlocked with 1 credit',
   LEGACY_PACKAGE: 'Included in your earlier ₹20 package',
   OTHER: 'Unlocked by LearnIQ',
 };
 
 /**
- * The Teacher Interview card: a purchase of its own (₹10 or 1 credit), separate from the exam. Every state comes from the backend
+ * The Teacher Interview card: a purchase of its own (paid online or with 1 credit), separate from the exam. Every state comes from the backend
  * (exam.interviewUnlocked / interviewVia and the interview workflow) - unlocking never starts the interview.
  */
 const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance, unlocking, onUseCredit, onPay, interviewBusy, onStartInterview }) => {
   const unlocked = !!exam.interviewUnlocked || !!interview; // /interviews/mine only lists exams whose interview the backend has unlocked
-  const price = exam.prices ? exam.prices.INTERVIEW : 10;
+  const price = exam.prices ? exam.prices.INTERVIEW : 10; // the server always sends exam.prices; 10 is only a display fallback
   const examSubmitted = exam.state === 'completed';
 
   return (
@@ -121,7 +128,7 @@ const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance
                 <p className="mb-2 p-3 rounded-xl bg-[#6C63F2]/10 border border-[#6C63F2]/30 text-[11px] text-text-secondary" data-testid="interview-scheduled-note">
                   {interview.interviewWindow === 'closed'
                     ? 'The interview window has closed. New interview requests are no longer accepted.'
-                    : `Your teacher interview opens on ${interview.interviewOpensOn || '18 October 2026'} at 9:00 AM IST. Please check your WhatsApp group for your interview instructions.`}
+                    : `Your teacher interview opens on ${interview.interviewOpensOn || '18 October 2026'} at ${openTime(interview.interviewOpensAt)} IST. Please check your WhatsApp group for your interview instructions.`}
                 </p>
                 <button
                   type="button"
@@ -130,7 +137,7 @@ const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance
                   className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-surface-alt border border-border-subtle text-text-muted text-sm sm:text-xs font-semibold cursor-not-allowed text-center flex items-center justify-center gap-2"
                   data-testid="interview-scheduled"
                 >
-                  <Clock className="w-3.5 h-3.5" /> {interview.interviewWindow === 'closed' ? 'Interview Window Closed' : `Scheduled — ${interview.interviewOpensOn || '18 October 2026'}, 9:00 AM IST`}
+                  <Clock className="w-3.5 h-3.5" /> {interview.interviewWindow === 'closed' ? 'Interview Window Closed' : `Scheduled — ${interview.interviewOpensOn || '18 October 2026'}, ${openTime(interview.interviewOpensAt)} IST`}
                 </button>
               </>
             ) : (

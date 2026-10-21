@@ -94,7 +94,9 @@ const generate = handler(async (req, res) => {
     throw new ApiError(409, 'Your certificate is available after you submit the examination.', 'NOT_SUBMITTED');
   }
   if (!release.isReleased(exam)) {
-    throw new ApiError(403, 'Your certificates will be available after the official results are published on 18 October 2026 at 6:00 PM IST.', 'RESULT_NOT_PUBLISHED', { releaseAt: release.releaseInstant(exam) });
+    const at = release.releaseInstant(exam);
+    const when = at ? `${new Date(at).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'long', year: 'numeric' })} at ${new Date(at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\bam\b/, 'AM').replace(/\bpm\b/, 'PM')} IST` : '18 October 2026 at 6:00 PM IST';
+    throw new ApiError(403, `Your certificates will be available after the official results are published on ${when}.`, 'RESULT_NOT_PUBLISHED', { releaseAt: at });
   }
   // make sure the official result exists (idempotent, backend-only evaluation). Every submitted attempt is eligible at ANY score.
   attempt = await require('./olympiadController')._internals.ensureEvaluated(attempt);

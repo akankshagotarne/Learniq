@@ -12,6 +12,7 @@ import CertificateBanner from '../../components/olympiad/CertificateBanner';
 import { interviewApi, ScheduleInfo } from '../../services/interview';
 import InterviewScheduleBanner from '../../components/interview/InterviewScheduleBanner';
 import { formatDuration, formatISTDateTime } from '../../utils/olympiadFormat';
+import QuestionBody from '../../components/olympiad/QuestionBody';
 
 type Filter = 'ALL' | 'CORRECT' | 'INCORRECT' | 'NOT_ATTEMPTED';
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -266,8 +267,7 @@ const OlympiadResultPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-sm sm:text-base text-text-primary font-medium leading-relaxed whitespace-pre-wrap break-words">{item.questionText}</p>
-                  {item.image && <img src={item.image} alt={`Diagram for question ${item.questionNumber}`} className="mt-3 max-h-64 rounded-xl border border-border-subtle object-contain" />}
+                  <QuestionBody number={item.questionNumber} text={item.questionText} textMr={item.questionTextMr} visual={item.visual} image={item.image} size="md" />
 
                   <div className="mt-4 space-y-2">
                     {item.options.map((opt, i) => {

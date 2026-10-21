@@ -1,0 +1,1033 @@
+{
+ "standard": 8,
+ "source": "8th_Standard_LearnIQ_Test_2.pdf",
+ "title": "Class 8 Olympiad Practice Paper (Moderate Level)",
+ "bilingual": false,
+ "durationMinutes": 60,
+ "sections": [
+  {
+   "name": "Mathematics",
+   "to": 15,
+   "marks": 15,
+   "from": 1
+  },
+  {
+   "name": "Science",
+   "to": 30,
+   "marks": 15,
+   "from": 16
+  },
+  {
+   "name": "English",
+   "to": 40,
+   "marks": 10,
+   "from": 31
+  },
+  {
+   "name": "Social Science and Reasoning",
+   "to": 50,
+   "marks": 10,
+   "from": 41
+  },
+  {
+   "name": "Achievers / HOTS",
+   "to": 60,
+   "marks": 10,
+   "from": 51
+  }
+ ],
+ "questions": [
+  {
+   "n": 1,
+   "section": 0,
+   "text": "Find the value of (−3/4) + (5/6) − (1/12).",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "0",
+    "1/6",
+    "−1/6",
+    "1/12"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "LCM is 12. (−9 + 10 − 1)/12 = 0."
+  },
+  {
+   "n": 2,
+   "section": 0,
+   "text": "Solve for x: 3(x + 2) = 2x + 11",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "3x + 6 = 2x + 11, so x = 5."
+  },
+  {
+   "n": 3,
+   "section": 0,
+   "text": "Each exterior angle of a regular polygon is 40°. How many sides does it have?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "8",
+    "9",
+    "10",
+    "12"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "Number of sides = 360 ÷ 40 = 9."
+  },
+  {
+   "n": 4,
+   "section": 0,
+   "text": "Find the smallest number by which 180 must be multiplied to get a perfect square.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "2",
+    "3",
+    "5",
+    "10"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "180 = 2² × 3² × 5. The prime 5 is unpaired, so multiply by 5."
+  },
+  {
+   "n": 5,
+   "section": 0,
+   "text": "What is the smallest number by which 108 must be multiplied to get a perfect cube?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "3",
+    "2",
+    "4",
+    "6"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "108 = 2² × 3³. One more 2 is needed to make 2³ × 3³, so the answer is 2."
+  },
+  {
+   "n": 6,
+   "section": 0,
+   "text": "An article bought for ₹500 is sold for ₹575. Find the profit percent.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "10%",
+    "12%",
+    "15%",
+    "18%"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "Profit = 75, and 75/500 × 100 = 15%."
+  },
+  {
+   "n": 7,
+   "section": 0,
+   "text": "Using an identity, the value of (101)² is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "10201",
+    "10101",
+    "10021",
+    "10401"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "(100 + 1)² = 10000 + 200 + 1 = 10201."
+  },
+  {
+   "n": 8,
+   "section": 0,
+   "text": "Which of the following is a Pythagorean triplet?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "(5, 7, 9)",
+    "(6, 8, 10)",
+    "(7, 9, 11)",
+    "(8, 10, 13)"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "6² + 8² = 36 + 64 = 100 = 10²."
+  },
+  {
+   "n": 9,
+   "section": 0,
+   "text": "How many diagonals does a hexagon have?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "6",
+    "9",
+    "12",
+    "15"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "Diagonals = n(n − 3)/2 = 6 × 3/2 = 9."
+  },
+  {
+   "n": 10,
+   "section": 0,
+   "text": "Which of the following fractions is the smallest?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "2/3",
+    "3/4",
+    "5/6",
+    "7/12"
+   ],
+   "answer": 3,
+   "marks": 1,
+   "explanation": "In decimals: 0.667, 0.75, 0.833 and 0.583, so 7/12 is the smallest."
+  },
+  {
+   "n": 11,
+   "section": 0,
+   "text": "The perimeter of a square is 48 cm. Find its area.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "144 cm²",
+    "192 cm²",
+    "96 cm²",
+    "48 cm²"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "Side = 48 ÷ 4 = 12 cm, so area = 12 × 12 = 144 cm²."
+  },
+  {
+   "n": 12,
+   "section": 0,
+   "text": "Find the total surface area of a cuboid of length 10 cm, breadth 8 cm and height 5 cm.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "340 cm²",
+    "400 cm²",
+    "170 cm²",
+    "380 cm²"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "TSA = 2(lb + bh + hl) = 2(80 + 40 + 50) = 340 cm²."
+  },
+  {
+   "n": 13,
+   "section": 0,
+   "text": "Evaluate: (2/3)⁻³",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "8/27",
+    "27/8",
+    "−8/27",
+    "9/4"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "(2/3)⁻³ = (3/2)³ = 27/8."
+  },
+  {
+   "n": 14,
+   "section": 0,
+   "text": "The diagonals of a rhombus are 14 cm and 10 cm. Find its area.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "140 cm²",
+    "24 cm²",
+    "48 cm²",
+    "70 cm²"
+   ],
+   "answer": 3,
+   "marks": 1,
+   "explanation": "Area = ½ × d₁ × d₂ = ½ × 14 × 10 = 70 cm²."
+  },
+  {
+   "n": 15,
+   "section": 0,
+   "text": "Find the curved surface area of a cylinder of radius 7 cm and height 10 cm. (π = 22/7)",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "440 cm²",
+    "220 cm²",
+    "1540 cm²",
+    "880 cm²"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "CSA = 2πrh = 2 × 22/7 × 7 × 10 = 440 cm²."
+  },
+  {
+   "n": 16,
+   "section": 1,
+   "text": "Which of the following is a thermosetting plastic?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Polythene",
+    "PVC",
+    "Bakelite",
+    "Nylon"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 17,
+   "section": 1,
+   "text": "Which of the following is a Rabi crop?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Wheat",
+    "Paddy",
+    "Maize",
+    "Cotton"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 18,
+   "section": 1,
+   "text": "Which microorganism converts milk into curd?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Rhizobium",
+    "Penicillium",
+    "Yeast",
+    "Lactobacillus"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 19,
+   "section": 1,
+   "text": "Which metal is stored in kerosene because it reacts vigorously with air and water?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Sodium",
+    "Iron",
+    "Copper",
+    "Zinc"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 20,
+   "section": 1,
+   "text": "The slow conversion of dead vegetation into coal is called:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Fermentation",
+    "Carbonisation",
+    "Combustion",
+    "Sublimation"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 21,
+   "section": 1,
+   "text": "After fertilisation, which part of the flower develops into the fruit?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Ovule",
+    "Stigma",
+    "Ovary",
+    "Anther"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 22,
+   "section": 1,
+   "text": "Which hormone, secreted by the pancreas, controls blood sugar level?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Thyroxine",
+    "Insulin",
+    "Adrenaline",
+    "Oestrogen"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 23,
+   "section": 1,
+   "text": "A force of 200 N acts on an area of 0.5 m². The pressure exerted is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "100 Pa",
+    "200 Pa",
+    "4000 Pa",
+    "400 Pa"
+   ],
+   "answer": 3,
+   "marks": 1,
+   "explanation": "Pressure = Force ÷ Area = 200 ÷ 0.5 = 400 Pa."
+  },
+  {
+   "n": 24,
+   "section": 1,
+   "text": "Sound cannot travel through:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Vacuum",
+    "Water",
+    "Steel",
+    "Air"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 25,
+   "section": 1,
+   "text": "The pitch of a sound depends on its:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Amplitude",
+    "Loudness",
+    "Frequency",
+    "Speed"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 26,
+   "section": 1,
+   "text": "Which of the following liquids conducts electricity?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Distilled water",
+    "Sugar solution",
+    "Vegetable oil",
+    "Lemon juice"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 27,
+   "section": 1,
+   "text": "The image formed by a plane mirror is:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Virtual and erect",
+    "Real and inverted",
+    "Real and erect",
+    "Virtual and inverted"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 28,
+   "section": 1,
+   "text": "A light year is a unit of:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Time",
+    "Distance",
+    "Speed",
+    "Brightness"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 29,
+   "section": 1,
+   "text": "Which of the following is biodegradable?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Plastic bag",
+    "Vegetable peels",
+    "Glass bottle",
+    "Aluminium can"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 30,
+   "section": 1,
+   "text": "Which blood cells help the body fight infections?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Red blood cells",
+    "Platelets",
+    "White blood cells",
+    "Plasma"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 31,
+   "section": 2,
+   "text": "Choose the synonym of ABUNDANT:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Plentiful",
+    "Scarce",
+    "Tiny",
+    "Costly"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 32,
+   "section": 2,
+   "text": "Choose the antonym of GENEROUS:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Kind",
+    "Noble",
+    "Selfish",
+    "Wealthy"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 33,
+   "section": 2,
+   "text": "Fill in the blank: She ________ to school every day.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "go",
+    "goes",
+    "going",
+    "gone"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 34,
+   "section": 2,
+   "text": "Change to indirect speech: She said, \"I am tired.\"",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "She said that she is tired.",
+    "She said that she was tired.",
+    "She said that I was tired.",
+    "She said she has been tired."
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 35,
+   "section": 2,
+   "text": "What does the idiom \"a piece of cake\" mean?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "A slice of dessert",
+    "Something very easy",
+    "A small reward",
+    "A birthday gift"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 36,
+   "section": 2,
+   "text": "Change to passive voice: The chef cooked the meal.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "The meal was cooked by the chef.",
+    "The meal is cooked by the chef.",
+    "The chef was cooked by the meal.",
+    "The meal has cooked by the chef."
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 37,
+   "section": 2,
+   "text": "The fear of closed spaces is called:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Acrophobia",
+    "Hydrophobia",
+    "Claustrophobia",
+    "Xenophobia"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 38,
+   "section": 2,
+   "text": "Choose the correct spelling:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Accomodation",
+    "Acommodation",
+    "Accommodation",
+    "Accomodasion"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 39,
+   "section": 2,
+   "text": "Fill in the blank: He was tired, ________ he kept working.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "because",
+    "or",
+    "but",
+    "so"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 40,
+   "section": 2,
+   "text": "Fill in the blank: He is ________ honest man.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "a",
+    "an",
+    "the",
+    "no article"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 41,
+   "section": 3,
+   "text": "Who led the British forces in the Battle of Plassey (1757)?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Robert Clive",
+    "Lord Dalhousie",
+    "Warren Hastings",
+    "Lord Curzon"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 42,
+   "section": 3,
+   "text": "The Indian Constitution came into force on:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "15 August 1947",
+    "26 November 1949",
+    "26 January 1950",
+    "2 October 1950"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 43,
+   "section": 3,
+   "text": "Which Article of the Constitution guarantees free and compulsory education to children aged 6 to 14 years?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Article 14",
+    "Article 21A",
+    "Article 24",
+    "Article 32"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 44,
+   "section": 3,
+   "text": "The Revolt of 1857 began at:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Delhi",
+    "Kanpur",
+    "Meerut",
+    "Jhansi"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 45,
+   "section": 3,
+   "text": "Find the next letter in the series: A, C, F, J, ?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "N",
+    "O",
+    "P",
+    "Q"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "Differences between letter positions are +2, +3, +4, +5. A(1), C(3), F(6), J(10), next is 15 = O."
+  },
+  {
+   "n": 46,
+   "section": 3,
+   "text": "If TABLE is coded as 20-1-2-12-5, how is CHAIR coded?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "3-8-1-9-18",
+    "3-8-1-18-9",
+    "3-7-1-9-18",
+    "4-8-1-9-18"
+   ],
+   "answer": 0,
+   "marks": 1,
+   "explanation": "Each letter is replaced by its position in the alphabet: C=3, H=8, A=1, I=9, R=18."
+  },
+  {
+   "n": 47,
+   "section": 3,
+   "text": "Find the odd one out: 25, 36, 48, 49",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "25",
+    "36",
+    "48",
+    "49"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "25, 36 and 49 are perfect squares. 48 is not."
+  },
+  {
+   "n": 48,
+   "section": 3,
+   "text": "If the 5th of a month is a Monday, what day of the week is the 20th of that month?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Sunday"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "20th is 15 days after the 5th. 15 = 2 weeks + 1 day, so Monday + 1 = Tuesday."
+  },
+  {
+   "n": 49,
+   "section": 3,
+   "text": "Pointing to a man, Meera says, \"He is the son of my mother's only brother.\" How is the man related to Meera?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Brother",
+    "Uncle",
+    "Nephew",
+    "Cousin"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 50,
+   "section": 3,
+   "text": "Which soil is most suitable for growing cotton?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Alluvial soil",
+    "Black soil",
+    "Red soil",
+    "Laterite soil"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 51,
+   "section": 4,
+   "text": "If 2x+1 = 32, find the value of x.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "3",
+    "5",
+    "4",
+    "6"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "2x+1 = 25, so x + 1 = 5 and x = 4."
+  },
+  {
+   "n": 52,
+   "section": 4,
+   "text": "Find the amount on ₹6,000 for 3 years at 8% per annum simple interest.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "₹7,240",
+    "₹7,440",
+    "₹7,640",
+    "₹7,200"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "SI = 6000 × 8 × 3 / 100 = 1440, so amount = 6000 + 1440 = ₹7,440."
+  },
+  {
+   "n": 53,
+   "section": 4,
+   "text": "A room is 6 m long, 5 m wide and 3 m high. Find the total area of its four walls.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "90 m²",
+    "66 m²",
+    "60 m²",
+    "72 m²"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "Area of four walls = 2(l + b) × h = 2 × 11 × 3 = 66 m²."
+  },
+  {
+   "n": 54,
+   "section": 4,
+   "text": "Which of the following is a chemical change?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Melting of ice",
+    "Dissolving sugar in water",
+    "Boiling of water",
+    "Rusting of iron"
+   ],
+   "answer": 3,
+   "marks": 1
+  },
+  {
+   "n": 55,
+   "section": 4,
+   "text": "A fair die is thrown once. What is the probability of getting a prime number?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "1/3",
+    "1/6",
+    "2/3",
+    "1/2"
+   ],
+   "answer": 3,
+   "marks": 1,
+   "explanation": "Primes on a die are 2, 3 and 5. Probability = 3/6 = 1/2."
+  },
+  {
+   "n": 56,
+   "section": 4,
+   "text": "The mean of 6, 8, 10, 12 and x is 10. Find the value of x.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "12",
+    "15",
+    "14",
+    "16"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "Sum = 5 × 10 = 50. 6 + 8 + 10 + 12 = 36, so x = 14."
+  },
+  {
+   "n": 57,
+   "section": 4,
+   "text": "A father's age is 3 times his son's age. After 12 years, the father will be twice as old as the son. Find the son's present age.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "10",
+    "14",
+    "15",
+    "12"
+   ],
+   "answer": 3,
+   "marks": 1,
+   "explanation": "Let son = x, father = 3x. 3x + 12 = 2(x + 12), so x = 12."
+  },
+  {
+   "n": 58,
+   "section": 4,
+   "text": "Choose the correct food chain:",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "Frog → Grass → Snake → Grasshopper",
+    "Grass → Grasshopper → Frog → Snake",
+    "Snake → Frog → Grasshopper → Grass",
+    "Grasshopper → Grass → Snake → Frog"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 59,
+   "section": 4,
+   "text": "A number is increased by 20% and the result is then decreased by 20%. What is the net change?",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "No change",
+    "4% decrease",
+    "4% increase",
+    "2% decrease"
+   ],
+   "answer": 1,
+   "marks": 1,
+   "explanation": "1.2 × 0.8 = 0.96, so the number falls by 4%."
+  },
+  {
+   "n": 60,
+   "section": 4,
+   "text": "The HCF of two numbers is 6 and their LCM is 36. If one number is 12, find the other number.",
+   "textMr": null,
+   "visual": null,
+   "image": null,
+   "options": [
+    "12",
+    "24",
+    "18",
+    "36"
+   ],
+   "answer": 2,
+   "marks": 1,
+   "explanation": "HCF × LCM = product of the numbers. 6 × 36 = 216, and 216 ÷ 12 = 18."
+  }
+ ],
+ "review": [],
+ "sourceIssues": [],
+ "totalQuestions": 60,
+ "totalMarks": 60
+}

@@ -46,6 +46,8 @@ export interface OlympiadCompletion {
   submittedAt: string;
   interviewDate: string;
   interviewOpensAt: string;
+  interviewClosesAt?: string;
+  resultsReleaseAt?: string | null;
   interviewSelected: boolean;
   resultsReleased: boolean;
 }
@@ -226,7 +228,13 @@ export interface OlympiadQuestion {
   _id: string;
   questionNumber: number;
   subject?: string;
+  section?: string;
+  sectionMr?: string;
   questionText: string;
+  /** Marathi wording of the same question (bilingual Standards 1-3) */
+  questionTextMr?: string;
+  /** a picture drawn with emoji / symbols, kept as text */
+  visual?: string;
   options: string[];
   marks: number;
   image?: string;
@@ -253,6 +261,8 @@ export interface OlympiadReviewItem {
   questionNumber: number;
   subject?: string;
   questionText: string;
+  questionTextMr?: string;
+  visual?: string;
   options: string[];
   image?: string;
   marks: number;

@@ -72,7 +72,7 @@ const setupInterviewSockets = (io) => {
         if (!svc.isValidId(interviewId)) return reply({ ok: false, code: 'NOT_FOUND', message: 'Interview not found.' });
         const iv = await TeacherInterview.findById(interviewId);
         if (!iv) return reply({ ok: false, code: 'NOT_FOUND', message: 'Interview not found.' });
-        const auth = svc.authorizeRoom(iv, user);
+        const auth = svc.authorizeRoom(iv, user, await require('./eventSchedule').windowForExam(iv.exam));
         if (!auth.ok) return reply({ ok: false, code: auth.code, message: auth.message });
 
         if (current() && current() !== svc.oid(iv._id)) await leaveRoom();

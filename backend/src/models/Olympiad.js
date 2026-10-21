@@ -15,6 +15,7 @@ const { STANDARD_OTHERS } = require('../constants/standards');
 // ──────────────────────────────────────────────
 const sectionSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  nameMr: { type: String, trim: true },        // Marathi section title where the source paper has one (bilingual Std 1-3 papers)
   questionCount: { type: Number, default: 0 },
   marks: { type: Number, default: 0 },
 }, { _id: false });
@@ -88,6 +89,16 @@ const olympiadExamSchema = new mongoose.Schema({
   resultsPublishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   resultsAudit: { type: [new mongoose.Schema({ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, action: String }, { _id: false })], default: [] },
 
+  // Imported question paper (services/paperImport.js): which source it came from and what still needs a human decision.
+  // A non-empty `importReview` blocks publishing the event (the paper is incomplete or unclear in its source).
+  paperImport: {
+    set: { type: String, trim: true },          // e.g. 'oct24-2026'
+    source: { type: String, trim: true },       // source file name
+    importedAt: { type: Date },
+    questionCount: { type: Number },
+    review: { type: [new mongoose.Schema({ question: Number, issue: String }, { _id: false })], default: undefined },
+  },
+
   // Online proctoring rules (admin-configured; off until enabled) - see services/proctoring/policy.js
   proctoring: { type: proctoringPolicySchema, default: () => ({}) },
 }, { timestamps: true });
@@ -100,6 +111,14 @@ const olympiadQuestionSchema = new mongoose.Schema({
   questionNumber: { type: Number, required: true },
   subject: { type: String, trim: true },
   questionText: { type: String, required: true, trim: true },
+  // Bilingual papers (Std 1-3): the Marathi wording of the same question, shown under the English text. Absent when the source has none.
+  questionTextMr: { type: String, trim: true },
+  section: { type: String, trim: true },        // section title (English) as printed in the source paper
+  sectionMr: { type: String, trim: true },
+  // The picture the question refers to when the source draws it with emoji / symbols (kept as text so the exact count and order survive).
+  visual: { type: String, trim: true },
+  // Stable identity of an imported question ('<paper set>:std<N>:q<n>'): re-running an import updates in place and never duplicates.
+  sourceRef: { type: String, trim: true },
   options: {
     type: [{ type: String, trim: true }],
     validate: [(v) => v.length >= 2 && v.length <= 6, 'A question needs between 2 and 6 options.'],
@@ -111,6 +130,7 @@ const olympiadQuestionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 olympiadQuestionSchema.index({ exam: 1, questionNumber: 1 }, { unique: true });
+olympiadQuestionSchema.index({ exam: 1, sourceRef: 1 }, { unique: true, sparse: true });
 
 // ──────────────────────────────────────────────
 // OlympiadPayment

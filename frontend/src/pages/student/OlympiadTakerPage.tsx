@@ -16,6 +16,7 @@ import ProctoringPanel from '../../proctoring/ProctoringPanel';
 import { useProctoring } from '../../proctoring/useProctoring';
 import { DEFAULT_PROCTORING_POLICY, ProctoringPolicy, SessionState } from '../../proctoring/types';
 import { OlympiadExam } from '../../types/olympiad';
+import QuestionBody, { DEVANAGARI_FONT } from '../../components/olympiad/QuestionBody';
 
 type SaveState = 'saved' | 'saving' | 'error';
 interface Pending { update: AnswerUpdate; v: number }
@@ -498,18 +499,13 @@ const OlympiadTakerPage: React.FC = () => {
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#6C63F2]/10 text-[#6C63F2]">
                 Question {current + 1} of {questions.length}
               </span>
-              {q.subject && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-surface-alt border border-border-subtle text-text-secondary">{q.subject}</span>}
+              {q.subject && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-surface-alt border border-border-subtle text-text-secondary">{q.subject}{q.sectionMr && <span lang="mr" style={{ fontFamily: DEVANAGARI_FONT }}> · {q.sectionMr}</span>}</span>}
               {resp.marked && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#FFC24B]/15 text-[#B7791F] dark:text-[#FFC24B]">Marked for review</span>}
             </div>
             <span className="text-[11px] text-text-muted whitespace-nowrap">{q.marks} {q.marks === 1 ? 'mark' : 'marks'}</span>
           </div>
 
-          <p className="text-base sm:text-lg text-text-primary font-medium leading-relaxed whitespace-pre-wrap break-words" data-testid="question-text">
-            {q.questionText}
-          </p>
-          {q.image && (
-            <img src={q.image} alt={`Diagram for question ${q.questionNumber}`} className="mt-4 max-w-full max-h-72 rounded-xl border border-border-subtle object-contain self-start" />
-          )}
+          <QuestionBody number={q.questionNumber} text={q.questionText} textMr={q.questionTextMr} visual={q.visual} image={q.image} />
 
           <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Answer options">
             {q.options.map((opt, i) => {

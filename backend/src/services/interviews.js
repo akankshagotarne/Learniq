@@ -15,6 +15,7 @@ const {
 } = require('../models/TeacherInterview');
 const { CRITERIA, MAX_TOTAL, KEYS } = require('../config/interviewCriteria');
 const { INTERVIEW_OPENS_AT, INTERVIEW_CLOSES_AT, INTERVIEW_RESULTS_AT, istDate, istTime } = require('../config/schedule');
+const eventSchedule = require('./eventSchedule');
 
 class InterviewError extends Error {
   constructor(status, message, code, extra) {
@@ -41,13 +42,14 @@ const note = (by, role, action, text) => ({ at: new Date(), by: by || undefined,
 const emitChanged = (iv) => { try { events.emit('changed', { interview: plain(iv) }); } catch (_) { /* listeners must never break a request */ } };
 
 // ── interview day (server clock, IST): opens inclusive, closes exclusive ───────────────────────────────────────
-const interviewWindow = (now = new Date()) => (now.getTime() < INTERVIEW_OPENS_AT.getTime() ? 'upcoming' : now.getTime() >= INTERVIEW_CLOSES_AT.getTime() ? 'closed' : 'open');
-const interviewOpen = (now = new Date()) => interviewWindow(now) === 'open';
-const interviewOpensOn = () => istDate(INTERVIEW_OPENS_AT);
-const opensAtText = () => `${interviewOpensOn()} at ${istTime(INTERVIEW_OPENS_AT)} IST`;
-const notOpenError = (status = 403, now = new Date()) => (interviewWindow(now) === 'closed'
-  ? new InterviewError(status, `The interview window closed on ${interviewOpensOn()} at ${istTime(INTERVIEW_CLOSES_AT)} IST. New interview requests are no longer accepted.`, 'INTERVIEW_CLOSED', { closedAt: INTERVIEW_CLOSES_AT.toISOString() })
-  : new InterviewError(status, `The interview opens on ${opensAtText()}. You can request it then.`, 'INTERVIEW_NOT_OPEN', { opensAt: INTERVIEW_OPENS_AT.toISOString() }));
+// `win` is the window of the exam's EVENT (services/eventSchedule.js); without one the original global (17/18 Oct) calendar applies.
+const interviewWindow = (now = new Date(), win = eventSchedule.GLOBAL) => (now.getTime() < win.opensAt.getTime() ? 'upcoming' : now.getTime() >= win.closesAt.getTime() ? 'closed' : 'open');
+const interviewOpen = (now = new Date(), win = eventSchedule.GLOBAL) => interviewWindow(now, win) === 'open';
+const interviewOpensOn = (win = eventSchedule.GLOBAL) => istDate(win.opensAt);
+const opensAtText = (win = eventSchedule.GLOBAL) => `${interviewOpensOn(win)} at ${istTime(win.opensAt)} IST`;
+const notOpenError = (status = 403, now = new Date(), win = eventSchedule.GLOBAL) => (interviewWindow(now, win) === 'closed'
+  ? new InterviewError(status, `The interview window closed on ${istDate(win.closesAt)} at ${istTime(win.closesAt)} IST. New interview requests are no longer accepted.`, 'INTERVIEW_CLOSED', { closedAt: win.closesAt.toISOString() })
+  : new InterviewError(status, `The interview opens on ${opensAtText(win)}. You can request it then.`, 'INTERVIEW_NOT_OPEN', { opensAt: win.opensAt.toISOString() }));
 
 // ── settings ─────────────────────────────────────────────────────────────────────────────────
 const getSettings = async () => {
@@ -60,11 +62,11 @@ const getSettings = async () => {
  *   published          -> an administrator released them now (earlier, or later than the schedule)
  *   held               -> an administrator is holding them back, even after the announcement time
  */
-const resultsReleased = (settings, now = new Date()) => {
+const resultsReleased = (settings, now = new Date(), announceAt = INTERVIEW_RESULTS_AT) => {
   const mode = (settings && settings.resultsMode) || 'schedule';
   if (mode === 'published') return true;
   if (mode === 'held') return false;
-  return now.getTime() >= INTERVIEW_RESULTS_AT.getTime();
+  return now.getTime() >= new Date(announceAt).getTime();
 };
 const RESULT_MODES = ['schedule', 'published', 'held'];
 const setResultsMode = async (admin, mode) => {
@@ -102,7 +104,7 @@ const checkEligibility = async (studentId, examId) => {
   // exception that includes it. Exam access alone never unlocks it (and the reverse).
   const ent = await examAccess.interviewEntitlementFor(studentId, exam._id);
   const payment = ent.payment || (ent.grant ? { _id: undefined, grant: ent.grant } : null);
-  if (!payment) return { eligible: false, code: 'NOT_PAID', message: 'Unlock the interview (₹10 or 1 credit) to attend it.', exam };
+  if (!payment) return { eligible: false, code: 'NOT_PAID', message: `Unlock the interview (₹${require('../config/olympiadPricing').priceFor('INTERVIEW', exam)} or 1 credit) to attend it.`, exam };
   const attempt = await OlympiadAttempt.findOne({ student: studentId, exam: exam._id });
   if (!attempt || attempt.status !== 'COMPLETED' || !attempt.submittedAt) {
     return { eligible: false, code: 'NOT_SUBMITTED', message: 'Submit your Olympiad exam to unlock the interview.', exam, payment, attempt };
@@ -197,7 +199,8 @@ const transition = (filter, set, auditEntry, extraUnset) => TeacherInterview.fin
 // ── student ──────────────────────────────────────────────────────────────────────────────────
 const requestInterview = async (student, examId) => {
   const eligibility = await requireEligible(student._id, examId); // paid / authorised AND submitted first ...
-  if (!interviewOpen()) throw notOpenError(); // ... then the interview window (9 AM-7 PM IST): not before, not at/after the close
+  const win = await eventSchedule.windowForExam(eligibility.exam);
+  if (!interviewOpen(new Date(), win)) throw notOpenError(403, new Date(), win); // ... then the EVENT's interview window: not before, not at/after the close
   const { interview, created } = await findOrCreateOpen({ studentId: student._id, examId: eligibility.exam._id, eligibility, requestedBy: 'student', actor: student });
   return { interview, created };
 };
@@ -206,7 +209,8 @@ const studentJoinRequest = async (student, id) => {
   const iv = await load(id);
   if (!same(iv.student, student._id)) throw new InterviewError(403, 'This is not your interview.', 'FORBIDDEN');
   if (iv.status === 'WAITING_FOR_APPROVAL') return iv; // idempotent
-  if (interviewWindow() === 'closed') throw notOpenError(409); // a new start after the close is refused
+  const win = await eventSchedule.windowForExam(iv.exam);
+  if (interviewWindow(new Date(), win) === 'closed') throw notOpenError(409, new Date(), win); // a new start after the close is refused
   const next = await transition(
     { _id: iv._id, student: student._id, status: 'ASSIGNED' },
     { status: 'WAITING_FOR_APPROVAL', joinRequestedAt: new Date(), ...flagsFor('WAITING_FOR_APPROVAL') },
@@ -240,7 +244,8 @@ const teacherApprove = async (teacher, id) => {
   const iv = await load(id);
   assertAssignedTeacher(iv, teacher);
   if (iv.status === 'APPROVED') return iv;
-  if (interviewWindow() === 'closed') throw notOpenError(409); // approving a waiting student is a new start: refused once the window has closed
+  const win = await eventSchedule.windowForExam(iv.exam);
+  if (interviewWindow(new Date(), win) === 'closed') throw notOpenError(409, new Date(), win); // approving a waiting student is a new start: refused once the window has closed
   const next = await transition(
     { _id: iv._id, teacher: teacher._id, status: 'WAITING_FOR_APPROVAL', requestedBy: { $ne: 'teacher' } },
     { status: 'APPROVED', approvedAt: new Date(), ...flagsFor('APPROVED') },
@@ -305,7 +310,8 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
 const teacherAccept = async (teacher, id) => {
   const iv = await load(id);
   if (!isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR(); // a record the student never requested can not be accepted
-  if (!interviewOpen()) throw notOpenError(409); // accepting is a NEW start: only inside the window
+  const win = await eventSchedule.windowForExam(iv.exam);
+  if (!interviewOpen(new Date(), win)) throw notOpenError(409, new Date(), win); // accepting is a NEW start: only inside the window
   if (same(iv.teacher, teacher._id)) { // my own interview: accepting again is harmless
     if (iv.status === 'WAITING_FOR_APPROVAL') return teacherApprove(teacher, id);
     if (ACTIVE.includes(iv.status)) return iv;
@@ -535,13 +541,21 @@ const studentResults = async (student) => {
   const examById = new Map(exams.map((e) => [oid(e._id), e]));
   const teacherById = new Map(teachers.map((t) => [oid(t._id), t]));
   const ivById = new Map(ivs.map((i) => [oid(i._id), i]));
-  const released = resultsReleased(await getSettings());
+  const settings = await getSettings();
+  const nowT = new Date();
+  // every exam has its OWN announcement time (its event's result release); the original event keeps the global 18 Oct one
+  const announceByExam = new Map();
+  for (const e of exams) announceByExam.set(oid(e._id), (await eventSchedule.windowForExam(e)).announceAt);
+  const releasedFor = (iv) => resultsReleased(settings, nowT, announceByExam.get(oid(iv.exam)) || INTERVIEW_RESULTS_AT);
   const finished = evals.map((ev) => ({ ev, iv: ivById.get(oid(ev.interview)) })).filter(({ iv }) => iv && iv.status === 'COMPLETED');
   // before the official release the student learns only THAT the interview is finished - no marks, remarks or selection
-  const awaiting = released ? [] : finished.map(({ iv }) => { const e = examById.get(oid(iv.exam)); return { interviewId: oid(iv._id), exam: e ? { _id: oid(e._id), title: e.title } : null }; });
-  const results = (released ? evals : [])
+  const awaitingRows = finished.filter(({ iv }) => !releasedFor(iv));
+  const awaiting = awaitingRows.map(({ iv }) => { const e = examById.get(oid(iv.exam)); return { interviewId: oid(iv._id), exam: e ? { _id: oid(e._id), title: e.title } : null }; });
+  const released = awaiting.length === 0;
+  const nextAnnounce = awaitingRows.map(({ iv }) => new Date(announceByExam.get(oid(iv.exam)) || INTERVIEW_RESULTS_AT)).sort((a, b) => a - b)[0] || INTERVIEW_RESULTS_AT;
+  const results = evals
     .map((ev) => ({ ev, iv: ivById.get(oid(ev.interview)) }))
-    .filter(({ iv }) => iv && iv.status === 'COMPLETED')
+    .filter(({ iv }) => iv && iv.status === 'COMPLETED' && releasedFor(iv))
     .sort((a, b) => new Date(b.ev.submittedAt) - new Date(a.ev.submittedAt))
     .map(({ ev, iv }) => {
       const e = examById.get(oid(iv.exam)); const t = iv.teacher ? teacherById.get(oid(iv.teacher)) : null;
@@ -556,7 +570,7 @@ const studentResults = async (student) => {
     const e = examById.get(oid(i.exam));
     return { interviewId: oid(i._id), exam: e ? { _id: oid(e._id), title: e.title } : null, message: 'Your interview evaluation has not been submitted yet.' };
   });
-  return { released, announceAt: INTERVIEW_RESULTS_AT.toISOString(), announcePassed: Date.now() >= INTERVIEW_RESULTS_AT.getTime(), announceText: `${istDate(INTERVIEW_RESULTS_AT)}, ${istTime(INTERVIEW_RESULTS_AT)} IST`, awaiting, results, pending, criteria: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max })), maxMarks: MAX_TOTAL };
+  return { released, announceAt: nextAnnounce.toISOString(), announcePassed: Date.now() >= nextAnnounce.getTime(), announceText: `${istDate(nextAnnounce)}, ${istTime(nextAnnounce)} IST`, awaiting, results, pending, criteria: CRITERIA.map((c) => ({ key: c.key, label: c.label, max: c.max })), maxMarks: MAX_TOTAL };
 };
 
 /** student / assigned teacher / admin. Students may cancel only before the teacher approves them. */
@@ -608,12 +622,12 @@ const roleIn = (iv, user) => {
 };
 
 /** May this user use the media room of this interview right now? (the socket layer calls the same function) */
-const authorizeRoom = (iv, user) => {
+const authorizeRoom = (iv, user, win = eventSchedule.GLOBAL) => {
   const role = roleIn(iv, user);
   if (!role) return { ok: false, code: 'FORBIDDEN', message: 'You are not a participant of this interview.' };
   if (!isGenuineRequest(iv)) return { ok: false, code: 'NO_STUDENT_REQUEST', message: 'The student has not requested this interview.' };
   // before the opening nobody enters; an interview approved inside the window may finish after the close (its own lifecycle)
-  if (interviewWindow() === 'upcoming') return { ok: false, code: 'INTERVIEW_NOT_OPEN', message: `The interview room opens on ${opensAtText()}.` };
+  if (interviewWindow(new Date(), win) === 'upcoming') return { ok: false, code: 'INTERVIEW_NOT_OPEN', message: `The interview room opens on ${opensAtText(win)}.` };
   // the room opens only AFTER the request was accepted/approved (APPROVED and later) - for the teacher exactly as for the student
   if (role === 'teacher' && !ROOM_STATUSES.includes(iv.status)) return { ok: false, code: 'NOT_APPROVED', message: 'Accept the student\'s request before entering the room.' };
   if (role === 'student' && !ROOM_STATUSES.includes(iv.status)) {
@@ -637,7 +651,7 @@ const iceServers = () => {
 
 const roomAccess = async (user, id) => {
   const iv = await load(id);
-  const auth = authorizeRoom(iv, user);
+  const auth = authorizeRoom(iv, user, await eventSchedule.windowForExam(iv.exam));
   if (!auth.ok) throw new InterviewError(['FORBIDDEN', 'NO_STUDENT_REQUEST'].includes(auth.code) ? 403 : 409, auth.message, auth.code);
   return { interview: iv, role: auth.role, iceServers: iceServers() };
 };
@@ -897,8 +911,8 @@ const workflowOf = (eligible, iv, evaluation) => {
  * What the STUDENT may see of the workflow: the marks / evaluation summary only once the interview results are released;
  * before that a finished interview exposes just the completion state and the announcement time.
  */
-const studentWorkflow = (wf, released) => {
-  const out = { ...wf, resultsReleased: released, resultsAnnounceAt: INTERVIEW_RESULTS_AT.toISOString(), announcePassed: Date.now() >= INTERVIEW_RESULTS_AT.getTime(), resultsAnnounceText: `${istDate(INTERVIEW_RESULTS_AT)}, ${istTime(INTERVIEW_RESULTS_AT)} IST` };
+const studentWorkflow = (wf, released, announceAt = INTERVIEW_RESULTS_AT) => {
+  const out = { ...wf, resultsReleased: released, resultsAnnounceAt: new Date(announceAt).toISOString(), announcePassed: Date.now() >= new Date(announceAt).getTime(), resultsAnnounceText: `${istDate(announceAt)}, ${istTime(announceAt)} IST` };
   if (!released) out.evaluation = null;
   return out;
 };
@@ -913,7 +927,7 @@ const studentOverview = async (student) => {
   const payments = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
   const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
   const settings = await getSettings();
-  const released = resultsReleased(settings);
+  const released = resultsReleased(settings);   // the ORIGINAL event's announcement; each exam below uses its own event's
   const byExam = {};
   const sched = require('./interviewSchedule');
   const now = new Date();
@@ -923,15 +937,17 @@ const studentOverview = async (student) => {
     const sum = summaryMap.get(`${oid(student._id)}:${oid(p.exam)}`) || null;
     const own = interviews.filter((i) => same(i.exam, p.exam)).sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
     const iv = own.find((i) => i.isOpen) || own[0] || null;
+    const win = await eventSchedule.windowForExam(p.exam);
+    const releasedHere = resultsReleased(settings, now, win.announceAt);
     byExam[oid(p.exam)] = {
       eligible: e.eligible,
       locked: !e.eligible,
       code: e.eligible ? null : e.code,
       message: e.eligible ? null : e.message,
       interview: iv ? view(iv) : null,
-      interviewOpen: interviewOpen(now), interviewWindow: interviewWindow(now), interviewOpensOn: interviewOpensOn(), interviewOpensAt: INTERVIEW_OPENS_AT.toISOString(), interviewClosesAt: INTERVIEW_CLOSES_AT.toISOString(),
+      interviewOpen: interviewOpen(now, win), interviewWindow: interviewWindow(now, win), interviewOpensOn: interviewOpensOn(win), interviewOpensAt: win.opensAt.toISOString(), interviewClosesAt: win.closesAt.toISOString(),
       schedule: { summary: sum, ...sched.messageFor(sum, now) },
-      ...studentWorkflow(workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null), released),
+      ...studentWorkflow(workflowOf(e.eligible, iv, iv ? evals.find((x) => same(x.interview, iv._id)) : null), releasedHere, win.announceAt),
     };
   }
   return { byExam, requestsEnabled: settings.requestsEnabled, resultsReleased: released, resultsAnnounceAt: INTERVIEW_RESULTS_AT.toISOString() };

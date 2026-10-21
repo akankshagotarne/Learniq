@@ -183,7 +183,7 @@ const validateCreate = (body, now = new Date()) => {
   };
 };
 
-const EDITABLE_EVENT = ['name', 'description', 'reference', 'registrationOpensAt', 'registrationClosesAt'];
+const EDITABLE_EVENT = ['name', 'description', 'reference', 'registrationOpensAt', 'registrationClosesAt', 'examFee', 'interviewFee', 'interviewOpensAt', 'interviewClosesAt', 'resultsPublishAt'];
 const CONTROL = ['expectedUpdatedAt'];
 
 const validateEventEdit = (event, body, exams = []) => {
@@ -229,6 +229,32 @@ const validateEventEdit = (event, body, exams = []) => {
       }
     }
   }
+  // fees (whole rupees), the interview window and the results release time of THIS event
+  for (const [field, label] of [['examFee', 'exam fee'], ['interviewFee', 'interview fee']]) {
+    if (b[field] === undefined) continue;
+    const n = b[field];
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 100000) errors[field] = `The ${label} must be a whole number of rupees from 1 to 100000.`;
+    else put(field, event[field] ?? null, n, n === (event[field] ?? null));
+  }
+  const sameAt = (a, c) => (a ? new Date(a).getTime() : null) === (c ? new Date(c).getTime() : null);
+  const inst = {};
+  for (const [field, label] of [['interviewOpensAt', 'interview opening'], ['interviewClosesAt', 'interview closing'], ['resultsPublishAt', 'results release']]) {
+    inst[field] = event[field] ? new Date(event[field]) : null;
+    if (b[field] === undefined) continue;
+    const r = parseNullable(b[field], field, label);
+    if (r.ok) inst[field] = r.value;
+  }
+  const touchedAt = ['interviewOpensAt', 'interviewClosesAt', 'resultsPublishAt'].filter((f) => b[f] !== undefined && !errors[f]);
+  if (touchedAt.length) {
+    const { end } = windowOf(event, exams);
+    if (inst.interviewOpensAt && inst.interviewClosesAt && inst.interviewClosesAt <= inst.interviewOpensAt) errors.interviewClosesAt = 'The interview window must close after it opens.';
+    else if ((inst.interviewOpensAt && !inst.interviewClosesAt) || (!inst.interviewOpensAt && inst.interviewClosesAt)) errors.interviewClosesAt = 'Set both the interview opening and closing time, or neither.';
+    if (inst.interviewOpensAt && Number.isFinite(end.getTime()) && inst.interviewOpensAt < end) errors.interviewOpensAt = 'Interviews cannot open before the examination closes.';
+    if (inst.resultsPublishAt && Number.isFinite(end.getTime()) && inst.resultsPublishAt < end) errors.resultsPublishAt = 'Results cannot be released before the examination closes.';
+    if (!errors.interviewOpensAt && !errors.interviewClosesAt && !errors.resultsPublishAt) {
+      for (const f of touchedAt) put(f, event[f] || null, inst[f], sameAt(inst[f], event[f]));
+    }
+  }
   return { errors, unknown: [], changes, next };
 };
 
@@ -259,6 +285,7 @@ const countsFor = async (eventId) => {
     submissions: registered.filter((r) => r.examStatus === 'SUBMITTED').length,
     students: new Set(registered.map((r) => r.studentId)).size,
     needsReview: data.rows.filter((r) => r.flags && r.flags.length).length,
+    interviewEligible: registered.filter((r) => r.examStatus === 'SUBMITTED').length, // a submitted attempt is what makes a student eligible for the interview
   };
 };
 
@@ -275,6 +302,11 @@ const eventView = (event, exams, counts, now = new Date()) => {
     registrationOpensAt: event.registrationOpensAt || null, registrationClosesAt: event.registrationClosesAt || null,
     registrationOpensAtIST: event.registrationOpensAt ? formatIST(event.registrationOpensAt) : '', registrationClosesAtIST: event.registrationClosesAt ? formatIST(event.registrationClosesAt) : '',
     examCount: exams.length, isLegacy: !!event.isLegacy,
+    examFee: event.examFee ?? null, interviewFee: event.interviewFee ?? null, totalFee: event.examFee && event.interviewFee ? event.examFee + event.interviewFee : null,
+    interviewOpensAt: event.interviewOpensAt || null, interviewClosesAt: event.interviewClosesAt || null,
+    interviewOpensAtIST: event.interviewOpensAt ? formatIST(event.interviewOpensAt) : '', interviewClosesAtIST: event.interviewClosesAt ? formatIST(event.interviewClosesAt) : '',
+    resultsPublishAt: event.resultsPublishAt || null, resultsPublishAtIST: event.resultsPublishAt ? formatIST(event.resultsPublishAt) : '',
+    paperSet: event.paperSet || null,
     cancelledAt: event.cancelledAt || null, cancelReason: event.cancelReason || '',
     updatedAt: event.updatedAt || event.createdAt || null,
     ...(counts || {}),
@@ -284,7 +316,8 @@ const eventView = (event, exams, counts, now = new Date()) => {
 const examSummary = (e, now) => ({
   _id: oid(e), title: e.title, standard: e.standard, startDate: e.startDate, endDate: e.endDate,
   startDateIST: formatIST(e.startDate), endDateIST: formatIST(e.endDate), durationMinutes: e.durationMinutes,
-  totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, fee: e.fee, isPublished: e.isPublished !== false,
+  totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, fee: e.fee, examFee: e.examFee ?? null, interviewFee: e.interviewFee ?? null, isPublished: e.isPublished !== false,
+  paperImported: !!(e.paperImport && e.paperImport.set), paperReview: (e.paperImport && e.paperImport.review) ? e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) : [],
   status: e.isPublished === false ? 'draft' : now < e.startDate ? 'upcoming' : now >= e.endDate ? 'closed' : 'live',
 });
 
@@ -411,7 +444,7 @@ const createEvent = async (body, admin, now = new Date()) => {
         description: src ? src.description : undefined, conductedBy: src ? src.conductedBy : undefined, teacher: src ? src.teacher : undefined,
         examType: 'olympiad', category: src ? src.category : undefined, standard: std, accessMode: 'payment', accessEnabled: true, hardClose: false,
         instructions: cfg.instructions || (src && src.instructions && src.instructions.length ? src.instructions : DEFAULT_INSTRUCTIONS),
-        sections: src ? (src.sections || []).map((s) => ({ name: s.name, questionCount: s.questionCount, marks: s.marks })) : [],
+        sections: src ? (src.sections || []).map((s) => ({ name: s.name, nameMr: s.nameMr, questionCount: s.questionCount, marks: s.marks })) : [],
         startDate: cfg.startDate, endDate: cfg.endDate, durationMinutes: cfg.durationMinutes,
         totalQuestions: srcQuestions.length ? srcQuestions.length : (cfg.totalQuestions || 0),
         totalMarks: srcQuestions.length ? srcQuestions.reduce((s, q) => s + (q.marks || 0), 0) : (cfg.totalMarks || 0),
@@ -424,6 +457,7 @@ const createEvent = async (body, admin, now = new Date()) => {
         await OlympiadQuestion.insertMany(srcQuestions.map((q) => ({
           exam: exam._id, questionNumber: q.questionNumber, subject: q.subject, questionText: q.questionText, options: q.options,
           correctAnswer: q.correctAnswer, marks: q.marks, explanation: q.explanation, image: q.image,
+          questionTextMr: q.questionTextMr, section: q.section, sectionMr: q.sectionMr, visual: q.visual,
         })));
       }
     }
@@ -462,6 +496,12 @@ const updateEvent = async (id, body, admin, now = new Date()) => {
   const set = { ...next, updatedBy: admin._id };
   const updated = await OlympiadEvent.findOneAndUpdate(guard, { $set: set }, { new: true });
   if (!updated) throw new EventError(409, 'This event was changed by someone else while you were saving. Reload it and apply your change again.', 'STALE_EVENT');
+  // event-level fees / results time reach the exams, which are what the payment and release code read (a published result is never moved)
+  const toExams = {};
+  if (next.examFee !== undefined) toExams.examFee = next.examFee;
+  if (next.interviewFee !== undefined) toExams.interviewFee = next.interviewFee;
+  if (Object.keys(toExams).length) await OlympiadExam.updateMany({ event: event._id, ...NOT_ENGINEERING }, { $set: toExams });
+  if (next.resultsPublishAt !== undefined && next.resultsPublishAt) await OlympiadExam.updateMany({ event: event._id, ...NOT_ENGINEERING, resultsPublishedAt: null }, { $set: { resultsPublishAt: next.resultsPublishAt, resultsScheduleSeeded: true } });
   for (const c of changes) await auditRows(updated, exams, admin, c.field, c.previous, c.next);
   return { ...(await eventDetail(updated._id, now)), changed: changes.map((c) => c.field) };
 };
@@ -476,7 +516,7 @@ const holdsRecords = async (examIds) => {
   return pay + att + grant > 0;
 };
 
-const publishEvent = async (id, admin, now = new Date()) => {
+const publishEvent = async (id, admin, now = new Date(), opts = {}) => {
   const event = await loadEvent(id);
   if (event.state === 'cancelled') throw new EventError(409, 'A cancelled event cannot be published.', 'EVENT_CANCELLED');
   const exams = await examsOfEvent(event._id);
@@ -485,6 +525,12 @@ const publishEvent = async (id, admin, now = new Date()) => {
     const empty = [];
     for (const e of exams) if ((await OlympiadQuestion.countDocuments({ exam: e._id })) < 1) empty.push(e.standard);
     if (empty.length) throw new EventError(422, `These exams have no questions yet, so the event cannot be published: Standard ${empty.join(', ')}.`, 'NOT_READY', { standards: empty });
+    // an imported paper that is incomplete in its source must be resolved (or explicitly accepted by an administrator) first
+    const unresolved = exams.filter((e) => e.paperImport && e.paperImport.review && e.paperImport.review.length).map((e) => ({ standard: e.standard, review: e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) }));
+    if (unresolved.length && !opts.acknowledgeReview) {
+      throw new EventError(422, `Some imported papers are incomplete in the source: ${unresolved.map((u) => `Standard ${u.standard} (question ${u.review.map((r) => r.question).join(', ')})`).join('; ')}. Resolve them, or publish with the explicit acknowledgement.`, 'PAPER_NEEDS_REVIEW', { unresolved });
+    }
+    if (unresolved.length) for (const u of unresolved) { const ex = exams.find((e) => e.standard === u.standard); await auditRows(event, [ex], admin, 'paperReviewAcknowledged', null, u.review.map((r) => r.question).join(',')); }
   }
   await OlympiadEvent.updateOne({ _id: event._id }, { $set: { state: 'published', publishedAt: event.publishedAt || now, updatedBy: admin._id } });
   await OlympiadExam.updateMany({ event: event._id, ...NOT_ENGINEERING }, { $set: { isPublished: true } });
@@ -631,7 +677,7 @@ const migrateLegacy = async ({ apply = false, log = console.log } = {}) => {
 };
 
 module.exports = {
-  EventError, STATUSES, STANDARDS, MAX_DURATION_MIN,
+  EventError, STATUSES, STANDARDS, MAX_DURATION_MIN, DEFAULT_INSTRUCTIONS,
   windowOf, registrationState, deriveStatus, validateCreate, validateEventEdit,
   examsOfEvent, examIdsOfEvent, loadEvent, eventView, listEvents, eventOptions, eventDetail,
   createEvent, updateEvent, publishEvent, unpublishEvent, cancelEvent, deleteEvent,

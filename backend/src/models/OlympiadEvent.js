@@ -20,6 +20,14 @@ const olympiadEventSchema = new mongoose.Schema({
   state: { type: String, enum: ['draft', 'published', 'cancelled'], default: 'draft' },
   registrationOpensAt: { type: Date, default: null },           // optional; null = no separate opening time
   registrationClosesAt: { type: Date, default: null },          // optional; null = registration follows the exam window
+  // Event-level settings the existing global calendar (config/schedule.js, the 17/18 Oct values) cannot express per event.
+  // All optional: an event without them keeps the global behaviour, so the 17 Oct event is unaffected.
+  examFee: { type: Number, min: 1, default: null },             // whole rupees, applied to every exam of the event (exam.examFee)
+  interviewFee: { type: Number, min: 1, default: null },        // whole rupees (exam.interviewFee)
+  interviewOpensAt: { type: Date, default: null },              // new interview requests / appointments from this instant ...
+  interviewClosesAt: { type: Date, default: null },             // ... until (exclusive) this instant
+  resultsPublishAt: { type: Date, default: null },              // official release of exam results, certificates and finalised interview results
+  paperSet: { type: String, trim: true, default: null },        // key of the question-paper set last imported into this event
   isLegacy: { type: Boolean, default: false },                  // created by the migration for exams that existed before events
   publishedAt: { type: Date, default: null },
   cancelledAt: { type: Date, default: null },

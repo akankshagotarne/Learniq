@@ -1,0 +1,683 @@
+{
+ "standard": 1,
+ "source": "1st_Standard_LearnIQ_Test_2.pdf",
+ "title": "LearnIQ All India Olympiad 2026 - Class 1 (Bilingual English & Marathi)",
+ "bilingual": true,
+ "durationMinutes": null,
+ "sections": [
+  {
+   "name": "Mathematics",
+   "nameMr": "गणित",
+   "to": 10,
+   "marks": 10,
+   "from": 1
+  },
+  {
+   "name": "Science / EVS",
+   "nameMr": "विज्ञान",
+   "to": 20,
+   "marks": 10,
+   "from": 11
+  },
+  {
+   "name": "English",
+   "nameMr": "इंग्रजी",
+   "to": 30,
+   "marks": 10,
+   "from": 21
+  },
+  {
+   "name": "Logical Reasoning & HOTS",
+   "nameMr": "बुद्धिमत्ता",
+   "to": 40,
+   "marks": 10,
+   "from": 31
+  }
+ ],
+ "questions": [
+  {
+   "n": 1,
+   "section": 0,
+   "text": "Count the apples shown in the box:",
+   "textMr": "चौकटीत दाखवलेले सफरचंद मोजा:",
+   "visual": "🍎🍎🍎🍎🍎🍎",
+   "image": null,
+   "options": [
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 2,
+   "section": 0,
+   "text": "Which shape is shown in the picture?",
+   "textMr": "चित्रात कोणता आकार दाखवला आहे?",
+   "visual": "▲ (Triangle)",
+   "image": null,
+   "options": [
+    "Circle",
+    "Triangle (त्रिकोण)",
+    "Square",
+    "Star"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 3,
+   "section": 0,
+   "text": "What time does the clock show?",
+   "textMr": "घड्याळात किती वाजले आहेत?",
+   "visual": "[ 🕒 Hour hand at 3, Minute hand at 12 ]",
+   "image": "/olympiad/oct24/std1-q3-clock.jpg",
+   "options": [
+    "1 o'clock",
+    "3 o'clock",
+    "6 o'clock",
+    "12 o'clock"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 4,
+   "section": 0,
+   "text": "Count the total stars: [ ⭐⭐⭐ ] + [ ⭐⭐ ] = ?",
+   "textMr": "एकूण चांदण्या मोजा: [ ⭐⭐⭐ ] + [ ⭐⭐ ] = ?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "4",
+    "5",
+    "6",
+    "3"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 5,
+   "section": 0,
+   "text": "Which group has MORE balls?",
+   "textMr": "कोणत्या गटामध्ये जास्त चेंडू आहेत?",
+   "visual": "Group A: ⚽⚽⚽⚽ | Group B: ⚽⚽",
+   "image": null,
+   "options": [
+    "Group A",
+    "Group B",
+    "Both equal",
+    "None"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 6,
+   "section": 0,
+   "text": "Which animal is the TALLEST in the picture?",
+   "textMr": "चित्रातील कोणता प्राणी सर्वात उंच आहे?",
+   "visual": "🦒 (Giraffe) vs 🐕 (Dog) vs 🐈 (Cat)",
+   "image": null,
+   "options": [
+    "Dog",
+    "Giraffe (जिराफ)",
+    "Cat",
+    "Rabbit"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 7,
+   "section": 0,
+   "text": "What comes after number 19?",
+   "textMr": "१९ या संख्येच्या नंतर कोणती संख्या येते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "18",
+    "20",
+    "21",
+    "17"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 8,
+   "section": 0,
+   "text": "Solve: 8 - 3 = ?",
+   "textMr": "सोडवा: ८ - ३ = ?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "4",
+    "5",
+    "6",
+    "3"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 9,
+   "section": 0,
+   "text": "Which object is ROUND like a circle?",
+   "textMr": "कोणती वस्तू वर्तुळासारखी गोल आहे?",
+   "visual": "⚽ (Ball) vs 📦 (Box)",
+   "image": null,
+   "options": [
+    "Box",
+    "Ball (चेंडू)",
+    "Ruler",
+    "Book"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 10,
+   "section": 0,
+   "text": "Complete the visual pattern: 🔴🔵🔴🔵 ____",
+   "textMr": "आकृतीबंध पूर्ण करा: 🔴🔵🔴🔵 ____",
+   "visual": null,
+   "image": null,
+   "options": [
+    "🔴",
+    "🔵",
+    "🟢",
+    "🟡"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 11,
+   "section": 1,
+   "text": "Which part of the plant grows under the soil?",
+   "textMr": "वनस्पतीचा कोणता भाग जमिनीखाली वाढतो?",
+   "visual": "🌱 [ Leaves | Stem | Roots 🧅 ]",
+   "image": null,
+   "options": [
+    "Leaf",
+    "Flower",
+    "Root (मूळ)",
+    "Fruit"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 12,
+   "section": 1,
+   "text": "Which animal gives us milk?",
+   "textMr": "कोणता प्राणी आपल्याला दूध देतो?",
+   "visual": "🐄 (Cow) vs 🦁 (Lion)",
+   "image": null,
+   "options": [
+    "Lion",
+    "Cow (गाय)",
+    "Tiger",
+    "Bear"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 13,
+   "section": 1,
+   "text": "Identify the fruit shown in the picture:",
+   "textMr": "चित्रात दाखवलेले फळ ओळखा:",
+   "visual": "🍌 (Banana)",
+   "image": null,
+   "options": [
+    "Apple",
+    "Banana (केळी)",
+    "Mango",
+    "Orange"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 14,
+   "section": 1,
+   "text": "Which sense organ helps us to SEE things?",
+   "textMr": "कोणते ज्ञानेंद्रिय आपल्याला पाहण्यास मदत करते?",
+   "visual": "👁️ (Eyes) vs 👂 (Ears)",
+   "image": null,
+   "options": [
+    "Ears",
+    "Eyes (डोळे)",
+    "Nose",
+    "Tongue"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 15,
+   "section": 1,
+   "text": "Which season is shown when people use an umbrella in rain?",
+   "textMr": "चित्रात पावसाळ्यात छत्री वापरताना कोणता ऋतू दिसतो?",
+   "visual": "🌧️ ☂️ (Rain & Umbrella)",
+   "image": null,
+   "options": [
+    "Summer",
+    "Rainy Season (पावसाळा)",
+    "Winter",
+    "Cold"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 16,
+   "section": 1,
+   "text": "We smell food with our:",
+   "textMr": "आपण अन्नाचा वास कशाने घेतो?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Eyes",
+    "Nose (नाक)",
+    "Ears",
+    "Hands"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 17,
+   "section": 1,
+   "text": "Which item is a healthy food?",
+   "textMr": "कोणता पदार्थ आरोग्यासाठी चांगला (Healthy) आहे?",
+   "visual": "🥛 (Milk) vs 🍔 (Burger)",
+   "image": null,
+   "options": [
+    "Milk (दूध)",
+    "Burger",
+    "Chips",
+    "Candy"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 18,
+   "section": 1,
+   "text": "Identify the bird that can SWIM in water:",
+   "textMr": "पाण्यात पोहणारा पक्षी ओळखा:",
+   "visual": "🦆 (Duck) vs 🦅 (Eagle)",
+   "image": null,
+   "options": [
+    "Eagle",
+    "Duck (बदक)",
+    "Parrot",
+    "Crow"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 19,
+   "section": 1,
+   "text": "The Sun rises in the:",
+   "textMr": "सूर्य कोणत्या दिशेला उगवतो?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "West",
+    "East (पूर्व)",
+    "North",
+    "South"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 20,
+   "section": 1,
+   "text": "Fish live in:",
+   "textMr": "मासे कोठे राहतात?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Air",
+    "Water (पाणी)",
+    "Trees",
+    "Desert"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 21,
+   "section": 2,
+   "text": "What is the first letter of the object shown in the picture?",
+   "textMr": "चित्रात दाखवलेल्या वस्तूचे पहिले इंग्रजी अक्षर कोणते?",
+   "visual": "🍎 (Apple)",
+   "image": null,
+   "options": [
+    "B",
+    "A",
+    "C",
+    "D"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 22,
+   "section": 2,
+   "text": "Choose the correct action word (verb) for the picture:",
+   "textMr": "चित्रासाठी योग्य क्रियापद निवडा:",
+   "visual": "🏃‍♂️ (Boy Running)",
+   "image": null,
+   "options": [
+    "Sleeping",
+    "Running (धावणे)",
+    "Eating",
+    "Sitting"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 23,
+   "section": 2,
+   "text": "Find the CAPITAL letter for 'g':",
+   "textMr": "'g' या अक्षराचे कॅपिटल (Capital) अक्षर कोणते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "J",
+    "G",
+    "C",
+    "Q"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 24,
+   "section": 2,
+   "text": "Identify the color in the picture:",
+   "textMr": "चित्रातील रंग ओळखा:",
+   "visual": "🔴 (Red Circle)",
+   "image": null,
+   "options": [
+    "Blue",
+    "Red (लाल)",
+    "Green",
+    "Yellow"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 25,
+   "section": 2,
+   "text": "Opposite of 'BIG' is:",
+   "textMr": "'BIG' (मोठा) चा विरुद्धार्थी शब्द कोणता?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Tall",
+    "Small (लहान)",
+    "High",
+    "Heavy"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 26,
+   "section": 2,
+   "text": "Fill in the missing vowel: C _ T",
+   "textMr": "गाळलेले स्वर (Vowel) भरा: C _ T (मांजर)",
+   "visual": "🐈 (Cat)",
+   "image": null,
+   "options": [
+    "e",
+    "a",
+    "i",
+    "o"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 27,
+   "section": 2,
+   "text": "Rhyming word for 'SUN' is:",
+   "textMr": "'SUN' या शब्दाशी यमक जुळणारा (Rhyming) शब्द कोणता?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "CAT",
+    "FUN",
+    "PEN",
+    "BOX"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 28,
+   "section": 2,
+   "text": "Choose the correct spelling for the picture:",
+   "textMr": "चित्रासाठी योग्य शब्दलेखन (Spelling) निवडा:",
+   "visual": "🐕 (Dog)",
+   "image": null,
+   "options": [
+    "DGO",
+    "DOG",
+    "GOD",
+    "ODG"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 29,
+   "section": 2,
+   "text": "Complete sentence: A cow has four ____.",
+   "textMr": "वाक्य पूर्ण करा: A cow has four ____.",
+   "visual": null,
+   "image": null,
+   "options": [
+    "wings",
+    "legs (पाय)",
+    "hands",
+    "beaks"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 30,
+   "section": 2,
+   "text": "Plural of 'BOY' is:",
+   "textMr": "'BOY' या शब्दाचे अनेकवचनी रूप कोणते?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Boyes",
+    "Boys",
+    "Boyes",
+    "Boies"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 31,
+   "section": 3,
+   "text": "Find the ODD picture out:",
+   "textMr": "वेगळे चित्र ओळखा:",
+   "visual": "A) 🍎 (Apple) | B) 🍌 (Banana) | C) 🚗 (Car) | D) 🥭 (Mango)",
+   "image": null,
+   "options": [
+    "Apple",
+    "Banana",
+    "Car (मोटार)",
+    "Mango"
+   ],
+   "answer": 2,
+   "marks": 1
+  },
+  {
+   "n": 32,
+   "section": 3,
+   "text": "Which image matches the shadow?",
+   "textMr": "सावलीशी जुळणारे चित्र कोणते?",
+   "visual": "Shadow: 👤 (Human Silhouette)",
+   "image": null,
+   "options": [
+    "Tree",
+    "Person (माणूस)",
+    "House",
+    "Dog"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 33,
+   "section": 3,
+   "text": "Which picture comes NEXT in pattern?",
+   "textMr": "आकृतीबंधात पुढे कोणते चित्र येईल?",
+   "visual": "☀️ 🌙 ☀️ 🌙 ____",
+   "image": null,
+   "options": [
+    "☀️ (Sun)",
+    "🌙",
+    "⭐",
+    "☁️"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 34,
+   "section": 3,
+   "text": "Which vehicle runs on RAILS (Track)?",
+   "textMr": "कोणते वाहन रुळांवर (Rails) धावते?",
+   "visual": "🚆 (Train) vs 🚌 (Bus)",
+   "image": null,
+   "options": [
+    "Bus",
+    "Train (आगाडी)",
+    "Car",
+    "Bicycle"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 35,
+   "section": 3,
+   "text": "Which animal lives in a DEN?",
+   "textMr": "गुहेत (Den) कोणता प्राणी राहतो?",
+   "visual": "🦁 (Lion)",
+   "image": null,
+   "options": [
+    "Cow",
+    "Lion (सिंह)",
+    "Fish",
+    "Bird"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 36,
+   "section": 3,
+   "text": "Find the missing part to complete the square:",
+   "textMr": "चौरस पूर्ण करण्यासाठी योग्य भाग निवडा:",
+   "visual": "[ ⬛ ⬛ | ⬛ ❓ ]",
+   "image": null,
+   "options": [
+    "⬛",
+    "⚪",
+    "🔺",
+    "⭐"
+   ],
+   "answer": 0,
+   "marks": 1
+  },
+  {
+   "n": 37,
+   "section": 3,
+   "text": "Which fruit is YELLOW when ripe?",
+   "textMr": "पिकल्यावर कोणते फळ पिवळे असते?",
+   "visual": "🍌 (Banana)",
+   "image": null,
+   "options": [
+    "Apple",
+    "Banana (केळी)",
+    "Grapes",
+    "Watermelon"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 38,
+   "section": 3,
+   "text": "How many days are there in a week?",
+   "textMr": "एका आठवड्यात किती दिवस असतात?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "5",
+    "7 (सात)",
+    "10",
+    "12"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 39,
+   "section": 3,
+   "text": "Which object is HEAVIEST?",
+   "textMr": "कोणती वस्तू सर्वात जड आहे?",
+   "visual": "🐘 (Elephant) vs 🪶 (Feather)",
+   "image": null,
+   "options": [
+    "Feather",
+    "Elephant (हत्ती)",
+    "Leaf",
+    "Pencil"
+   ],
+   "answer": 1,
+   "marks": 1
+  },
+  {
+   "n": 40,
+   "section": 3,
+   "text": "What do we wear on our feet?",
+   "textMr": "आपण पायात काय घालतो?",
+   "visual": null,
+   "image": null,
+   "options": [
+    "Hat",
+    "Shoes (शूट/पादत्राणे)",
+    "Ring",
+    "Shirt"
+   ],
+   "answer": 1,
+   "marks": 1
+  }
+ ],
+ "review": [],
+ "sourceIssues": [],
+ "totalQuestions": 40,
+ "totalMarks": 40
+}

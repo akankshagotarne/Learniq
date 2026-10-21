@@ -6,6 +6,7 @@ import { Modal } from '../engineering/ui';
 import { olympiadErrorMessage } from '../../services/olympiad';
 import { CreateEventPayload, eventsApi, EventStatus, OlympiadEventRow, STATUS_CLS, STATUS_LABEL } from '../../services/olympiadEvents';
 import { fromISTInput } from '../../utils/examSchedule';
+import PaperImportDialog from './PaperImportDialog';
 
 const inputCls = 'w-full text-sm rounded-xl border border-border-subtle bg-surface px-3 py-2 text-text-primary';
 const labelCls = 'block text-[11px] font-semibold text-text-muted mb-1';
@@ -105,6 +106,8 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
 const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => void; onSaved: () => void }> = ({ id, editable, onClose, onSaved }) => {
   const [ev, setEv] = useState<OlympiadEventRow | null>(null); const [err, setErr] = useState('');
   const [name, setName] = useState(''); const [description, setDescription] = useState(''); const [regOpen, setRegOpen] = useState(''); const [regClose, setRegClose] = useState('');
+  const [examFee, setExamFee] = useState(''); const [interviewFee, setInterviewFee] = useState('');
+  const [ivOpen, setIvOpen] = useState(''); const [ivClose, setIvClose] = useState(''); const [resAt, setResAt] = useState('');
   const [saving, setSaving] = useState(false); const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const toInput = (iso: string | null) => {
     if (!iso) return '';
@@ -115,6 +118,8 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
     eventsApi.detail(id).then(r => {
       setEv(r.event); setName(r.event.name); setDescription(r.event.description || '');
       setRegOpen(toInput(r.event.registrationOpensAt)); setRegClose(toInput(r.event.registrationClosesAt));
+      setExamFee(r.event.examFee ? String(r.event.examFee) : ''); setInterviewFee(r.event.interviewFee ? String(r.event.interviewFee) : '');
+      setIvOpen(toInput(r.event.interviewOpensAt ?? null)); setIvClose(toInput(r.event.interviewClosesAt ?? null)); setResAt(toInput(r.event.resultsPublishAt ?? null));
     }).catch(e => setErr(olympiadErrorMessage(e, 'Could not load this event.')));
   }, [id]);
   const locked = ev?.state === 'cancelled';
@@ -126,6 +131,11 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
     if (description.trim() !== (ev.description || '')) body.description = description.trim();
     if (regOpen !== toInput(ev.registrationOpensAt)) body.registrationOpensAt = regOpen ? fromISTInput(regOpen) : null;
     if (regClose !== toInput(ev.registrationClosesAt)) body.registrationClosesAt = regClose ? fromISTInput(regClose) : null;
+    if (examFee !== (ev.examFee ? String(ev.examFee) : '') && examFee) body.examFee = Number(examFee);
+    if (interviewFee !== (ev.interviewFee ? String(ev.interviewFee) : '') && interviewFee) body.interviewFee = Number(interviewFee);
+    if (ivOpen !== toInput(ev.interviewOpensAt ?? null)) body.interviewOpensAt = ivOpen ? fromISTInput(ivOpen) : null;
+    if (ivClose !== toInput(ev.interviewClosesAt ?? null)) body.interviewClosesAt = ivClose ? fromISTInput(ivClose) : null;
+    if (resAt !== toInput(ev.resultsPublishAt ?? null)) body.resultsPublishAt = resAt ? fromISTInput(resAt) : null;
     try {
       const r = await eventsApi.update(id, body);
       toast.success(r.changed.length ? 'Event updated.' : 'Nothing to save.'); onSaved(); onClose();
@@ -142,6 +152,13 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
             <label className="block"><span className={labelCls}>Description</span><textarea className={inputCls} rows={2} value={description} onChange={e => setDescription(e.target.value)} /></label>
             <label className="block"><span className={labelCls}>Registration opens (IST)</span><input type="datetime-local" className={inputCls} value={regOpen} onChange={e => setRegOpen(e.target.value)} /></label>
             <label className="block"><span className={labelCls}>Registration closes (IST)</span><input type="datetime-local" className={inputCls} value={regClose} onChange={e => setRegClose(e.target.value)} />{fieldErrors.registrationClosesAt && <p className={errCls}>{fieldErrors.registrationClosesAt}</p>}</label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block"><span className={labelCls}>Exam fee (₹)</span><input type="number" min={1} className={inputCls} value={examFee} onChange={e => setExamFee(e.target.value)} data-testid="ev-exam-fee" />{fieldErrors.examFee && <p className={errCls}>{fieldErrors.examFee}</p>}</label>
+              <label className="block"><span className={labelCls}>Interview fee (₹)</span><input type="number" min={1} className={inputCls} value={interviewFee} onChange={e => setInterviewFee(e.target.value)} data-testid="ev-interview-fee" />{fieldErrors.interviewFee && <p className={errCls}>{fieldErrors.interviewFee}</p>}</label>
+            </div>
+            <label className="block"><span className={labelCls}>Interview opens (IST)</span><input type="datetime-local" className={inputCls} value={ivOpen} onChange={e => setIvOpen(e.target.value)} />{fieldErrors.interviewOpensAt && <p className={errCls}>{fieldErrors.interviewOpensAt}</p>}</label>
+            <label className="block"><span className={labelCls}>Interview closes (IST)</span><input type="datetime-local" className={inputCls} value={ivClose} onChange={e => setIvClose(e.target.value)} />{fieldErrors.interviewClosesAt && <p className={errCls}>{fieldErrors.interviewClosesAt}</p>}</label>
+            <label className="block"><span className={labelCls}>Results &amp; certificates released (IST)</span><input type="datetime-local" className={inputCls} value={resAt} onChange={e => setResAt(e.target.value)} />{fieldErrors.resultsPublishAt && <p className={errCls}>{fieldErrors.resultsPublishAt}</p>}</label>
             <p className="text-xs text-text-muted">To change an exam&apos;s own schedule, duration or settings use <strong>Manage Exams</strong>.</p>
           </>) : (<dl className="grid grid-cols-[8rem_1fr] gap-y-1.5">
             <dt className="text-text-muted">Name</dt><dd>{ev.name}</dd>
@@ -150,7 +167,11 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
             <dt className="text-text-muted">Opens</dt><dd>{ev.startDateIST}</dd><dt className="text-text-muted">Closes</dt><dd>{ev.endDateIST}</dd>
             <dt className="text-text-muted">Registration</dt><dd>{ev.registrationOpensAtIST || 'Open now'} → {ev.registrationClosesAtIST || 'until the exam closes'}</dd>
             {ev.cancelReason && (<><dt className="text-text-muted">Cancelled</dt><dd>{ev.cancelReason}</dd></>)}
+            {ev.examFee && ev.interviewFee ? (<><dt className="text-text-muted">Fees</dt><dd data-testid="ev-fees">Exam ₹{ev.examFee} / Interview ₹{ev.interviewFee} / Total ₹{ev.examFee + ev.interviewFee}</dd></>) : null}
+            {ev.interviewOpensAtIST && (<><dt className="text-text-muted">Interview</dt><dd>{ev.interviewOpensAtIST} → {ev.interviewClosesAtIST}</dd></>)}
+            {ev.resultsPublishAtIST && (<><dt className="text-text-muted">Results</dt><dd>{ev.resultsPublishAtIST}</dd></>)}
             <dt className="text-text-muted">Registered</dt><dd>{String(ev.students ?? '—')}</dd><dt className="text-text-muted">Submitted</dt><dd>{String(ev.submissions ?? '—')}</dd>
+            <dt className="text-text-muted">Interview eligible</dt><dd>{String(ev.interviewEligible ?? '—')}</dd>
           </dl>)}
           {err && <div role="alert" className="text-red-600 text-sm">{err}</div>}
           {editable && !locked && <div className="flex justify-end gap-2"><button type="button" className="btn-secondary text-sm px-4 py-2" onClick={onClose}>Cancel</button><button type="button" className="btn-primary text-sm px-5 py-2 disabled:opacity-50" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save changes'}</button></div>}
@@ -166,6 +187,7 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
 type Pending = { kind: 'publish' | 'unpublish' | 'cancel' | 'delete'; event: OlympiadEventRow } | null;
 const ConfirmDialog: React.FC<{ pending: NonNullable<Pending>; onClose: () => void; onDone: () => void }> = ({ pending, onClose, onDone }) => {
   const [reason, setReason] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const [review, setReview] = useState<{ standard: number; review: { question: number; issue: string }[] }[]>([]); const [ack, setAck] = useState(false);
   const { kind, event } = pending;
   const text = {
     publish: `Publish "${event.name}"? Students will see its exams and can register.`,
@@ -176,12 +198,15 @@ const ConfirmDialog: React.FC<{ pending: NonNullable<Pending>; onClose: () => vo
   const go = async () => {
     setBusy(true); setErr('');
     try {
-      if (kind === 'publish') await eventsApi.publish(event._id);
+      if (kind === 'publish') await eventsApi.publish(event._id, ack);
       else if (kind === 'unpublish') await eventsApi.unpublish(event._id);
       else if (kind === 'cancel') await eventsApi.cancel(event._id, reason.trim());
       else await eventsApi.remove(event._id);
       toast.success({ publish: 'Event published.', unpublish: 'Event moved to draft.', cancel: 'Event cancelled.', delete: 'Draft deleted.' }[kind]); onDone();
-    } catch (e) { setErr(olympiadErrorMessage(e, 'That did not work.')); } finally { setBusy(false); }
+    } catch (e: any) {
+      if (e?.response?.data?.code === 'PAPER_NEEDS_REVIEW') setReview(e.response.data.unresolved || []);
+      setErr(olympiadErrorMessage(e, 'That did not work.'));
+    } finally { setBusy(false); }
   };
   return (
     <Modal title="Please confirm" onClose={onClose}>
@@ -189,8 +214,13 @@ const ConfirmDialog: React.FC<{ pending: NonNullable<Pending>; onClose: () => vo
         <p>{text}</p>
         {kind === 'cancel' && <label className="block"><span className={labelCls}>Reason (shown to admins)</span><input className={inputCls} value={reason} onChange={e => setReason(e.target.value)} maxLength={300} data-testid="cancel-reason" /></label>}
         {err && <div role="alert" className="text-red-600">{err}</div>}
+        {review.length > 0 && (
+          <label className="flex items-start gap-2 text-xs rounded-xl border border-amber-300 bg-amber-50 p-3" data-testid="ack-review">
+            <input type="checkbox" className="mt-0.5" checked={ack} onChange={e => setAck(e.target.checked)} />
+            <span>I understand that {review.map(u => `Standard ${u.standard} (question ${u.review.map(r => r.question).join(', ')})`).join('; ')} is incomplete in the source paper and will be missing for students.</span>
+          </label>)}
         <div className="flex justify-end gap-2"><button type="button" className="btn-secondary text-sm px-4 py-2" onClick={onClose}>Back</button>
-          <button type="button" disabled={busy || (kind === 'cancel' && reason.trim().length < 3)} onClick={go} className="btn-primary text-sm px-5 py-2 disabled:opacity-50" data-testid="confirm-go">{busy ? 'Working…' : 'Confirm'}</button></div>
+          <button type="button" disabled={busy || (kind === 'cancel' && reason.trim().length < 3) || (review.length > 0 && !ack)} onClick={go} className="btn-primary text-sm px-5 py-2 disabled:opacity-50" data-testid="confirm-go">{busy ? 'Working…' : 'Confirm'}</button></div>
       </div>
     </Modal>
   );
@@ -202,7 +232,7 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
   const [events, setEvents] = useState<OlympiadEventRow[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
   const [search, setSearch] = useState(''); const [q, setQ] = useState(''); const [status, setStatus] = useState('all'); const [standard, setStandard] = useState('all');
   const [creating, setCreating] = useState(false); const [dialog, setDialog] = useState<{ id: string; editable: boolean } | null>(null); const [pending, setPending] = useState<Pending>(null);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null); const [importing, setImporting] = useState<OlympiadEventRow | null>(null);
 
   useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 300); return () => clearTimeout(t); }, [search]);
   const load = useCallback(async () => {
@@ -239,7 +269,9 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
               <EventBadge status={e.status} />
             </div>
             <p className="text-xs text-text-secondary mt-2">Opens {e.startDateIST} · Closes {e.endDateIST} · {e.registration === 'draft' ? 'Not published - students cannot see it' : e.registration === 'cancelled' ? 'Cancelled' : `Registration ${e.registration === 'open' ? 'open' : e.registration === 'closed' ? 'closed' : 'not open yet'}`} · {e.examCount} exam{e.examCount === 1 ? '' : 's'}</p>
-            <p className="text-xs text-text-secondary">Registered students {String(e.students ?? 0)} · Registrations {String(e.registrations ?? 0)} · Submitted {String(e.submissions ?? 0)}</p>
+            <p className="text-xs text-text-secondary">Registered students {String(e.students ?? 0)} · Registrations {String(e.registrations ?? 0)} · Submitted {String(e.submissions ?? 0)}{e.interviewEligible !== undefined ? ` · Interview eligible ${e.interviewEligible}` : ''}</p>
+            {e.examFee && e.interviewFee ? <p className="text-xs text-text-secondary" data-testid="event-fees">Fees: Exam ₹{e.examFee} / Interview ₹{e.interviewFee} / Total ₹{e.examFee + e.interviewFee}{e.registrationClosesAtIST ? ` · Registration closes ${e.registrationClosesAtIST}` : ''}</p> : null}
+            {e.interviewOpensAtIST ? <p className="text-xs text-text-secondary">Interview {e.interviewOpensAtIST} → {e.interviewClosesAtIST}{e.resultsPublishAtIST ? ` · Results ${e.resultsPublishAtIST}` : ''}</p> : null}
             <div className="flex flex-wrap gap-2 mt-3">
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5" onClick={() => setDialog({ id: e._id, editable: false })}><Eye className="w-3.5 h-3.5" /> View</button>
               {e.state !== 'cancelled' && <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" onClick={() => setDialog({ id: e._id, editable: true })}>Edit</button>}
@@ -247,6 +279,7 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5" onClick={() => go('/admin/olympiad/analytics', e._id)}><BarChart2 className="w-3.5 h-3.5" /> View Analytics</button>
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" onClick={() => go('/admin/olympiad', e._id)}>View Results</button>
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" onClick={() => go('/admin/olympiad', e._id)}>View Certificates</button>
+              {!e.isLegacy && e.state !== 'cancelled' && <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" data-testid="act-import-papers" onClick={() => setImporting(e)}>Import question papers</button>}
               {e.state === 'draft' && <button type="button" className="btn-primary text-xs px-3 py-2 min-h-[40px]" data-testid="act-publish-visible" onClick={() => setPending({ kind: 'publish', event: e })}>Publish Event</button>}
               <span className="relative">
                 <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px]" aria-haspopup="menu" onClick={() => setOpenMenu(openMenu === e._id ? null : e._id)}>More</button>
@@ -263,6 +296,7 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
       </div>
       {creating && <CreateDialog events={events} onClose={() => setCreating(false)} onCreated={ev => { setCreating(false); onSelect(ev._id); changed(); }} />}
       {dialog && <DetailDialog id={dialog.id} editable={dialog.editable} onClose={() => setDialog(null)} onSaved={changed} />}
+      {importing && <PaperImportDialog event={importing} onClose={() => setImporting(null)} onDone={changed} />}
       {pending && <ConfirmDialog pending={pending} onClose={() => setPending(null)} onDone={() => { setPending(null); changed(); }} />}
     </section>
   );
