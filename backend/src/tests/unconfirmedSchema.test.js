@@ -37,7 +37,7 @@ test('Payment (course): unconfirmed is valid, the old statuses still work, unkno
 test('the signature stays hidden and the unique-success index does NOT cover UNCONFIRMED (a real payment can still be recorded)', () => {
   assert.equal(OlympiadPayment.schema.path('razorpaySignature').options.select, false);
   assert.equal(Payment.schema.path('razorpaySignature').options.select, false);
-  const idx = OlympiadPayment.schema.indexes().find(([, o]) => o && o.name === 'one_success_per_student_exam');
+  const idx = OlympiadPayment.schema.indexes().find(([, o]) => o && o.name === 'one_success_per_student_exam_component');
   assert.deepEqual(idx[1].partialFilterExpression, { status: 'SUCCESS' });
 });
 
