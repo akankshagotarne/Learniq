@@ -195,6 +195,10 @@ export interface OlympiadExam {
   ownStandard?: boolean;
   /** the student registered (verified payment or administrator exception) - wording of the Expired card */
   registered?: boolean;
+  /** registration window (separate from the exam window): decided by the backend */
+  registration?: 'registered' | 'cancelled' | 'not_open' | 'open' | 'closed';
+  registrationOpensAt?: string | null;
+  registrationClosesAt?: string | null;
   message: string | null;
   paymentStatus: OlympiadPaymentStatus;
   /** Separate, backend-decided entitlements: the exam and the interview are unlocked independently (Rs 10 or 1 credit each). */

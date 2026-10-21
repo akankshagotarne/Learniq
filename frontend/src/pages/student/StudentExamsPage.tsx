@@ -82,6 +82,20 @@ const StudentExamsPage: React.FC = () => {
     }
   };
 
+  // Time-aware refresh: when the next opening / closing / registration instant arrives, and whenever the tab becomes visible again,
+  // re-ask the server (it stays authoritative). No reload and no re-registration is needed for "Start" to appear.
+  useEffect(() => {
+    const now = Date.now();
+    const instants = olympiadExams.flatMap(o => [o.startDate, o.endDate, o.registrationOpensAt, o.registrationClosesAt])
+      .map(v => (v ? new Date(v).getTime() : NaN)).filter(t => Number.isFinite(t) && t > now);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (instants.length) timer = setTimeout(() => { fetchOlympiad(); }, Math.min(Math.min(...instants) - now + 1500, 2_000_000_000));
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchOlympiad(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => { if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
+  }, [olympiadExams]);
+
   const fetchExams = async () => {
     setLoading(true);
     try {

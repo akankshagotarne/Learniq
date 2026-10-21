@@ -180,7 +180,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, c
           </p>
         )}
         {!expired && exam.message && (state === 'upcoming' || (state === 'pay' && exam.window === 'upcoming') || state === 'closed' || state === 'disabled' || state === 'rejected') && (
-          <p className="text-[11px] text-text-secondary mb-3">{exam.message}</p>
+          <p className="text-[11px] text-text-secondary mb-3" data-testid="exam-message">{exam.registered && state === 'upcoming' ? `Registration successful. ${exam.message}` : exam.message}</p>
         )}
       </div>
 
