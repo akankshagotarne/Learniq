@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { OlympiadQuestion } = require('../models/Olympiad');
 const cfg = require('../config/oct24Event');
+const { hasMarathi } = require('./optionLanguage');
 
 const PUBLIC_ROOT = path.join(__dirname, '..', '..', '..', 'frontend', 'public');
 
@@ -29,6 +30,8 @@ const validateExam = async (exam) => {
     const opts = (q.options || []).map((o) => String(o || '').trim());
     if (opts.length < 2 || opts.some((o) => !o)) add(n, 'An answer option is missing or empty.');
     else if (new Set(opts).size !== opts.length && opts.filter((o) => o === opts[q.correctAnswer]).length > 1) add(n, 'The correct answer\'s text appears more than once among the options.');
+    // a bilingual question must not translate only some of its options (typically only the correct one): all or none
+    if (q.questionTextMr && opts.some(hasMarathi) && !opts.every(hasMarathi)) add(n, 'Some answer options have a Marathi translation and others do not.');
     if (!Number.isInteger(q.correctAnswer) || q.correctAnswer < 0 || q.correctAnswer >= opts.length) add(n, 'The correct answer is missing or does not point at an option.');
     if (!(q.marks > 0)) add(n, 'The question has no marks.');
   }

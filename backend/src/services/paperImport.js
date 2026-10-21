@@ -19,6 +19,7 @@ const { OlympiadEvent } = require('../models/OlympiadEvent');
 const { OlympiadExam, OlympiadQuestion, OlympiadAttempt } = require('../models/Olympiad');
 const events = require('./olympiadEvents');
 const { ordinal } = require('../seed/olympiadTitles');
+const { isTranslationOnly, optionLanguageIssue } = require('./optionLanguage');
 
 const { EventError } = events;
 const IST = 'Asia/Kolkata';
@@ -51,6 +52,7 @@ const loadPaper = (standard, dir = cfg.DATA_DIR) => {
       if (q.options.filter((o) => String(o).trim() === key).length > 1) problems.push(`${tag}: the correct answer's text appears twice among the options.`);
       else warnings.push({ question: q.n, issue: 'Two wrong options have identical text in the source paper (kept as printed; the correct answer is unambiguous).' });
     }
+    if (paper.bilingual && q.textMr && Array.isArray(q.options)) { const why = optionLanguageIssue(q.options, q.optionsMrExempt); if (why) problems.push(`${tag}: ${why}`); }
     if (!Number.isInteger(q.answer) || !q.options || q.answer < 0 || q.answer >= q.options.length) problems.push(`${tag}: the correct answer is missing or out of range.`);
     if (!Number.isInteger(q.section) || !paper.sections || !paper.sections[q.section]) problems.push(`${tag}: it does not belong to a section.`);
   }
@@ -82,6 +84,10 @@ const questionDoc = (examId, paper, q) => {
 const FIELDS = ['subject', 'section', 'sectionMr', 'questionText', 'questionTextMr', 'visual', 'image', 'correctAnswer', 'marks', 'explanation', 'sourceRef'];
 const provKey = (p) => (p && p.kind ? JSON.stringify({ kind: p.kind, fields: [...(p.fields || [])], original: p.original || null, basis: p.basis || null }) : null);
 const differs = (existing, doc) => FIELDS.some((f) => (existing[f] ?? undefined) !== (doc[f] ?? undefined)) || JSON.stringify(existing.options || []) !== JSON.stringify(doc.options) || provKey(existing.provenance) !== provKey(doc.provenance);
+
+/** A difference that only adds / corrects Marathi labels on the options (and the provenance note): safe even where students already have attempts,
+ *  because answers are stored as option indexes and every other field - text, order, key, marks, section - is identical. */
+const onlyTranslation = (existing, doc) => !FIELDS.some((f) => (existing[f] ?? undefined) !== (doc[f] ?? undefined)) && isTranslationOnly(existing.options || [], doc.options);
 
 /** The event must be the real 24 Oct 2026 event: never the original (17 Oct / legacy) one, never a cancelled one. */
 const loadTarget = async (eventId) => {
@@ -122,19 +128,22 @@ const planStandard = async (event, standard, exam) => {
   out.attempts = attempts;
   const existing = exam ? await OlympiadQuestion.find({ exam: exam._id }).select('+correctAnswer +explanation') : [];
   const byNo = new Map(existing.map((q) => [q.questionNumber, q]));
-  const incoming = new Set();
+  const incoming = new Set(); let safe = 0;
   for (const q of paper.questions) {
     incoming.add(q.n);
     const doc = questionDoc(exam ? exam._id : null, paper, q);
     const cur = byNo.get(q.n);
     if (!cur) out.inserted += 1;
-    else { out.duplicatesAvoided += 1; if (differs(cur, doc)) out.updated += 1; else out.unchanged += 1; }
+    else { out.duplicatesAvoided += 1; if (differs(cur, doc)) { out.updated += 1; if (onlyTranslation(cur, doc)) safe += 1; } else out.unchanged += 1; }
     if (q.image) { out.imagesAssociated += 1; out.imageFiles.push({ question: q.n, image: q.image, file: imageState(q.image) }); }
   }
   out.removed = existing.filter((q) => !incoming.has(q.questionNumber)).length;
-  if (attempts > 0 && (out.inserted || out.updated || out.removed)) {
-    out.locked = true; out.lockedReason = `${attempts} student attempt(s) already exist for this exam; its questions are not changed.`;
-  }
+  // Students have already attempted this exam: its questions are not changed - EXCEPT Marathi-label additions, which are applied in place
+  // (they alter no answer, order, key, mark or English text). Anything else pending keeps the exam locked, as before.
+  if (attempts > 0 && (out.inserted || out.removed || out.updated > safe)) {
+    out.locked = true; out.lockedReason = `${attempts} student attempt(s) already exist for this exam; its questions are not changed${safe ? ` (${safe} Marathi-translation update(s) are still applied)` : ''}.`;
+    out.updated = safe;
+  } else if (attempts > 0 && safe) out.translationOnly = true;
   return { out, paper };
 };
 
@@ -221,7 +230,11 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
         const removed = await OlympiadQuestion.deleteMany({ exam: exam._id, questionNumber: { $nin: keep } });
         row.removed = removed && (removed.deletedCount ?? removed.n ?? 0);
         row.inserted = counts.inserted; row.updated = counts.updated; row.unchanged = counts.unchanged;
-      } else { row.inserted = 0; row.updated = 0; row.unchanged = 0; row.removed = 0; }
+      } else {
+        let n = 0;
+        for (const q of paper.questions) { const doc = questionDoc(exam._id, paper, q); const cur = await OlympiadQuestion.findOne({ exam: exam._id, questionNumber: q.n }).select('+correctAnswer +explanation'); if (cur && differs(cur, doc) && onlyTranslation(cur, doc)) { await OlympiadQuestion.updateOne({ exam: exam._id, questionNumber: q.n }, { $set: { options: doc.options, ...(doc.provenance ? { provenance: doc.provenance } : {}) } }); n += 1; } }
+        row.inserted = 0; row.updated = n; row.unchanged = 0; row.removed = 0;
+      }
 
       const sections = paper.sections.map((s) => ({ name: s.name, nameMr: s.nameMr, questionCount: paper.questions.filter((q) => paper.sections[q.section] === s).length, marks: paper.questions.filter((q) => paper.sections[q.section] === s).reduce((m, q) => m + (q.marks ?? 1), 0) }));
       const set = { examFee: cfg.FEES.exam, interviewFee: cfg.FEES.interview };

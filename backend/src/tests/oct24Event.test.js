@@ -167,7 +167,7 @@ test('A: the dry run writes NOTHING and reports found / to-insert / review / ima
   assert.equal(r.body.summary.standards, 10); assert.equal(r.body.summary.found, 3 * 40 + 7 * 60, 'every paper is complete: 540 questions');
   assert.equal(r.body.summary.inserted, 540); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.duplicatesAvoided, 0);
   assert.equal(r.body.summary.manualReview, 0, 'no unresolved item remains'); assert.equal(r.body.summary.sourceWarnings, 0); assert.equal(r.body.summary.imagesAssociated, 1);
-  assert.equal(r.body.summary.completed, 3, 'Std 9 Q57 plus two repaired duplicate distractors are listed as completed by LearnIQ');
+  assert.equal(r.body.summary.completed, 6, 'Std 9 Q57, two repaired duplicate distractors and the Marathi option labels of Std 1, 2 and 3 are listed as completed by LearnIQ');
   assert.deepEqual(r.body.rows.find((x) => x.standard === 9).review, []); assert.equal(r.body.rows.find((x) => x.standard === 9).found, 60);
   assert.deepEqual(r.body.rows.find((x) => x.standard === 9).completions.map((x) => [x.question, x.kind]), [[57, 'authored-completion']]);
   assert.equal(fake.OlympiadQuestion.docs.length, before, 'a dry run never writes');
@@ -218,7 +218,7 @@ test('D: Std 9 Q57 is complete: stem and A/B from the PDF, authored C (correct) 
   assert.equal(ex9.totalQuestions, 60); assert.equal(ex9.totalMarks, 60);
   // the two repaired duplicate distractors keep the original wording in the record and the correct answer unchanged
   const b1 = questionsOf(1).find((x) => x.questionNumber === 30); assert.deepEqual(b1.options, ['Boyes', 'Boys', 'Boyz', 'Boies']); assert.equal(b1.correctAnswer, 1); assert.equal(b1.provenance.original, 'Boyes');
-  const b3 = questionsOf(3).find((x) => x.questionNumber === 29); assert.equal(b3.options[b3.correctAnswer], 'Teeth (दांत)'); assert.equal(b3.provenance.original, 'Toothes');
+  const b3 = questionsOf(3).find((x) => x.questionNumber === 29); assert.equal(b3.options[b3.correctAnswer], 'Teeth', 'no lone Marathi hint on the correct word form'); assert.equal(b3.options.filter((o) => /[\u0900-\u097F]/.test(o)).length, 0); assert.equal(b3.provenance.original, 'Toothes');
 });
 
 test('D2: every standard passes the server-side completeness check (counts, 4 distinct options, one valid stored answer, no gaps, marks)', async () => {
@@ -240,7 +240,7 @@ test('E: re-running the import is idempotent: nothing inserted, every question m
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.summary.inserted, 0); assert.equal(r.body.summary.updated, 0); assert.equal(r.body.summary.unchanged, 540); assert.equal(r.body.summary.duplicatesAvoided, 540);
   assert.equal(questionsOf(9).filter((q) => q.questionNumber === 57).length, 1, 'still exactly one Q57');
-  assert.equal(r.body.readiness.ready, true);
+  assert.equal((await require('../services/paperImport').readinessOf(O.e24._id)).ready, true);
   assert.equal(fake.OlympiadQuestion.docs.length, qBefore); assert.equal(fake.OlympiadExam.docs.length, exBefore);
   // an edited question is repaired in place (still one copy)
   const q = questionsOf(5).find((x) => x.questionNumber === 7); q.questionText = 'tampered';
@@ -503,4 +503,122 @@ test('U: the 24 Oct event published normally; nothing else was published and the
   const strip = (o) => { const c = deepClone(o); delete c.ex.resultsAudit; delete c.ex.resultsPublishedAt; delete c.ex.updatedAt; return c; };
   // (test O ran the scheduled results sweeper at a simulated 25 Oct, which legitimately stamps the 17 Oct exam's release bookkeeping; its questions, attempts and settings must be identical)
   assert.deepEqual(strip({ ev: fake.OlympiadEvent.docs.find((e) => String(e._id) === String(O.e17._id)), ex: fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x17._id)), q: fake.OlympiadQuestion.docs.filter((q) => String(q.exam) === String(O.x17._id)), at: fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x17._id)) }), strip(O.snap17));
+});
+
+// ───────────────────────── Marathi answer options (Std 1-3): every option bilingual, answers and order untouched ─────────────────────────
+const DEV = /[ऀ-ॿ]/; const fsx = require('fs'); const pathx = require('path');
+const paperFile = (n) => JSON.parse(fsx.readFileSync(pathx.join(__dirname, '..', 'data', 'oct24', `std${n}.json`), 'utf8'));
+const optLang = require('../services/optionLanguage');
+const ensurePaid = async (stu, exam) => { const o = await order(stu, exam, 'EXAM'); if (o.status === 200) await payFor(stu, exam, 'EXAM'); else assert.equal(o.body.code, 'ALREADY_PAID', o.text); };
+
+test('V: Q16-Q19 (as in the screenshots) show EVERY option in English + Marathi, in the original order, with the original keys', async () => {
+  const want = { 16: [['Eyes (डोळे)', 'Nose (नाक)', 'Ears (कान)', 'Hands (हात)'], 1], 17: [['Milk (दूध)', 'Burger (बर्गर)', 'Chips (चिप्स)', 'Candy (कँडी)'], 0], 18: [['Eagle (गरुड)', 'Duck (बदक)', 'Parrot (पोपट)', 'Crow (कावळा)'], 1], 19: [['West (पश्चिम)', 'East (पूर्व)', 'North (उत्तर)', 'South (दक्षिण)'], 1] };
+  for (const [n, [opts, key]] of Object.entries(want)) { const q = questionsOf(1).find((x) => x.questionNumber === Number(n)); assert.deepEqual(q.options, opts, `Std 1 Q${n}`); assert.equal(q.correctAnswer, key, `key of Q${n} unchanged`); }
+  // and through the student API, in the same order, with no key
+  const stu = O.s[1]; await ensurePaid(stu, O.x24[1]);
+  const st = await call('POST', `/api/olympiad/exams/${O.x24[1]._id}/start`, { token: stu.token });
+  assert.equal(st.status, 200, st.text); assert.equal(st.body.questions.length, 40);
+  for (const [n, [opts]] of Object.entries(want)) { const q = st.body.questions.find((x) => x.questionNumber === Number(n)); assert.deepEqual(q.options, opts); assert.ok(q.questionTextMr); }
+  assert.doesNotMatch(st.text, /correctAnswer|"answer":|provenance|optionsMrExempt|authored|sourceRef/);
+  O.std1Questions = st.body.questions;
+});
+
+test('W: all questions of Std 1, 2 and 3 are consistently bilingual - in the files, in the stored exams and in what students receive (all sections)', async () => {
+  O.s[3] = await mkUser('student', 3, 'Std 3 Student'); await ensurePaid(O.s[3], O.x24[3]); await ensurePaid(O.s[2], O.x24[2]);
+  const out = {};
+  for (const std of [1, 2, 3]) {
+    const file = paperFile(std); const exempt = new Map(file.questions.filter((q) => q.optionsMrExempt).map((q) => [q.n, q.optionsMrExempt]));
+    const stored = questionsOf(std); assert.equal(stored.length, 40);
+    const api = (await call('POST', `/api/olympiad/exams/${O.x24[std]._id}/start`, { token: O.s[std].token })).body.questions;
+    assert.equal(api.length, 40);
+    const sections = new Map(); let bilingual = 0; let optionsLabelled = 0;
+    for (const q of api) {
+      assert.equal(q.options.length, 4, `Std ${std} Q${q.questionNumber}`); assert.ok(q.questionTextMr, 'Marathi question text present');
+      const mr = q.options.filter((o) => DEV.test(o)).length;
+      assert.ok(mr === 0 || mr === 4, `Std ${std} Q${q.questionNumber}: all four options or none carry Marathi (${JSON.stringify(q.options)})`);
+      if (mr === 0) { assert.ok(exempt.has(q.questionNumber), `Std ${std} Q${q.questionNumber} is English-only but not a numeric / letter / spelling question: ${JSON.stringify(q.options)}`); }
+      else { bilingual += 1; optionsLabelled += 4; }
+      const s = sections.get(q.section) || { total: 0, bilingual: 0 }; s.total += 1; if (mr) s.bilingual += 1; sections.set(q.section, s);
+      assert.deepEqual(q.options, stored.find((x) => x.questionNumber === q.questionNumber).options, 'the student API serves exactly the stored options');
+    }
+    assert.deepEqual([...sections.keys()].sort(), ['English', 'Logical Reasoning & HOTS', 'Mathematics', 'Science / EVS']);
+    for (const [name, s] of sections) assert.ok(s.bilingual > 0, `Std ${std} ${name} has bilingual options`);
+    assert.equal(sections.get('Science / EVS').bilingual, 10, `Std ${std}: every Science / EVS question has bilingual options`);
+    out[std] = { questions: api.length, bilingual, exempt: exempt.size, optionsLabelled };
+    assert.equal(bilingual + exempt.size, 40, 'every question is either fully bilingual or an explicitly exempt numeric / letter / spelling question');
+  }
+  O.mrAudit = out; console.log('# Marathi option audit', JSON.stringify(out));
+});
+
+test('X: nothing but option labels changed - answers, order, English text, Marathi question text, marks, sections, visuals, images are identical to the paper files', async () => {
+  const { execFileSync } = require('child_process');
+  for (const std of [1, 2, 3]) {
+    const file = paperFile(std); const stored = questionsOf(std);
+    for (const q of file.questions) {
+      const s = stored.find((x) => x.questionNumber === q.n);
+      assert.equal(s.correctAnswer, q.answer); assert.equal(s.questionText, q.text); assert.equal(s.questionTextMr, q.textMr); assert.equal(s.marks, q.marks);
+      assert.equal(s.section, file.sections[q.section].name); assert.equal(s.visual, q.visual || undefined); assert.equal(s.image, q.image || undefined);
+      assert.equal(s.sourceRef, `oct24-2026:std${std}:q${q.n}`); assert.equal(s.options.length, 4);
+    }
+    // against the paper file as it was BEFORE this change (git history): same English/symbol part and position for each option
+    let before = null; try { before = JSON.parse(execFileSync('git', ['show', `${process.env.PAPER_BASELINE || 'f830f73'}:backend/src/data/oct24/std${std}.json`], { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString()); } catch { /* no git history in this checkout */ }
+    if (before) for (const b of before.questions) {
+      const a = file.questions.find((x) => x.n === b.n); assert.equal(a.answer, b.answer, `Std ${std} Q${b.n}: key unchanged`); assert.equal(a.text, b.text); assert.equal(a.textMr, b.textMr); assert.equal(a.marks, b.marks); assert.equal(a.section, b.section);
+      b.options.forEach((o, i) => {
+        if (std === 3 && b.n === 29 && i === 1) return; // the lone Marathi hint on the correct word form was removed on purpose
+        assert.ok(optLang.isTranslationOnly([o], [a.options[i]]), `Std ${std} Q${b.n} option ${i}: ${o} -> ${a.options[i]}`);
+      });
+    }
+  }
+});
+
+test('Y: Marathi stays with its option when the options are re-ordered, and scoring is unaffected: all-correct answers score full marks, a wrong choice scores 0', async () => {
+  // the app does not shuffle options; the label is part of the option string so any re-ordering keeps it, and the key is an index into the same array
+  for (const q of O.std1Questions) { const rev = [...q.options].reverse(); assert.deepEqual([...rev].reverse(), q.options); assert.equal(rev.filter((o) => DEV.test(o)).length, q.options.filter((o) => DEV.test(o)).length, 'each label is inside its own option string, so re-ordering cannot separate it'); }
+  const stu = O.s[1]; const stored = questionsOf(1);
+  const answers = O.std1Questions.map((q) => ({ questionId: q._id, selectedOption: q.questionNumber === 16 ? 0 : stored.find((x) => x.questionNumber === q.questionNumber).correctAnswer }));  // Q16: deliberately wrong (A)
+  assert.equal((await call('PUT', `/api/olympiad/exams/${O.x24[1]._id}/attempt/answers`, { token: stu.token, body: { answers } })).status, 200);
+  await fake.OlympiadExam.updateOne({ _id: O.x24[1]._id }, { $set: { resultsPublishedAt: null, resultsPublishAt: new Date(Date.now() + 5 * D) } });
+  const sub = await call('POST', `/api/olympiad/exams/${O.x24[1]._id}/submit`, { token: stu.token, body: {} }); assert.equal(sub.status, 200, sub.text); assert.doesNotMatch(sub.text, /correctAnswer|"score"/);
+  const row = (await attemptsOf(O.x24[1])).find((a) => a.student && a.student.name === 'Std 1 Student');
+  assert.equal(row.score, 39); assert.equal(row.correctCount, 39); assert.equal(row.wrongCount, 1); assert.equal(row.totalMarks, 40);
+});
+
+test('Z: the import checks catch the defect and repeat imports keep the translations: half-translated papers are refused, partial DB rows block publishing, locked exams still receive label updates only', async () => {
+  const pi = require('../services/paperImport'); const os = require('os');
+  // 1. the importer refuses a bilingual paper whose only translated option is the correct one
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'paper-')); const bad = paperFile(1); bad.questions = bad.questions.slice(0, 40);
+  bad.questions.find((q) => q.n === 16).options = ['Eyes', 'Nose (नाक)', 'Ears', 'Hands']; fsx.writeFileSync(pathx.join(dir, 'std1.json'), JSON.stringify(bad));
+  const r = pi.loadPaper(1, dir); assert.ok(r.problems.some((p) => /^Q16: Only 1 of 4 answer options have a Marathi translation \(options A, C, D are English-only\)/.test(p)), JSON.stringify(r.problems));
+  assert.deepEqual(pi.loadPaper(1).problems, [], 'the real Std 1 paper is clean');
+  for (const n of [2, 3]) assert.deepEqual(pi.loadPaper(n).problems, []);
+  assert.equal(optLang.optionLanguageIssue(['4', '5', '6', '7']), null); assert.equal(optLang.optionLanguageIssue(['Cat', 'Dog', 'Cow', 'Hen']) !== null, true); assert.equal(optLang.optionLanguageIssue(['DGO', 'DOG', 'GOD', 'ODG'], 'spelling'), null);
+  // 2. the publish-time check flags a stored half-translated question (as the live exam showed), and passes again once fixed
+  const q16 = questionsOf(1).find((q) => q.questionNumber === 16); const good = [...q16.options]; q16.options = ['Eyes', 'Nose (नाक)', 'Ears', 'Hands'];
+  const { validateExam } = require('../services/paperValidation'); const bad1 = await validateExam(fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x24[1]._id)));
+  assert.equal(bad1.ok, false); assert.deepEqual(bad1.issues.map((i) => i.question), [16]); assert.match(bad1.issues[0].issue, /Marathi translation/);
+  // 3. a repeat import restores it IN PLACE even though students have attempted this exam (label-only update), with no duplicates and the attempt untouched
+  const nBefore = fake.OlympiadQuestion.docs.length; const attBefore = deepClone(fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x24[1]._id)));
+  const reimport = async () => ({ status: 200, body: await pi.apply(O.e24._id, S.admin.user, { standards: [1] }) }); // (service call: the HTTP route is rate-limited)
+  const rep = await reimport();
+  assert.equal(rep.body.rows[0].locked, false); assert.equal(rep.body.rows[0].updated, 1); assert.deepEqual(q16.options, good); assert.equal(q16.correctAnswer, 1);
+  assert.equal(fake.OlympiadQuestion.docs.length, nBefore); assert.deepEqual(deepClone(fake.OlympiadAttempt.docs.filter((a) => String(a.exam) === String(O.x24[1]._id))), attBefore);
+  assert.equal((await validateExam(fake.OlympiadExam.docs.find((e) => String(e._id) === String(O.x24[1]._id)))).ok, true);
+  // 4. a second repeat changes nothing; and if something ELSE differs, the exam stays locked but the label update still lands
+  const again = await reimport(); assert.equal(again.status, 200, again.text); assert.equal(again.body.rows[0].updated, 0); assert.equal(again.body.rows[0].unchanged, 40);
+  const q17 = questionsOf(1).find((q) => q.questionNumber === 17); const q20 = questionsOf(1).find((q) => q.questionNumber === 20);
+  q17.options = ['Milk (दूध)', 'Burger', 'Chips', 'Candy']; q20.questionText = 'Fish live in (edited):';
+  const mix = await reimport();
+  assert.equal(mix.body.rows[0].locked, true); assert.match(mix.body.rows[0].lockedReason, /1 Marathi-translation update/);
+  assert.deepEqual(q17.options, ['Milk (दूध)', 'Burger (बर्गर)', 'Chips (चिप्स)', 'Candy (कँडी)']); assert.equal(q20.questionText, 'Fish live in (edited):', 'a locked exam keeps every other field as it was');
+  q20.questionText = 'Fish live in:'; // restore
+});
+
+test('Z2: the paper-import report lists the Marathi labels as a recorded LearnIQ completion, not as a review item, and publishing still needs no acknowledgement', async () => {
+  const r = await adminCall('GET', `/api/olympiad/admin/events/${O.e24._id}/paper-import`);
+  for (const std of [1, 2, 3]) { const row = r.body.rows.find((x) => x.standard === std); assert.ok(row.completions.some((c) => c.kind === 'marathi-options-added' && new RegExp(`Std ${std}:`).test(c.basis))); assert.deepEqual(row.review, []); }
+  assert.equal(r.body.summary.manualReview, 0);
+  assert.equal((await require('../services/paperImport').readinessOf(O.e24._id)).ready, true);
+  // provenance never reaches students
+  const st = await call('POST', `/api/olympiad/exams/${O.x24[3]._id}/start`, { token: O.s[3].token }); assert.doesNotMatch(st.text, /provenance|marathi-options-added|optionsMrExempt|correctAnswer/);
 });
