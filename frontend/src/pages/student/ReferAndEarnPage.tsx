@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Gift, Copy, Check, Share2, Users, BadgeCheck, Ticket, Wallet, Loader2, AlertTriangle, UserPlus, GraduationCap, ChevronLeft, ChevronRight, Send, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sidebar from '../../components/layout/Sidebar';
+import { Link } from 'react-router-dom';
+import { useCreditBalance, setCreditBalanceFromServer } from '../../hooks/useCreditBalance';
 import { referralApi, MyReferralOverview, MyReferralRow, CreditTx } from '../../services/referrals';
 import { olympiadErrorMessage } from '../../services/olympiad';
 import { formatISTDate } from '../../utils/olympiadFormat';
@@ -46,7 +48,7 @@ const ReferAndEarnPage: React.FC = () => {
 
   const loadOverview = useCallback(async () => {
     setError('');
-    try { setData(await referralApi.me()); } catch (err) { setError(olympiadErrorMessage(err, 'We could not load your referral details.')); }
+    try { const ov = await referralApi.me(); setData(ov); setCreditBalanceFromServer(ov.stats.available); } catch (err) { setError(olympiadErrorMessage(err, 'We could not load your referral details.')); }
   }, []);
   useEffect(() => { void loadOverview(); }, [loadOverview]);
 
@@ -78,6 +80,8 @@ const ReferAndEarnPage: React.FC = () => {
   const total = tab === 'referrals' ? refs?.total ?? 0 : hist?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const s = data?.stats;
+  const shared = useCreditBalance(true);
+  const available = shared.balance ?? s?.available ?? 0;
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -100,6 +104,37 @@ const ReferAndEarnPage: React.FC = () => {
           {data && s && (
             <>
               {!data.enabled && <div className="rounded-xl border border-[#FCD34D] bg-[#FEF3C7] p-3 mb-4 text-sm text-[#92400E]" data-testid="refer-paused">The referral programme is paused right now. Your credits are safe and can still be used.</div>}
+
+              <section className="rounded-card p-5 sm:p-6 mb-5 text-white bg-gradient-to-br from-[#5B52E8] to-[#4F7BF0] shadow-md" aria-labelledby="credit-card-title" data-testid="credit-balance-card">
+                <div className="flex items-center gap-4">
+                  <span className="flex-shrink-0 w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center" aria-hidden><Ticket className="w-7 h-7" /></span>
+                  <div className="min-w-0">
+                    <h2 id="credit-card-title" className="text-xs sm:text-sm font-semibold uppercase tracking-wide text-white/90">Available Exam Credits</h2>
+                    <p className="font-heading font-extrabold leading-none text-5xl sm:text-6xl mt-1 tabular-nums break-all" data-testid="credit-balance-value" aria-label={`Available exam credits: ${available}`}>{available}</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm text-white/95" data-testid="credit-balance-message">
+                  {available <= 0 ? 'Share your referral code to earn exam credits.'
+                    : available === 1 ? 'Use 1 credit to unlock one eligible exam or interview.'
+                    : available === 2 ? 'Use 1 credit for an eligible exam and 1 credit for an eligible interview.'
+                    : `You have ${available} credits. Each credit unlocks one eligible exam or one eligible interview.`}
+                </p>
+                <p className="mt-1 text-xs text-white/85" data-testid="credit-balance-rule">1 exam credit = 1 eligible exam OR 1 eligible interview. Use your credits to unlock eligible exams or interviews without payment.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {available <= 0 ? (
+                    <button onClick={canNativeShare ? nativeShare : () => doCopy('link')} className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-xl bg-white text-[#4338CA] text-sm font-semibold hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" data-testid="credit-share">
+                      <Share2 className="w-4 h-4" aria-hidden /> Share Referral Link
+                    </button>
+                  ) : (
+                    <Link to="/student/exams" className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-xl bg-white text-[#4338CA] text-sm font-semibold hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" data-testid="credit-explore">
+                      <GraduationCap className="w-4 h-4" aria-hidden /> Explore Eligible Exams
+                    </Link>
+                  )}
+                  <button onClick={() => { setTab('history'); setPage(1); document.getElementById('referral-lists')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-xl border border-white/60 text-white text-sm font-semibold hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" data-testid="credit-history-link">
+                    View Credit History
+                  </button>
+                </div>
+              </section>
 
               <section className="card-soft rounded-card border border-border-subtle p-5 mb-5" aria-label="Your referral code">
                 <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Your referral code</p>
@@ -135,13 +170,12 @@ const ReferAndEarnPage: React.FC = () => {
                 </div>
               </section>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5" data-testid="refer-stats">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5" data-testid="refer-stats">
                 <StatCard testId="stat-total" icon={Users} label="Total referrals" value={s.totalReferrals} hint="Friends who registered with your code" tone="bg-[#E0E7FF] text-[#4338CA]" />
                 <StatCard testId="stat-pending" icon={Users} label="Pending" value={s.pending} hint="Waiting for their first payment" tone="bg-[#FEF3C7] text-[#B45309]" />
                 <StatCard testId="stat-successful" icon={BadgeCheck} label="Successful" value={s.successful} hint="First payment made, credit added" tone="bg-[#DCFCE7] text-[#16A34A]" />
                 <StatCard testId="stat-earned" icon={Ticket} label="Credits earned" value={s.creditsEarned} hint={s.creditsFromAdmin ? `+ ${s.creditsFromAdmin} from LearnIQ` : 'From referrals'} tone="bg-[#FEF3C7] text-[#D97706]" />
                 <StatCard testId="stat-used" icon={GraduationCap} label="Credits used" value={s.creditsUsed} hint="Used for exams / interviews" tone="bg-[#E0E7FF] text-[#4338CA]" />
-                <StatCard testId="stat-available" icon={Wallet} label="Available credits" value={s.available} hint={s.creditsUsed ? `${s.creditsUsed} used for exams / interviews` : '1 credit = 1 exam or 1 interview'} tone="bg-[#CCFBF1] text-[#0D9488]" />
               </div>
               {(s.pending > 0 || s.underReview > 0) && (
                 <p className="text-xs text-text-secondary -mt-2 mb-5" data-testid="stat-notes">
@@ -167,7 +201,7 @@ const ReferAndEarnPage: React.FC = () => {
                 <p className="text-[11px] text-text-muted mt-2">Credits are earned only when a genuinely new student registers with your code and makes a first successful payment. They cannot be sold or transferred, and they do not expire. LearnIQ may review referrals that look unusual.</p>
               </section>
 
-              <div className="flex gap-2 mb-3" role="tablist" aria-label="Referral lists">
+              <div id="referral-lists" className="flex gap-2 mb-3 scroll-mt-20" role="tablist" aria-label="Referral lists">
                 {([['referrals', 'My referrals'], ['history', 'Credit history']] as const).map(([k, label]) => (
                   <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); setPage(1); }} data-testid={`tab-${k}`}
                     className={`text-xs font-semibold px-4 py-2 rounded-full border transition-colors ${tab === k ? 'bg-brand-primary text-white border-brand-primary' : 'bg-surface text-text-primary border-border-subtle hover:bg-surface-alt'}`}>{label}</button>

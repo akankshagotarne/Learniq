@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
+import ExamCreditsButton from './ExamCreditsButton';
 import ThemeToggle from '../ui/ThemeToggle';
 import { COURSES_ENABLED } from '../../constants/features';
 import { standardShortLabel } from '../../constants/standards';
@@ -122,6 +123,7 @@ const Sidebar: React.FC = () => {
       {/* Mobile top bar - only shown below md, gives access to the drawer */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 dark:bg-[#1B1C2E]/95 backdrop-blur-xl border-b border-[#E7E7F2] dark:border-[#2E2F4A] z-40 flex items-center justify-between px-4">
         <LogoLink size="sm" />
+        {user.role === 'student' && <div className="flex-1 min-w-0 flex justify-end pl-2 pr-1"><ExamCreditsButton routeKey={location.pathname} /></div>}
         <button
           ref={menuBtnRef}
           onClick={() => setMobileOpen(true)}
@@ -193,6 +195,9 @@ const Sidebar: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Exam credit balance (desktop; phones show it in the top bar) */}
+        {!collapsed && user.role === 'student' && <div className="hidden lg:block px-4 pt-3"><ExamCreditsButton routeKey={location.pathname} className="w-full justify-between" /></div>}
 
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
