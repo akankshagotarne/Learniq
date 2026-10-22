@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useOlympiadPayment } from './useOlympiadPayment';
 import ExamPaymentDialog from './ExamPaymentDialog';
+import { setCreditBalanceFromServer, refreshCreditBalance } from '../../hooks/useCreditBalance';
 import { referralApi, ExamCreditInfo } from '../../services/referrals';
 import { olympiadErrorCode, olympiadErrorMessage, ExamComponent } from '../../services/olympiad';
 
@@ -35,11 +36,12 @@ export const useExamCheckout = (onUnlocked: (examId: string, component: ExamComp
     lock.current = true; setCheckingId(`${exam._id}:${component}`);
     try {
       const r = await referralApi.redeem(exam._id, component);
+      setCreditBalanceFromServer(r.balance);   // header + Refer & Earn show the new server balance at once
       toast.success(r.message || '1 credit used.');
       done(exam._id, component);
       return true;
     } catch (err) {
-      if (olympiadErrorCode(err) === 'ALREADY_PAID') { toast.success('Already unlocked. No credit was used.'); done(exam._id, component); return true; }
+      if (olympiadErrorCode(err) === 'ALREADY_PAID') { void refreshCreditBalance(true); toast.success('Already unlocked. No credit was used.'); done(exam._id, component); return true; }
       toast.error(olympiadErrorMessage(err, 'We could not use your credit. You have not been charged.'));
       return false;
     } finally { lock.current = false; setCheckingId(null); }

@@ -25,6 +25,7 @@ const studentApi = (extra?: Override): Override => (m, p, body) => {
   if (m === 'GET' && p === '/referrals/me') return { body: overview() };
   if (m === 'GET' && p === '/referrals/me/referrals') return { body: myRefs };
   if (m === 'GET' && p === '/referrals/me/credits') return { body: myCredits };
+  if (m === 'GET' && p === '/referrals/me/balance') return { body: { success: true, balance: 4 } };
   return undefined;
 };
 
@@ -104,7 +105,10 @@ test.describe('student Refer & Earn', () => {
     await expect(page.getByTestId('stat-total-value')).toHaveText('4');
     await expect(page.getByTestId('stat-successful-value')).toHaveText('3');
     await expect(page.getByTestId('stat-earned-value')).toHaveText('3');
-    await expect(page.getByTestId('stat-available-value')).toHaveText('4');
+    await expect(page.getByTestId('credit-balance-value')).toHaveText('4');
+    await expect(page.getByTestId('credit-balance-card')).toContainText('Available Exam Credits');
+    await expect(page.getByTestId('credit-balance-rule')).toContainText('1 exam credit = 1 eligible exam OR 1 eligible interview');
+    await expect(page.getByTestId('stat-available')).toHaveCount(0);
     await expect(page.getByTestId('stat-pending-value')).toHaveText('0');
     await expect(page.getByTestId('stat-used-value')).toHaveText('1');
     await expect(page.getByTestId('refer-explainer')).toContainText('Signing up alone does not earn a credit');
@@ -136,7 +140,9 @@ test.describe('student Refer & Earn', () => {
     await page.goto('/student/refer');
     await expect(page.getByTestId('referrals-empty')).toContainText('No referrals yet');
     await expect(page.locator('aside nav a', { hasText: 'Refer & Earn' })).toHaveCount(1);
-    await expect(page.getByTestId('stat-available-value')).toHaveText('0');
+    await expect(page.getByTestId('credit-balance-value')).toHaveText('0');
+    await expect(page.getByTestId('credit-balance-message')).toContainText('Share your referral code to earn exam credits.');
+    await expect(page.getByTestId('credit-share')).toBeVisible();
   });
 
   test('a server error is shown with a retry, not a blank page', async ({ page }) => {
