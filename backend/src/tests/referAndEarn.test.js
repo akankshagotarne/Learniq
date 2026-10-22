@@ -100,6 +100,18 @@ const reqId = () => `req-${Date.now()}-${++seq}-abcdefgh`;
 const grant = async (studentIds, extra = {}, who) => call('POST', '/api/referrals/admin/grants', { token: (who || await mkUser('admin')).token, body: { studentIds: studentIds.map(String), credits: 1, reason: 'Festival gift from the LearnIQ team', requestId: reqId(), ...extra } });
 const giveCredits = async (stu, n) => { const r = await grant([stu.id], { credits: n }); assert.equal(r.status, 201, r.text); };
 const info = (stu, exam) => call('GET', `/api/olympiad/exams/${exam._id}/credit`, { token: stu.token });
+// a verified money payment, confirmed through the SAME shared function the checkout verify / webhook / reconciler use
+const markPaid = require('../controllers/olympiadController')._internals.markPaymentSuccess;
+let paySeq = 0;
+const startPayment = (studentId, { component = 'EXAM', amount = 10, exam } = {}) => fake.OlympiadPayment.create({
+  student: studentId, exam: (exam || S.exam)._id, component, amount, currency: 'INR', status: 'PENDING', razorpayOrderId: `order_ref_${++paySeq}`,
+});
+const payFor = async (studentId, opts = {}) => {
+  const p = await startPayment(studentId, opts);
+  return markPaid(p, { razorpayPaymentId: `pay_ref_${p.razorpayOrderId}`, razorpaySignature: 'sig', via: opts.via || 'verify' });
+};
+const regPaid = async (body, opts) => { const r = await register(body); assert.equal(r.status, 201, r.text); await payFor(r.body.user._id, opts); return r; };
+const refOf = (referredId) => fake.Referral.docs.find((x) => String(x.referred) === String(referredId));
 const redeem = (stu, exam) => call('POST', `/api/olympiad/exams/${exam._id}/credit/redeem`, { token: stu.token });
 
 test.before(async () => {
@@ -155,6 +167,10 @@ test('B: a new student registering with a valid code earns the referrer exactly 
   const before = balanceOf(ref.id);
   const r = await register(regBody({ name: 'Aarav Mehta', referralCode: code.toLowerCase() }));
   assert.equal(r.status, 201, r.text);
+  assert.equal(balanceOf(ref.id), before, 'registration alone earns nothing');
+  assert.equal(refOf(r.body.user._id).rewardStatus, 'PENDING'); assert.equal(refOf(r.body.user._id).rewardPolicy, 'ON_FIRST_PAYMENT');
+  assert.equal(ledgerOf(ref.id).length, 0, 'no ledger entry at registration');
+  await payFor(r.body.user._id);
   assert.equal(balanceOf(ref.id), before + 1);
   const rows = fake.Referral.docs.filter((x) => String(x.referrer) === ref.id);
   assert.equal(rows.length, 1);
@@ -188,7 +204,10 @@ test('B: self-referral and a repeated / concurrent attribution can never reward 
   const bal = balanceOf(ref.id);
   const results = await Promise.all(Array.from({ length: 8 }, () => referrals.attributeRegistration({ newUser: fresh.user, code })));
   assert.ok(results.every((x) => x.applied === true));
-  assert.equal(balanceOf(ref.id), bal + 1, 'eight concurrent attempts, one credit');
+  assert.equal(balanceOf(ref.id), bal, 'attribution never rewards');
+  const pay = await startPayment(fresh.id);
+  await Promise.all(Array.from({ length: 6 }, () => markPaid(pay, { razorpayPaymentId: 'pay_dup', via: 'webhook' })));
+  assert.equal(balanceOf(ref.id), bal + 1, 'eight concurrent attributions and six concurrent confirmations, one credit');
   assert.equal(fake.Referral.docs.filter((x) => String(x.referred) === fresh.id).length, 1);
   assert.equal(ledgerOf(ref.id).filter((t) => t.type === 'REFERRAL_REWARD').length, 1);
   const other = await mkUser(); const code2 = await codeOf(other);
@@ -203,13 +222,13 @@ test('B: a paused program never blocks registration and issues no reward; re-ena
   assert.equal(r.status, 201); assert.equal(balanceOf(ref.id), 0);
   assert.equal((await call('GET', `/api/referrals/validate?code=${code}`)).body.valid, false);
   await call('PUT', '/api/referrals/admin/settings', { ...admin(), body: { enabled: true } });
-  assert.equal((await register(regBody({ referralCode: code }))).status, 201); assert.equal(balanceOf(ref.id), 1);
+  assert.equal((await regPaid(regBody({ referralCode: code }))).status, 201); assert.equal(balanceOf(ref.id), 1);
 });
 
 test('B: a burst of referrals from one code is held UNDER_REVIEW (no reward) until an admin approves', async () => {
   const ref = await mkUser(); const code = await codeOf(ref);
   const made = [];
-  for (let i = 0; i < 7; i += 1) made.push(await register(regBody({ referralCode: code })));
+  for (let i = 0; i < 7; i += 1) made.push(await regPaid(regBody({ referralCode: code })));
   assert.ok(made.every((m) => m.status === 201), 'registrations are never blocked');
   assert.equal(balanceOf(ref.id), 5, 'the first five are rewarded');
   const held = fake.Referral.docs.filter((x) => String(x.referrer) === ref.id && x.status === 'UNDER_REVIEW');
@@ -224,8 +243,8 @@ test('B: a burst of referrals from one code is held UNDER_REVIEW (no reward) unt
 // ── C. student dashboard ─────────────────────────────────────────────────────────────────────
 test('C: dashboard stats, referral table (names minimised) and credit history are correct and private to the student', async () => {
   const ref = await mkUser(undefined, 8, 'Neha Kulkarni'); const code = await codeOf(ref);
-  await register(regBody({ name: 'Ishaan Prakash Desai', referralCode: code }));
-  await register(regBody({ name: 'Meera Joshi', referralCode: code }));
+  await regPaid(regBody({ name: 'Ishaan Prakash Desai', referralCode: code }));
+  await regPaid(regBody({ name: 'Meera Joshi', referralCode: code }));
   await giveCredits(ref, 2);
   const me = (await call('GET', '/api/referrals/me', { token: ref.token })).body;
   assert.equal(me.stats.totalReferrals, 2); assert.equal(me.stats.successful, 2); assert.equal(me.stats.creditsEarned, 2);
@@ -288,7 +307,7 @@ test('D: overview numbers equal the underlying records; list filters and details
 
 test('D: review needs a reason, is audited, and rejecting a rewarded referral needs an explicit reward decision', async () => {
   const ref = await mkUser(); const code = await codeOf(ref);
-  await register(regBody({ referralCode: code })); await register(regBody({ referralCode: code }));
+  await regPaid(regBody({ referralCode: code })); await regPaid(regBody({ referralCode: code }));
   const [r1, r2] = fake.Referral.docs.filter((x) => String(x.referrer) === ref.id);
   const url = (r) => `/api/referrals/admin/referrals/${r._id}/review`;
   assert.equal((await call('POST', url(r1), { ...admin(), body: { action: 'reject' } })).body.code, 'REASON_REQUIRED');
@@ -309,7 +328,7 @@ test('D: review needs a reason, is audited, and rejecting a rewarded referral ne
 
 test('D: reversing a reward the student already spent is refused (the balance never goes negative)', async () => {
   const ref = await mkUser(); const code = await codeOf(ref);
-  await register(regBody({ referralCode: code }));
+  await regPaid(regBody({ referralCode: code }));
   const exam = await mkExam(); assert.equal((await redeem(ref, exam)).status, 200);
   assert.equal(balanceOf(ref.id), 0);
   const r = fake.Referral.docs.find((x) => String(x.referrer) === ref.id);
@@ -550,7 +569,7 @@ test('G: reconcile reports drift and repairs only quiet accounts; in-flight ones
 });
 
 test('G: deleting a student retires the code but keeps the ledger and referral records', async () => {
-  const ref = await mkUser(); const code = await codeOf(ref); await register(regBody({ referralCode: code }));
+  const ref = await mkUser(); const code = await codeOf(ref); await regPaid(regBody({ referralCode: code }));
   await referrals.onStudentDeleted(ref.user._id);
   assert.equal((await call('GET', `/api/referrals/validate?code=${code}`)).body.valid, false);
   assert.equal(ledgerOf(ref.id).length, 1); assert.equal(fake.Referral.docs.filter((x) => String(x.referrer) === ref.id).length, 1);
@@ -580,4 +599,117 @@ test('H: registration without any referral input behaves exactly as before', asy
   assert.equal(r.status, 201); assert.ok(r.body.token); assert.equal(r.body.user.role, 'student');
   const dupPhone = await register({ email: 'zzz@example.com', phone: fake.User.docs.find((u) => u.phoneNormalized).phone });
   assert.equal(dupPhone.status, 409);
+});
+
+// ── I. payment-qualified referral reward ─────────────────────────────────────────────────────
+const rewardsOf = (id) => ledgerOf(id).filter((t) => t.type === 'REFERRAL_REWARD');
+const mkReferred = async (ref, extra = {}) => { const r = await register(regBody({ referralCode: await codeOf(ref), ...extra })); assert.equal(r.status, 201, r.text); return r.body.user._id; };
+
+test('I: registration is PENDING and stays PENDING after non-payment activity (login, profile, credit redemption, an unpaid order)', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  const row = refOf(kid);
+  assert.equal(row.rewardStatus, 'PENDING'); assert.equal(row.qualifiedAt, undefined); assert.equal(balanceOf(ref.id), 0);
+  const kidTok = fake.sessionToken(fake.User.docs.find((u) => String(u._id) === String(kid)));
+  await call('GET', '/api/referrals/me', { token: kidTok });
+  await startPayment(kid);                                             // an order that was never paid
+  await giveCredits({ id: String(kid) }, 1); await redeem({ id: String(kid), token: kidTok }, await mkExam());   // a credit unlock is not a payment
+  assert.equal(refOf(kid).rewardStatus, 'PENDING'); assert.equal(balanceOf(ref.id), 0); assert.equal(rewardsOf(ref.id).length, 0);
+  const list = (await call('GET', '/api/referrals/me/referrals', { token: ref.token })).body;
+  assert.equal(list.referrals[0].status, 'Pending');
+  const me = (await call('GET', '/api/referrals/me', { token: ref.token })).body;
+  assert.equal(me.stats.totalReferrals, 1); assert.equal(me.stats.successful, 0); assert.equal(me.stats.creditsEarned, 0);
+});
+
+test('I: the first verified EXAM payment rewards exactly once; later payments, duplicate events and retries add nothing', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  const p1 = await startPayment(kid, { component: 'EXAM', amount: 10 });
+  await markPaid(p1, { razorpayPaymentId: 'pay_a', via: 'webhook' });
+  assert.equal(balanceOf(ref.id), 1);
+  const row = refOf(kid);
+  assert.equal(row.rewardStatus, 'REWARDED'); assert.equal(row.qualifyingComponent, 'EXAM'); assert.equal(String(row.qualifyingPayment), String(p1._id)); assert.equal(row.qualifyingAmount, 10);
+  const tx = rewardsOf(ref.id); assert.equal(tx.length, 1); assert.equal(String(tx[0].payment), String(p1._id)); assert.equal(tx[0].student && String(tx[0].student), ref.id);
+  assert.equal(balanceOf(String(kid)), 0, 'the referred student gets / loses nothing');
+  for (let i = 0; i < 4; i += 1) await markPaid(p1, { razorpayPaymentId: 'pay_a', via: i % 2 ? 'webhook' : 'reconcile' });
+  await payFor(kid, { component: 'INTERVIEW', amount: 10 });
+  assert.equal(balanceOf(ref.id), 1); assert.equal(rewardsOf(ref.id).length, 1); assert.equal(balanceOf(ref.id), ledgerTotal(ref.id));
+  assert.equal(fake.Notification.docs.filter((n) => String(n.recipient) === ref.id && /first successful payment/.test(n.message)).length, 1, 'one notification');
+  const list = (await call('GET', '/api/referrals/me/referrals', { token: ref.token })).body;
+  assert.equal(list.referrals[0].status, 'Successful'); assert.equal(list.referrals[0].credits, 1);
+});
+
+test('I: the first verified INTERVIEW payment alone also qualifies', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  await payFor(kid, { component: 'INTERVIEW', amount: 10 });
+  assert.equal(balanceOf(ref.id), 1); assert.equal(refOf(kid).qualifyingComponent, 'INTERVIEW');
+});
+
+test('I: pending, failed, unverified, zero-amount and removed payments never qualify; a later real payment does', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  const pending = await startPayment(kid);
+  assert.equal((await referrals.qualifyOnPayment(pending)).qualified, false);
+  const failed = await fake.OlympiadPayment.create({ student: kid, exam: S.exam._id, component: 'EXAM', amount: 10, status: 'FAILED', razorpayOrderId: `o_f_${++paySeq}` });
+  assert.equal((await referrals.qualifyOnPayment(failed)).qualified, false);
+  const noVerify = await fake.OlympiadPayment.create({ student: kid, exam: (await mkExam())._id, component: 'EXAM', amount: 10, status: 'SUCCESS', razorpayOrderId: `o_u_${++paySeq}` });
+  assert.equal((await referrals.qualifyOnPayment(noVerify)).reason, 'NOT_VERIFIED', 'SUCCESS without a verification record is not trusted');
+  const zero = await fake.OlympiadPayment.create({ student: kid, exam: (await mkExam())._id, component: 'EXAM', amount: 0, status: 'SUCCESS', verifiedAt: new Date(), razorpayOrderId: `o_z_${++paySeq}` });
+  assert.equal((await referrals.qualifyOnPayment(zero)).reason, 'NOT_A_MONEY_PAYMENT');
+  const legacy = await fake.OlympiadPayment.create({ student: kid, exam: (await mkExam())._id, component: 'PACKAGE', amount: 10, status: 'SUCCESS', verifiedAt: new Date(), razorpayOrderId: `o_p_${++paySeq}` });
+  assert.equal((await referrals.qualifyOnPayment(legacy)).qualified, false);
+  assert.equal((await referrals.qualifyOnPayment(null)).qualified, false);
+  assert.equal(balanceOf(ref.id), 0); assert.equal(refOf(kid).qualifiedAt, undefined);
+  await payFor(kid, { exam: await mkExam() }); assert.equal(balanceOf(ref.id), 1);
+});
+
+test('I: a student with no referral, and a payment by someone who did not register with a code, change nothing', async () => {
+  const stu = await mkUser(); const r = await payFor(stu.id);
+  assert.equal(r.changed, true); assert.equal(fake.CreditTransaction.docs.filter((t) => t.type === 'REFERRAL_REWARD' && String(t.student) === stu.id).length, 0);
+});
+
+test('I: legacy referrals (rewarded at registration, no policy marker) are never re-processed or paid a second time', async () => {
+  const ref = await mkUser(); const code = await codeOf(ref);
+  const kid = await mkUser();
+  const legacy = await fake.Referral.create({ referrer: ref.user._id, referred: kid.user._id, codeUsed: code, status: 'SUCCESSFUL', rewardStatus: 'PENDING' });
+  assert.equal(legacy.rewardPolicy, undefined);
+  await referrals.rewardReferral(legacy._id); assert.equal(balanceOf(ref.id), 1, 'legacy: rewarded by the old rule');
+  const bal = balanceOf(ref.id);
+  const out = await payFor(kid.id);
+  assert.equal(out.changed, true);
+  assert.equal(balanceOf(ref.id), bal, 'the legacy referral earns nothing more'); assert.equal(refOf(kid.id).rewardPolicy, undefined); assert.equal(refOf(kid.id).qualifiedAt, undefined);
+  assert.equal(rewardsOf(ref.id).length, 1);
+});
+
+test('I: an interrupted qualification (payment recorded, reward not issued) is completed by the next confirmation, still once', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  const p = await startPayment(kid);
+  const origAward = credits.awardReferral; credits.awardReferral = async () => { throw new Error('db down'); };
+  try { await markPaid(p, { razorpayPaymentId: 'pay_crash', via: 'verify' }); } finally { credits.awardReferral = origAward; }
+  assert.ok(refOf(kid).qualifiedAt, 'qualification was recorded'); assert.equal(refOf(kid).rewardStatus, 'PENDING'); assert.equal(balanceOf(ref.id), 0);
+  await markPaid(p, { razorpayPaymentId: 'pay_crash', via: 'webhook' });
+  assert.equal(balanceOf(ref.id), 1); assert.equal(rewardsOf(ref.id).length, 1);
+});
+
+test('I: the admin referral list carries the payment details, filters work, retry needs a qualification', async () => {
+  const ref = await mkUser(); const k1 = await mkReferred(ref); const k2 = await mkReferred(ref);
+  await payFor(k1, { component: 'INTERVIEW', amount: 10 });
+  const all = (await call('GET', `/api/referrals/admin/referrals?q=${encodeURIComponent(ref.user.name)}`, admin())).body;
+  const done = all.referrals.find((r) => r.qualified);
+  assert.ok(done); assert.equal(done.qualifyingComponent, 'INTERVIEW'); assert.equal(done.qualifyingAmount, 10); assert.ok(done.qualifyingPaymentId);
+  assert.equal((await call('GET', '/api/referrals/admin/referrals?qualified=interview', admin())).body.referrals.every((r) => r.qualifyingComponent === 'INTERVIEW'), true);
+  const none = (await call('GET', '/api/referrals/admin/referrals?qualified=none', admin())).body;
+  assert.ok(none.referrals.some((r) => r.referredName) && none.referrals.every((r) => !r.qualified));
+  const detail = (await call('GET', `/api/referrals/admin/referrals/${done.id}`, admin())).body.referral;
+  assert.ok(detail.rewardTransactionId && detail.qualifyingGatewayRef);
+  const pend = refOf(k2);
+  const retry = await call('POST', `/api/referrals/admin/referrals/${pend._id}/review`, { ...admin(), body: { action: 'retry_reward', reason: 'Trying to force it' } });
+  assert.equal(retry.status, 409); assert.equal(retry.body.code, 'NOT_QUALIFIED'); assert.equal(balanceOf(ref.id), 1);
+  const ov = (await call('GET', '/api/referrals/admin/overview', admin())).body;
+  assert.ok(ov.metrics.awaitingFirstPayment >= 1 && ov.metrics.qualifiedByInterview >= 1);
+});
+
+test('I: a referred student cannot trigger a reward through the HTTP API (no client-side success flag exists)', async () => {
+  const ref = await mkUser(); const kid = await mkReferred(ref);
+  const tok = fake.sessionToken(fake.User.docs.find((u) => String(u._id) === String(kid)));
+  for (const [m, u] of [['POST', '/admin/referrals/x/review'], ['POST', '/admin/reconcile']]) assert.equal((await call(m, `/api/referrals${u}`, { token: tok, body: { action: 'retry_reward', qualified: true, rewardStatus: 'REWARDED' } })).status, 403);
+  await call('POST', `/api/olympiad/exams/${S.exam._id}/payment/verify`, { token: tok, body: { razorpay_order_id: 'order_fake', razorpay_payment_id: 'pay_fake', razorpay_signature: 'bad', success: true } });
+  assert.equal(balanceOf(ref.id), 0); assert.equal(refOf(kid).qualifiedAt, undefined);
 });

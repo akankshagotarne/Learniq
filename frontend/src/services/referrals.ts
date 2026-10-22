@@ -7,7 +7,7 @@ export interface ReferralStats {
   creditsEarned: number; creditsFromAdmin: number; creditsUsed: number; adjustments: number; available: number;
 }
 export interface MyReferralOverview { code: string; link: string; enabled: boolean; creditsPerReferral: number; stats: ReferralStats }
-export interface MyReferralRow { no: number; name: string; registeredAt: string; status: 'Successful' | 'Pending' | 'Under review' | 'Rejected'; credits: number; rewardedAt: string | null }
+export interface MyReferralRow { no: number; name: string; registeredAt: string; status: 'Successful' | 'Pending' | 'Under review' | 'Rejected'; credits: number; rewardedAt: string | null; paymentMade?: boolean; paymentFor?: 'Exam' | 'Interview' | null }
 export interface CreditTx { id: string; at: string; type: string; label: string; delta: number; description: string; examTitle: string | null; component?: 'EXAM' | 'INTERVIEW' | null }
 export interface Page { page: number; limit: number; total: number }
 
@@ -27,10 +27,12 @@ export type RewardStatus = 'REWARDED' | 'PENDING' | 'WITHHELD' | 'REVERSED' | 'N
 export interface AdminReferralRow {
   id: string; referrerId: string; referrerName: string; referredId: string; referredName: string; code: string; standard: number | null;
   registeredAt: string; status: ReferralStatus; rewardStatus: RewardStatus; credits: number; rewardedAt: string | null; risk: string[];
+  rewardPolicy: 'ON_REGISTRATION' | 'ON_FIRST_PAYMENT'; qualified: boolean; qualifiedAt: string | null;
+  qualifyingComponent: 'EXAM' | 'INTERVIEW' | null; qualifyingAmount: number | null; qualifyingCurrency: string | null; qualifyingPaymentId: string | null;
 }
 export interface Person { id: string | null; name: string; email: string | null; phone: string | null; standard: number | null; deleted: boolean }
 export interface AdminReferralDetail extends AdminReferralRow {
-  referrer: Person; referred: Person; reviewReason: string | null; reviewedAt: string | null;
+  referrer: Person; referred: Person; reviewReason: string | null; reviewedAt: string | null; qualifyingGatewayRef?: string | null; rewardTransactionId?: string | null;
   timeline: { at: string; event: string; byName: string | null; reason: string | null }[];
   transactions: { id: string; type: string; delta: number; at: string; reason: string | null }[];
 }

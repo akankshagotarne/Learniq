@@ -543,6 +543,7 @@ const getCompleted = handler(async (req, res) => {
 // ──────────────────────────────────────────────
 // Payments
 // ──────────────────────────────────────────────
+const referrals = require('../services/referrals');
 const markPaymentSuccess = async (paymentDoc, { razorpayPaymentId, razorpaySignature, via }) => {
   try {
     const updated = await OlympiadPayment.findOneAndUpdate(
@@ -568,9 +569,13 @@ const markPaymentSuccess = async (paymentDoc, { razorpayPaymentId, razorpaySigna
         link: '/student/exams',
       }).catch(() => {});
       paymentMethod.captureMethod(OlympiadPayment, updated).catch(() => {}); // best effort: the receipt shows the gateway-reported method
+      await referrals.qualifyOnPayment(updated);   // first verified paid exam / interview -> referrer's credit (idempotent, never throws)
       return { payment: updated, changed: true };
     }
-    return { payment: await OlympiadPayment.findById(paymentDoc._id), changed: false };
+    const current = await OlympiadPayment.findById(paymentDoc._id);
+    // duplicate webhook / retry: also completes a qualification that a crash left half-done (a no-op when already rewarded)
+    if (current && current.status === 'SUCCESS') await referrals.qualifyOnPayment(current);
+    return { payment: current, changed: false };
   } catch (err) {
     if (isDuplicateKey(err)) {
       // The student already holds a SUCCESS payment for this exam (e.g. paid twice through two orders).
