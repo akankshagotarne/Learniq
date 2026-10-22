@@ -29,7 +29,7 @@ const REFERRAL_STATUS = ['SUCCESSFUL', 'UNDER_REVIEW', 'REJECTED'];
 const REWARD_STATUS = ['REWARDED', 'PENDING', 'WITHHELD', 'REVERSED', 'NOT_REWARDED'];
 const timelineSchema = new Schema({
   at: { type: Date, default: Date.now },
-  event: { type: String, required: true },             // REGISTERED | REWARDED | FLAGGED | UNDER_REVIEW | REJECTED | APPROVED | REWARD_REVERSED | REWARD_RETRIED
+  event: { type: String, required: true },             // REGISTERED | QUALIFIED | REWARDED | FLAGGED | UNDER_REVIEW | REJECTED | APPROVED | REWARD_REVERSED | REWARD_RETRIED
   by: { type: Schema.Types.ObjectId, ref: 'User' },
   byName: { type: String },
   reason: { type: String, maxlength: 500 },
@@ -49,6 +49,18 @@ const referralSchema = new Schema({
   rewardTransaction: { type: Schema.Types.ObjectId, ref: 'CreditTransaction' },
   rewardedAt: { type: Date },
   registeredAt: { type: Date, default: Date.now },
+  // ── reward policy marker. NO default on purpose: a record without it predates the payment-qualified policy and was rewarded at registration
+  //    (it is never re-processed). New referrals are written with ON_FIRST_PAYMENT: PENDING until the referred student's first verified paid
+  //    exam / interview, see services/referrals.js qualifyOnPayment.
+  rewardPolicy: { type: String, enum: ['ON_REGISTRATION', 'ON_FIRST_PAYMENT'] },
+  // ── the qualifying payment (written once, by the backend only, from the persisted verified payment record)
+  qualifiedAt: { type: Date },
+  qualifyingPayment: { type: Schema.Types.ObjectId, ref: 'OlympiadPayment' },
+  qualifyingComponent: { type: String, enum: ['EXAM', 'INTERVIEW'] },
+  qualifyingAmount: { type: Number },
+  qualifyingCurrency: { type: String },
+  qualifyingVerifiedAt: { type: Date },
+  qualifyingGatewayRef: { type: String },              // Razorpay payment id (an identifier, never a secret); shown to administrators only
   riskFlags: [{ type: String }],                       // review INPUTS (never an automatic verdict): e.g. VELOCITY
   reviewReason: { type: String, trim: true, maxlength: 500 },
   reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -60,6 +72,7 @@ referralSchema.index({ referred: 1 }, { unique: true, name: 'one_referral_per_re
 referralSchema.index({ referrer: 1, registeredAt: -1 });
 referralSchema.index({ status: 1, registeredAt: -1 });
 referralSchema.index({ rewardStatus: 1 });
+referralSchema.index({ qualifyingPayment: 1 }, { sparse: true, name: 'referral_by_qualifying_payment' });
 
 // ── balance (cache) ───────────────────────────────────────────────────────────────────────────
 const accountSchema = new Schema({
@@ -81,6 +94,7 @@ const txSchema = new Schema({
   idempotencyKey: { type: String, required: true },
   referral: { type: Schema.Types.ObjectId, ref: 'Referral' },
   exam: { type: Schema.Types.ObjectId, ref: 'OlympiadExam' },
+  payment: { type: Schema.Types.ObjectId, ref: 'OlympiadPayment' },   // REFERRAL_REWARD: the referred student's qualifying payment (a reference only)
   component: { type: String, enum: ['EXAM', 'INTERVIEW'] },   // set on EXAM_REDEMPTION / INTERVIEW_REDEMPTION
   examTitle: { type: String },
   batch: { type: Schema.Types.ObjectId, ref: 'CreditGrantBatch' },

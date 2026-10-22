@@ -135,6 +135,14 @@ const ReferralDetail: React.FC<{ id: string; onClose: () => void; onChanged: () 
             <div><dt className="text-[11px] text-text-muted">Status</dt><dd><StatusPill value={d.status} /></dd></div>
             <div><dt className="text-[11px] text-text-muted">Reward</dt><dd><StatusPill value={d.rewardStatus} /> {d.credits > 0 ? `· ${d.credits} credit(s)` : ''}</dd></div>
           </dl>
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm" data-testid="ref-qualification">
+            <div><dt className="text-[11px] text-text-muted">Qualifying payment</dt><dd>{d.qualified ? (d.qualifyingComponent === 'INTERVIEW' ? 'Interview' : 'Exam') : d.rewardPolicy === 'ON_FIRST_PAYMENT' ? 'None yet' : 'Legacy (rewarded at registration)'}</dd></div>
+            <div><dt className="text-[11px] text-text-muted">Amount</dt><dd>{d.qualifyingAmount != null ? `₹${d.qualifyingAmount}` : '—'}</dd></div>
+            <div><dt className="text-[11px] text-text-muted">Qualified at</dt><dd>{d.qualifiedAt ? formatISTDateTime(d.qualifiedAt) : '—'}</dd></div>
+            <div><dt className="text-[11px] text-text-muted">Rewarded at</dt><dd>{d.rewardedAt ? formatISTDateTime(d.rewardedAt) : '—'}</dd></div>
+            <div className="col-span-2"><dt className="text-[11px] text-text-muted">Payment reference</dt><dd className="font-mono text-xs break-all">{d.qualifyingGatewayRef || d.qualifyingPaymentId || '—'}</dd></div>
+            <div className="col-span-2"><dt className="text-[11px] text-text-muted">Reward credit transaction</dt><dd className="font-mono text-xs break-all">{d.rewardTransactionId || '—'}</dd></div>
+          </dl>
           {d.risk.length > 0 && <p className="text-xs rounded-lg bg-[#E0E7FF] text-[#4338CA] px-3 py-2" data-testid="risk-note">Review signal: {d.risk.map(r => (r === 'VELOCITY' ? 'many referrals from this code in a short time' : r)).join(', ')}. This is a hint for a human check, not a verdict.</p>}
           <section><h3 className="text-sm font-bold text-text-primary mb-1">History</h3>
             <ol className="text-xs border border-border-subtle rounded-xl divide-y divide-border-subtle" data-testid="timeline">{d.timeline.map((e, i) => <li key={i} className="px-3 py-2"><span className="font-semibold">{e.event.replace(/_/g, ' ')}</span> · {formatISTDateTime(e.at)}{e.byName ? ` · ${e.byName}` : ''}{e.reason ? <span className="block text-text-secondary break-words">{e.reason}</span> : null}</li>)}</ol>
@@ -159,7 +167,7 @@ const ReferralDetail: React.FC<{ id: string; onClose: () => void; onChanged: () 
           ) : (
             <div className="flex flex-wrap gap-2 justify-end">
               {d.status === 'UNDER_REVIEW' && <button onClick={() => setAction('approve')} className="btn-primary min-h-[40px] text-xs" data-testid="act-approve">Approve</button>}
-              {d.status === 'SUCCESSFUL' && d.rewardStatus !== 'REWARDED' && <button onClick={() => void run('retry_reward')} disabled={busy} className="btn-primary min-h-[40px] text-xs" data-testid="act-retry">Issue credit now</button>}
+              {d.status === 'SUCCESSFUL' && d.rewardStatus !== 'REWARDED' && (d.rewardPolicy !== 'ON_FIRST_PAYMENT' || d.qualified) && <button onClick={() => void run('retry_reward')} disabled={busy} className="btn-primary min-h-[40px] text-xs" data-testid="act-retry">Issue credit now</button>}
               {d.status !== 'UNDER_REVIEW' && d.status !== 'REJECTED' && <button onClick={() => setAction('under_review')} className="btn-outline min-h-[40px] text-xs" data-testid="act-review">Put under review</button>}
               {d.status !== 'REJECTED' && <button onClick={() => setAction('reject')} className="btn-danger min-h-[40px] text-xs" data-testid="act-reject">Reject</button>}
               <button onClick={onClose} className="btn-outline min-h-[40px] text-xs">Close</button>
@@ -176,14 +184,14 @@ const PAGE = 20;
 const Referrals: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   const narrow = useNarrow();
   const [q, setQ] = useState(''); const search = useDebounced(q.trim());
-  const [status, setStatus] = useState('all'); const [reward, setReward] = useState('all'); const [standard, setStandard] = useState('all');
+  const [status, setStatus] = useState('all'); const [reward, setReward] = useState('all'); const [qualified, setQualified] = useState('all'); const [standard, setStandard] = useState('all');
   const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [flagged, setFlagged] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<{ rows: AdminReferralRow[]; total: number } | null>(null);
   const [loading, setLoading] = useState(false); const [error, setError] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const filters: Filters = { q: search, status, reward, standard, from, to, review: flagged ? 'flagged' : undefined };
+  const filters: Filters = { q: search, status, reward, qualified, standard, from, to, review: flagged ? 'flagged' : undefined };
   const key = JSON.stringify(filters);
   useEffect(() => { setPage(1); }, [key]);
   const load = useCallback(async () => {
@@ -193,7 +201,7 @@ const Referrals: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
     finally { setLoading(false); }
   }, [key, page]);
   useEffect(() => { void load(); }, [load]);
-  const reset = () => { setQ(''); setStatus('all'); setReward('all'); setStandard('all'); setFrom(''); setTo(''); setFlagged(false); };
+  const reset = () => { setQ(''); setStatus('all'); setReward('all'); setQualified('all'); setStandard('all'); setFrom(''); setTo(''); setFlagged(false); };
   const dirty = !!(q || status !== 'all' || reward !== 'all' || standard !== 'all' || from || to || flagged);
   const doExport = async () => { setExporting(true); try { await adminReferralApi.exportReferrals(filters); } catch (err) { toast.error(olympiadErrorMessage(err, 'Could not export.')); } finally { setExporting(false); } };
 
@@ -204,6 +212,7 @@ const Referrals: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
           <Field label="Search"><div className="relative"><Search className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" aria-hidden /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Name, code or ID" className={`${selectCls} pl-9`} data-testid="ref-search" /></div></Field>
           <Field label="Status"><select className={selectCls} value={status} onChange={e => setStatus(e.target.value)} data-testid="ref-status"><option value="all">All</option><option value="SUCCESSFUL">Successful</option><option value="UNDER_REVIEW">Under review</option><option value="REJECTED">Rejected</option></select></Field>
           <Field label="Reward"><select className={selectCls} value={reward} onChange={e => setReward(e.target.value)} data-testid="ref-reward"><option value="all">All</option><option value="REWARDED">Rewarded</option><option value="PENDING">Pending</option><option value="WITHHELD">Withheld</option><option value="REVERSED">Reversed</option><option value="NOT_REWARDED">Not rewarded</option></select></Field>
+          <Field label="First payment"><select className={selectCls} value={qualified} onChange={e => setQualified(e.target.value)} data-testid="ref-qualified"><option value="all">All</option><option value="none">No payment yet</option><option value="exam">Exam payment</option><option value="interview">Interview payment</option></select></Field>
           <Field label="Standard"><select className={selectCls} value={standard} onChange={e => setStandard(e.target.value)}><option value="all">All</option>{Array.from({ length: 10 }, (_, i) => i + 1).map(n => <option key={n} value={n}>Std {n}</option>)}<option value="99">Others</option></select></Field>
           <Field label="Registered from"><input type="date" className={selectCls} value={from} max={to || undefined} onChange={e => setFrom(e.target.value)} /></Field>
           <Field label="Registered to"><input type="date" className={selectCls} value={to} min={from || undefined} onChange={e => setTo(e.target.value)} /></Field>
@@ -225,12 +234,13 @@ const Referrals: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
             </li>))}</ul>
         ) : (
           <div className="overflow-x-auto"><table className="w-full text-sm min-w-[820px]" data-testid="ref-table">
-            <thead className="bg-surface-alt border-b border-border-subtle"><tr>{['Referred student', 'Referrer', 'Code', 'Standard', 'Registered', 'Status', 'Reward', 'Credits', ''].map(h => <th key={h} className="text-left px-3 py-2 text-xs font-semibold text-text-secondary whitespace-nowrap">{h}</th>)}</tr></thead>
+            <thead className="bg-surface-alt border-b border-border-subtle"><tr>{['Referred student', 'Referrer', 'Code', 'Standard', 'Registered', 'Status', 'Reward', 'First payment', 'Credits', ''].map(h => <th key={h} className="text-left px-3 py-2 text-xs font-semibold text-text-secondary whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>{data.rows.map(r => (
               <tr key={r.id} className="border-b border-border-subtle last:border-0 align-top" data-testid="ref-row">
                 <td className="px-3 py-2.5 font-semibold text-text-primary">{r.referredName}{r.risk.length > 0 && <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#E0E7FF] text-[#4338CA]">flagged</span>}</td>
                 <td className="px-3 py-2.5">{r.referrerName}</td><td className="px-3 py-2.5 font-mono text-xs">{r.code}</td><td className="px-3 py-2.5 whitespace-nowrap">{STD(r.standard)}</td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-xs">{formatISTDate(r.registeredAt)}</td><td className="px-3 py-2.5"><StatusPill value={r.status} /></td><td className="px-3 py-2.5"><StatusPill value={r.rewardStatus} /></td>
+                <td className="px-3 py-2.5 text-xs whitespace-nowrap" data-testid="ref-payment">{r.qualified ? `${r.qualifyingComponent === 'INTERVIEW' ? 'Interview' : 'Exam'}${r.qualifyingAmount != null ? ` · ₹${r.qualifyingAmount}` : ''}` : r.rewardPolicy === 'ON_FIRST_PAYMENT' ? 'Not yet' : 'Legacy'}</td>
                 <td className="px-3 py-2.5">{r.credits || '—'}</td><td className="px-3 py-2.5"><button onClick={() => setOpenId(r.id)} className="text-xs font-semibold text-brand-primary hover:underline whitespace-nowrap" data-testid="ref-open">View</button></td>
               </tr>))}</tbody></table></div>
         )}

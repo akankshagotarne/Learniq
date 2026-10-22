@@ -105,6 +105,11 @@ test.describe('student Refer & Earn', () => {
     await expect(page.getByTestId('stat-successful-value')).toHaveText('3');
     await expect(page.getByTestId('stat-earned-value')).toHaveText('3');
     await expect(page.getByTestId('stat-available-value')).toHaveText('4');
+    await expect(page.getByTestId('stat-pending-value')).toHaveText('0');
+    await expect(page.getByTestId('stat-used-value')).toHaveText('1');
+    await expect(page.getByTestId('refer-explainer')).toContainText('Signing up alone does not earn a credit');
+    await expect(page.getByText('earn 1 exam credit when they make their first successful exam or interview payment')).toBeVisible();
+    await expect(page.getByTestId('how-it-works').locator('li')).toHaveCount(3);
     await expect(page.getByTestId('how-it-works').locator('li')).toHaveCount(3);
     await expect(page.getByTestId('share-whatsapp')).toHaveAttribute('href', new RegExp(`^https://wa\\.me/\\?text=.*${CODE}`));
     await expect(page.getByTestId('share-telegram')).toHaveAttribute('href', new RegExp(`^https://t\\.me/share/url\\?url=.*${CODE}`));

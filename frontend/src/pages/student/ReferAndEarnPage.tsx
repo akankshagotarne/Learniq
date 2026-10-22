@@ -86,7 +86,8 @@ const ReferAndEarnPage: React.FC = () => {
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto" data-testid="refer-page">
           <p className="text-brand-primary text-xs font-semibold tracking-wide uppercase mb-1">Rewards</p>
           <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary flex items-center gap-2"><Gift className="w-6 h-6 text-[#FFC24B]" aria-hidden /> Refer &amp; Earn</h1>
-          <p className="text-text-secondary text-sm mt-1 mb-6">Invite your friends to LearnIQ. When a friend joins with your code, you earn an exam credit. One credit unlocks either your Olympiad exam or your interview (₹10 each if you pay instead).</p>
+          <p className="text-text-secondary text-sm mt-1 mb-6">Refer friends to LearnIQ and earn 1 exam credit when they make their first successful exam or interview payment. One credit unlocks either your Olympiad exam or your interview.</p>
+          <p className="text-text-secondary text-xs -mt-4 mb-6" data-testid="refer-explainer">Your friend must complete registration using your referral code and make their first successful payment for an eligible LearnIQ exam or interview. Signing up alone does not earn a credit.</p>
 
           {error && (
             <div className="rounded-xl border border-[#F9A8C0] bg-[#FFE4EC] p-4 mb-5 text-sm text-[#9D174D]" role="alert" data-testid="refer-error">
@@ -134,15 +135,17 @@ const ReferAndEarnPage: React.FC = () => {
                 </div>
               </section>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5" data-testid="refer-stats">
-                <StatCard testId="stat-total" icon={Users} label="Total referrals" value={s.totalReferrals} hint="Friends who joined with your code" tone="bg-[#E0E7FF] text-[#4338CA]" />
-                <StatCard testId="stat-successful" icon={BadgeCheck} label="Successful referrals" value={s.successful} hint="Credit awarded" tone="bg-[#DCFCE7] text-[#16A34A]" />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5" data-testid="refer-stats">
+                <StatCard testId="stat-total" icon={Users} label="Total referrals" value={s.totalReferrals} hint="Friends who registered with your code" tone="bg-[#E0E7FF] text-[#4338CA]" />
+                <StatCard testId="stat-pending" icon={Users} label="Pending" value={s.pending} hint="Waiting for their first payment" tone="bg-[#FEF3C7] text-[#B45309]" />
+                <StatCard testId="stat-successful" icon={BadgeCheck} label="Successful" value={s.successful} hint="First payment made, credit added" tone="bg-[#DCFCE7] text-[#16A34A]" />
                 <StatCard testId="stat-earned" icon={Ticket} label="Credits earned" value={s.creditsEarned} hint={s.creditsFromAdmin ? `+ ${s.creditsFromAdmin} from LearnIQ` : 'From referrals'} tone="bg-[#FEF3C7] text-[#D97706]" />
+                <StatCard testId="stat-used" icon={GraduationCap} label="Credits used" value={s.creditsUsed} hint="Used for exams / interviews" tone="bg-[#E0E7FF] text-[#4338CA]" />
                 <StatCard testId="stat-available" icon={Wallet} label="Available credits" value={s.available} hint={s.creditsUsed ? `${s.creditsUsed} used for exams / interviews` : '1 credit = 1 exam or 1 interview'} tone="bg-[#CCFBF1] text-[#0D9488]" />
               </div>
               {(s.pending > 0 || s.underReview > 0) && (
                 <p className="text-xs text-text-secondary -mt-2 mb-5" data-testid="stat-notes">
-                  {s.pending > 0 && <>{s.pending} referral{s.pending === 1 ? '' : 's'} waiting for the credit to be added. </>}
+                  {s.pending > 0 && <>{s.pending} referral{s.pending === 1 ? '' : 's'} pending: your credit is added after your friend's first successful payment. </>}
                   {s.underReview > 0 && <>{s.underReview} referral{s.underReview === 1 ? ' is' : 's are'} being reviewed by the LearnIQ team.</>}
                 </p>
               )}
@@ -152,8 +155,8 @@ const ReferAndEarnPage: React.FC = () => {
                 <ol className="grid sm:grid-cols-3 gap-3" data-testid="how-it-works">
                   {[
                     { icon: Share2, t: 'Share your code', d: 'Send your code or link to a friend who is not on LearnIQ yet.' },
-                    { icon: UserPlus, t: 'Your friend registers', d: 'They create a new student account using your code.' },
-                    { icon: GraduationCap, t: 'You earn a credit', d: `You get ${data.creditsPerReferral} exam credit${data.creditsPerReferral === 1 ? '' : 's'}. Use 1 credit to unlock the exam OR the interview — 2 credits unlock both.` },
+                    { icon: UserPlus, t: 'Your friend registers', d: 'They create a new student account using your code. The referral shows as Pending.' },
+                    { icon: GraduationCap, t: 'You earn a credit', d: `When they make their first successful exam or interview payment, you get ${data.creditsPerReferral} exam credit${data.creditsPerReferral === 1 ? '' : 's'}. Use 1 credit to unlock the exam OR the interview.` },
                   ].map((st, i) => (
                     <li key={st.t} className="card-soft rounded-card border border-border-subtle p-4 flex gap-3">
                       <span className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary text-white text-sm font-bold flex items-center justify-center" aria-hidden>{i + 1}</span>
@@ -161,7 +164,7 @@ const ReferAndEarnPage: React.FC = () => {
                     </li>
                   ))}
                 </ol>
-                <p className="text-[11px] text-text-muted mt-2">Credits are earned only when a genuinely new student registers with your code. They cannot be sold or transferred, and they do not expire. LearnIQ may review referrals that look unusual.</p>
+                <p className="text-[11px] text-text-muted mt-2">Credits are earned only when a genuinely new student registers with your code and makes a first successful payment. They cannot be sold or transferred, and they do not expire. LearnIQ may review referrals that look unusual.</p>
               </section>
 
               <div className="flex gap-2 mb-3" role="tablist" aria-label="Referral lists">

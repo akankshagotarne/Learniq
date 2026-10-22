@@ -96,7 +96,7 @@ const notify = async (studentId, title, message, link) => {
 // ── the two primitive operations ─────────────────────────────────────────────────────────────
 const ledgerFields = (o) => ({
   student: o.student, studentName: o.studentName, type: o.type, delta: o.delta, source: o.source, idempotencyKey: o.key,
-  referral: o.referral, exam: o.exam, examTitle: o.examTitle, component: o.component, batch: o.batch, batchId: o.batchId, reversalOf: o.reversalOf,
+  referral: o.referral, payment: o.payment, exam: o.exam, examTitle: o.examTitle, component: o.component, batch: o.batch, batchId: o.batchId, reversalOf: o.reversalOf,
   reason: o.reason, note: o.note, actor: o.actor, actorName: o.actorName,
 });
 
@@ -135,14 +135,13 @@ const debit = async (o) => {
 };
 
 // ── referral reward (called by services/referrals.js) ────────────────────────────────────────
-const awardReferral = async ({ referral, student, amount }) => {
-  const r = await credit({
-    student: student._id, studentName: student.name, type: 'REFERRAL_REWARD', delta: amount, source: 'REFERRAL', key: `referral:${idStr(referral)}`,
-    referral: referral._id || referral, reason: 'A friend joined LearnIQ using your referral code.',
-  });
-  if (!r.duplicate) await notify(student._id, 'You earned an exam credit! 🎁', `Congratulations! You earned ${amount} exam credit${amount === 1 ? '' : 's'} because a friend joined LearnIQ using your referral code.`, '/student/refer');
-  return r;
-};
+// `payment` / `component`: the referred student's qualifying payment (payment-qualified referrals). The caller notifies the student AFTER the
+// referral record itself has been committed (services/referrals.js), so a notification never announces a reward that is not fully recorded.
+const awardReferral = async ({ referral, student, amount, payment, component }) => credit({
+  student: student._id, studentName: student.name, type: 'REFERRAL_REWARD', delta: amount, source: 'REFERRAL', key: `referral:${idStr(referral)}`,
+  referral: referral._id || referral, payment: payment ? payment._id || payment : undefined, component,
+  reason: payment ? `Referral reward: your friend made their first successful ${component === 'INTERVIEW' ? 'interview' : 'exam'} payment.` : 'A friend joined LearnIQ using your referral code.',
+});
 
 // ── administrator grants / adjustments ───────────────────────────────────────────────────────
 const cleanText = (v, min, max, label) => {
