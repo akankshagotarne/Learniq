@@ -88,39 +88,84 @@ test('admin: Mentor Referrals tab keeps the old tabs, shows server-side data and
   expect(await page.getByTestId('mentor-dialog').innerText()).not.toMatch(/credit|approval/i);
 });
 
-test('register: a mentor link is validated, shown, and sent with the registration; an invalid one never blocks', async ({ page }) => {
-  const sent: any[] = [];
-  await mockApi(page, 'guest', (m, p, body) => {
-    if (m === 'GET' && p === '/mentor-referrals/validate') return { body: { success: true, valid: true } };
-    if (m === 'POST' && p === '/auth/register') { sent.push(body); return { status: 201, body: { success: true, token: 't', user: { _id: 'u1', name: 'Asha', role: 'student' } } }; }
-    return undefined;
-  });
-  await page.goto(`/register?mentorRef=${CODE.toLowerCase()}`);
-  await expect(page.getByTestId('mentor-ref-note')).toContainText('invited by a LearnIQ mentor');
+const regFill = async (page: any) => {
   await page.locator('input[name="name"]').fill('Asha Patil');
   await page.locator('input[name="phone"]').fill('+91 98765 43210');
   await page.locator('input[name="password"]').fill('Str0ngPass1');
   await page.locator('input[name="confirmPassword"]').fill('Str0ngPass1');
-  await page.getByRole('button', { name: /create account/i }).click();
-  await expect.poll(() => sent.length).toBe(1);
-  expect(sent[0].mentorRef).toBe(CODE);
-});
+};
+const okReg = (sent: any[]) => (m: string, p: string, body: any) => {
+  if (m === 'POST' && p === '/auth/register') { sent.push(body); return { status: 201, body: { success: true, token: 't', user: { _id: 'u1', name: 'Asha', role: 'student' } } }; }
+  return undefined;
+};
 
-test('register: a teacher never sends the mentor code and no mentor note is shown', async ({ page }) => {
+test('register: a mentor code typed in the ONE field is accepted ("Valid mentor referral code.") and sent as referralCode', async ({ page }) => {
   const sent: any[] = [];
   await mockApi(page, 'guest', (m, p, body) => {
-    if (m === 'GET' && p === '/mentor-referrals/validate') return { body: { success: true, valid: true } };
+    if (m === 'GET' && p === '/referral-codes/validate') return { body: { success: true, valid: true, type: 'mentor', message: 'Valid mentor referral code.' } };
+    return okReg(sent)(m, p, body);
+  });
+  await page.goto('/register');
+  await page.getByTestId('referral-input').fill('mn58puj23');
+  await expect(page.getByTestId('referral-valid')).toContainText('Valid mentor referral code.');
+  await regFill(page);
+  await page.getByRole('button', { name: /create account/i }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0].referralCode).toBe('MN58PUJ23'); expect(sent[0].mentorId).toBeUndefined();
+});
+
+test('register: a mentor LINK fills the same field, survives a refresh, and is validated', async ({ page }) => {
+  await mockApi(page, 'guest', (m, p) => (m === 'GET' && p === '/referral-codes/validate' ? { body: { success: true, valid: true, type: 'mentor', message: 'Valid mentor referral code.' } } : undefined));
+  await page.goto(`/register?mentorRef=${CODE}`);
+  await expect(page.getByTestId('referral-input')).toHaveValue(CODE);
+  await expect(page.getByTestId('referral-valid')).toBeVisible();
+  await page.goto('/register');
+  await expect(page.getByTestId('referral-input')).toHaveValue(CODE);
+});
+
+test('register: a failed validation request says "unable to validate", NOT "not found", and does not block registering', async ({ page }) => {
+  const sent: any[] = [];
+  await mockApi(page, 'guest', (m, p, body) => {
+    if (m === 'GET' && p === '/referral-codes/validate') return { status: 503, body: { success: false, message: 'down' } };
+    return okReg(sent)(m, p, body);
+  });
+  await page.goto('/register');
+  await page.getByTestId('referral-input').fill(CODE);
+  await expect(page.getByTestId('referral-unavailable')).toContainText('Unable to validate the referral code right now');
+  await expect(page.getByTestId('referral-invalid')).toHaveCount(0);
+});
+
+test('register: a slow older validation can never overwrite the newest code\'s result', async ({ page }) => {
+  await mockApi(page, 'guest');
+  await page.route('**/referral-codes/validate*', async route => {
+    const code = new URL(route.request().url()).searchParams.get('code');
+    if (code === 'MNAAAAAAA') { await new Promise(r => setTimeout(r, 2500)); return route.fulfill({ json: { success: true, valid: false, message: 'Referral code not found. Please check the code and try again.' } }); }
+    return route.fulfill({ json: { success: true, valid: true, type: 'mentor', message: 'Valid mentor referral code.' } });
+  });
+  await page.goto('/register');
+  await page.getByTestId('referral-input').fill('MNAAAAAAA');
+  await page.waitForTimeout(900);
+  await page.getByTestId('referral-input').fill(CODE);
+  await expect(page.getByTestId('referral-valid')).toBeVisible();
+  await page.waitForTimeout(3000);
+  await expect(page.getByTestId('referral-valid')).toBeVisible();
+  await expect(page.getByTestId('referral-invalid')).toHaveCount(0);
+});
+
+test('register: a teacher does not see the referral field and sends no referral code', async ({ page }) => {
+  const sent: any[] = [];
+  await mockApi(page, 'guest', (m, p, body) => {
     if (m === 'POST' && p === '/auth/register') { sent.push(body); return { status: 201, body: { success: true, pendingApproval: true, message: 'Submitted' } }; }
     return undefined;
   });
   await page.goto(`/register?mentorRef=${CODE}`);
   await page.getByRole('button', { name: /Teacher/ }).click();
-  await expect(page.getByTestId('mentor-ref-note')).toHaveCount(0);
+  await expect(page.getByTestId('referral-input')).toHaveCount(0);
   await page.locator('input[name="name"]').fill('Neeta Kulkarni');
   await page.locator('input[name="email"]').fill('neeta@example.com');
   await page.locator('input[name="password"]').fill('Str0ngPass1');
   await page.locator('input[name="confirmPassword"]').fill('Str0ngPass1');
   await page.getByRole('button', { name: /create account|request teacher account/i }).click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(sent[0].mentorRef).toBeUndefined();
+  expect(sent[0].referralCode).toBeUndefined(); expect(sent[0].mentorRef).toBeUndefined();
 });

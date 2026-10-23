@@ -1,24 +1,20 @@
-import { mentorReferralApi } from '../services/mentorReferrals';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle, Clock, Gift, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AffiliationLine, LogoLink } from '../components/ui/Logo';
 import toast from 'react-hot-toast';
-import { referralApi } from '../services/referrals';
+import { referralCodeApi } from '../services/referralCodes';
 import { PASSWORD_HELP, PASSWORD_MIN_LENGTH, passwordProblem } from '../constants/passwordPolicy';
 
 const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   // a shared link (/register?ref=CODE) pre-fills the optional referral code; the server validates it again
-  const [referralCode, setReferralCode] = useState(() => (searchParams.get('ref') || '').trim().toUpperCase().slice(0, 20));
-  // a mentor link (/register?mentorRef=CODE) is remembered for this tab only; the server validates and attributes it. It never blocks registration.
-  const [mentorRef] = useState(() => {
-    const fromUrl = (searchParams.get('mentorRef') || '').trim().toUpperCase().slice(0, 20);
-    try { if (fromUrl) { sessionStorage.setItem('learniq_mentor_ref', fromUrl); return fromUrl; } return sessionStorage.getItem('learniq_mentor_ref') || ''; } catch { return fromUrl; }
+  // a mentor link (/register?mentorRef=CODE) fills the SAME field; it is kept for this tab (refresh / navigation) and the server decides what kind of code it is
+  const [referralCode, setReferralCode] = useState(() => {
+    const fromUrl = (searchParams.get('ref') || searchParams.get('mentorRef') || '').trim().toUpperCase().slice(0, 20);
+    try { if (fromUrl) { sessionStorage.setItem('learniq_referral_code', fromUrl); return fromUrl; } return sessionStorage.getItem('learniq_referral_code') || ''; } catch { return fromUrl; }
   });
-  const [mentorValid, setMentorValid] = useState<boolean | null>(null);
-  useEffect(() => { if (!mentorRef) return; mentorReferralApi.validate(mentorRef).then(setMentorValid).catch(() => setMentorValid(null)); }, [mentorRef]);
   const [refState, setRefState] = useState<{ status: 'idle' | 'checking' | 'valid' | 'invalid' | 'unknown'; message?: string }>({ status: 'idle' });
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', role: 'student', phone: '' });
   const [showPass, setShowPass] = useState(false);
@@ -40,9 +36,9 @@ const RegisterPage: React.FC = () => {
     setRefState({ status: 'checking' });
     let cancelled = false;
     const t = setTimeout(() => {
-      referralApi.validate(code)
-        .then(r => { if (!cancelled) setRefState(r.valid ? { status: 'valid', message: r.message || 'Referral code applied.' } : { status: 'invalid', message: r.message || 'Referral code not found.' }); })
-        .catch(() => { if (!cancelled) setRefState({ status: 'unknown' }); });
+      referralCodeApi.validate(code)
+        .then(r => { if (!cancelled) setRefState(r.valid ? { status: 'valid', message: r.message || 'Referral code applied.' } : { status: 'invalid', message: r.message || 'Referral code not found. Please check the code and try again.' }); })
+        .catch(() => { if (!cancelled) setRefState({ status: 'unknown', message: 'Unable to validate the referral code right now. Please try again.' }); });   // a failed request is NOT an invalid code
     }, 500);
     return () => { cancelled = true; clearTimeout(t); };
   }, [referralCode, isTeacher]);
@@ -79,10 +75,10 @@ const RegisterPage: React.FC = () => {
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined, mentorRef: !isTeacher && mentorRef ? mentorRef : undefined });
+      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined });
       if (result.pendingApproval) { setPendingMessage(result.message); return; } // a teacher is NOT signed in
       toast.success('Account created successfully!');
-      try { sessionStorage.removeItem('learniq_mentor_ref'); } catch { /* ignore */ }
+      try { sessionStorage.removeItem('learniq_referral_code'); } catch { /* ignore */ }
       navigate('/student/standard');
     } catch (err: any) {
       const data = err.response?.data;
@@ -154,11 +150,6 @@ const RegisterPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {!isTeacher && mentorRef && mentorValid !== null && (
-              <p className={`text-xs rounded-xl px-3 py-2 border ${mentorValid ? 'bg-[#E6F8EE] text-[#117A43] border-[#9BE0BA]' : 'bg-[#FFF4DD] text-[#8A5A00] border-[#F5D58A]'}`} role="status" data-testid="mentor-ref-note">
-                {mentorValid ? 'You were invited by a LearnIQ mentor.' : 'This mentor link is not valid. You can still create your account.'}
-              </p>
-            )}
             {/* Role Select: only chooses which kind of account to REQUEST. Teachers are approved by an administrator; admin is not offered. */}
             <div>
               <span className="text-xs font-semibold text-text-secondary block mb-1.5">I am a</span>
@@ -265,13 +256,14 @@ const RegisterPage: React.FC = () => {
                   <Gift className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input id="reg-referral" name="referralCode" type="text" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={20} value={referralCode}
                     onChange={e => { setReferralCode(e.target.value.toUpperCase().replace(/\s+/g, '')); setFieldErrors(prev => (prev.referralCode ? { ...prev, referralCode: undefined } : prev)); }}
-                    placeholder="Enter a friend's code" aria-invalid={refState.status === 'invalid' || !!fieldErrors.referralCode} aria-describedby="referral-status"
+                    placeholder="Enter a friend's or mentor's code" aria-invalid={refState.status === 'invalid' || !!fieldErrors.referralCode} aria-describedby="referral-status"
                     className={`${inputCls(refState.status === 'invalid' || fieldErrors.referralCode ? 'bad' : undefined)} font-mono tracking-wider`} data-testid="referral-input" />
                 </div>
                 <div id="referral-status" aria-live="polite" data-testid="referral-status">
                   {refState.status === 'checking' && <p className="flex items-center gap-1.5 text-text-muted text-xs mt-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Checking the code…</p>}
                   {refState.status === 'valid' && <p className="flex items-center gap-1.5 text-accent-mint text-xs font-medium mt-1.5" data-testid="referral-valid"><CheckCircle className="w-3.5 h-3.5" aria-hidden /> {refState.message}</p>}
                   {refState.status === 'invalid' && !fieldErrors.referralCode && <p className="flex items-start gap-1.5 text-[#E1447A] text-xs font-medium mt-1.5" data-testid="referral-invalid"><AlertCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" aria-hidden /> {refState.message}</p>}
+                  {refState.status === 'unknown' && <p className="flex items-start gap-1.5 text-[#8A5A00] text-xs font-medium mt-1.5" data-testid="referral-unavailable"><AlertCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" aria-hidden /> {refState.message}</p>}
                 </div>
                 {fieldError('referral', fieldErrors.referralCode)}
               </div>
