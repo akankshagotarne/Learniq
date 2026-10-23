@@ -178,32 +178,28 @@ test('M3: a student registering through a mentor link is attributed once, SUCCES
   const me = (await call('GET', '/api/mentor-referrals/me', { token: m.token })).body;
   assert.deepEqual(me.stats, { totalReferrals: 1, successful: 1, pending: 0 });
   const list = (await call('GET', '/api/mentor-referrals/me/referrals', { token: m.token })).body;
-  assert.equal(list.total, 1); assert.equal(list.referrals[0].name, 'Kabir P.'); assert.equal(list.referrals[0].userType, 'Student'); assert.equal(list.referrals[0].status, 'Successful');
+  assert.equal(list.total, 1); assert.equal(list.referrals[0].name, 'Kabir P.'); assert.equal(list.referrals[0].status, 'Successful');
   assert.ok(!/@|9700\d/.test(JSON.stringify(list)), 'no phone / e-mail of the referred person');
   assert.deepEqual(creditSnapshot(), before, 'no ledger entry, no balance change anywhere');
   assert.equal(fake.CreditTransaction.docs.filter((t) => t.type === 'REFERRAL_REWARD' && String(t.student) === m.id).length, 0);
   assert.equal(fake.Referral.docs.filter((x) => String(x.referred) === String(r.body.user._id)).length, 0, 'no student-program referral record either');
 });
 
-test('M4: a referred TEACHER stays Pending Approval until an administrator approves; approval flips the tracking status and awards nothing', async () => {
+test('M4: STUDENTS ONLY - a teacher registering through a student-facing mentor link gets no referral record, still needs admin approval, and needs no code', async () => {
   const m = await mkMentor('Mentor Dev'); const code = await mentorCode(m);
+  const noCode = await regTeacher({ email: `t${++seq}@example.com`, name: 'Plain Teacher' });
+  assert.equal(noCode.status, 201, noCode.text); assert.equal(noCode.body.pendingApproval, true, 'teacher registration works without any referral code');
   const r = await regTeacher({ email: `t${++seq}@example.com`, name: 'Neeta Kulkarni', mentorRef: code });
   assert.equal(r.status, 201, r.text); assert.equal(r.body.pendingApproval, true); assert.ok(!r.body.token, 'a pending teacher never gets a session');
-  const tid = fake.User.docs.find((u) => u.name === 'Neeta Kulkarni')._id;
-  assert.equal(fake.MentorReferral.docs.find((x) => String(x.referred) === String(tid)).status, 'PENDING');
-  let list = (await call('GET', '/api/mentor-referrals/me/referrals', { token: m.token })).body;
-  assert.equal(list.referrals[0].status, 'Pending Approval'); assert.equal(list.referrals[0].userType, 'Teacher');
-  assert.deepEqual((await call('GET', '/api/mentor-referrals/me', { token: m.token })).body.stats, { totalReferrals: 1, successful: 0, pending: 1 });
+  const tu = fake.User.docs.find((u) => u.name === 'Neeta Kulkarni');
+  assert.equal(tu.isApproved, false, 'a mentor link never approves a teacher');
+  assert.equal(fake.MentorReferral.docs.filter((x) => String(x.referred) === String(tu._id)).length, 0, 'no mentor referral for a teacher');
+  assert.deepEqual((await call('GET', '/api/mentor-referrals/me', { token: m.token })).body.stats, { totalReferrals: 0, successful: 0, pending: 0 });
+  assert.equal((await mentorSvc.attributeRegistration({ newUser: tu, code })).reason, 'ROLE_NOT_SUPPORTED', 'the service refuses teachers too');
   const before = creditSnapshot();
-  const rej = await call('PUT', `/api/admin/users/${tid}`, { ...admin(), body: { isApproved: false } });
-  assert.equal(rej.status, 200, rej.text);
-  assert.equal(fake.MentorReferral.docs.find((x) => String(x.referred) === String(tid)).status, 'PENDING', 'a rejection is not a success');
-  const ok = await call('PUT', `/api/admin/users/${tid}`, { ...admin(), body: { isApproved: true } });
-  assert.equal(ok.status, 200, ok.text);
-  const row = fake.MentorReferral.docs.find((x) => String(x.referred) === String(tid));
-  assert.equal(row.status, 'SUCCESSFUL'); assert.ok(row.successfulAt);
-  assert.deepEqual((await call('GET', '/api/mentor-referrals/me', { token: m.token })).body.stats, { totalReferrals: 1, successful: 1, pending: 0 });
-  assert.deepEqual(creditSnapshot(), before, 'approval never touches credits');
+  assert.equal((await call('PUT', `/api/admin/users/${tu._id}`, { ...admin(), body: { isApproved: true } })).status, 200);
+  assert.equal(fake.MentorReferral.docs.filter((x) => String(x.referred) === String(tu._id)).length, 0, 'approval creates nothing');
+  assert.deepEqual(creditSnapshot(), before);
 });
 
 test('M5: a mentor code never approves a teacher, never bypasses role rules, and a bad code never blocks registration', async () => {
@@ -225,8 +221,8 @@ test('M5: a mentor code never approves a teacher, never bypasses role rules, and
 
 test('M6: self-referral, duplicate / concurrent / later attribution never create a second record or replace the first', async () => {
   const m = await mkMentor(); const code = await mentorCode(m);
-  assert.equal((await mentorSvc.attributeRegistration({ newUser: m.user, code })).reason, 'SELF_REFERRAL');
-  const twin = await mkUser('teacher'); twin.user.phoneNormalized = m.user.phoneNormalized || '+919888877777'; m.user.phoneNormalized = twin.user.phoneNormalized;
+  assert.equal((await mentorSvc.attributeRegistration({ newUser: m.user, code })).reason, 'ROLE_NOT_SUPPORTED');
+  const twin = await mkUser('student'); twin.user.phoneNormalized = m.user.phoneNormalized || '+919888877777'; m.user.phoneNormalized = twin.user.phoneNormalized;
   assert.equal((await mentorSvc.attributeRegistration({ newUser: twin.user, code })).reason, 'SELF_REFERRAL', 'same phone = same person');
   const fresh = await mkUser();
   const out = await Promise.all(Array.from({ length: 8 }, () => mentorSvc.attributeRegistration({ newUser: fresh.user, code })));
@@ -243,38 +239,44 @@ test('M7: a teacher sees ONLY their own referrals; ids / query tricks cannot rea
   const a = await mkMentor('Mentor Esha'); const b = await mkMentor('Mentor Farid');
   const ca = await mentorCode(a); const cb = await mentorCode(b);
   for (let i = 0; i < 5; i += 1) await register(regBody({ name: `Asha${i} Joshi`, mentorRef: ca }));
-  await regTeacher({ email: `t${++seq}@example.com`, name: 'Waiting Teacher', mentorRef: ca });
+  await regTeacher({ email: `t${++seq}@example.com`, name: 'Waiting Teacher', mentorRef: ca });   // ignored: students only
+  fake.MentorReferral.docs.find((x) => x.referredName === 'Asha4 Joshi').status = 'PENDING';
   await register(regBody({ name: 'Only B', mentorRef: cb }));
   const all = (await call('GET', '/api/mentor-referrals/me/referrals?limit=4&page=2', { token: a.token })).body;
-  assert.equal(all.total, 6); assert.equal(all.referrals.length, 2); assert.equal(all.referrals[0].no, 5);
+  assert.equal(all.total, 5); assert.equal(all.referrals.length, 1); assert.equal(all.referrals[0].no, 5); assert.ok(all.referrals.every((r) => !('userType' in r)));
   const trick = (await call('GET', `/api/mentor-referrals/me/referrals?mentor=${b.id}&mentorId=${b.id}&user=${b.id}`, { token: a.token })).body;
-  assert.equal(trick.total, 6); assert.ok(!JSON.stringify(trick).includes('Only B'));
+  assert.equal(trick.total, 5); assert.ok(!JSON.stringify(trick).includes('Only B'));
   const pend = (await call('GET', '/api/mentor-referrals/me/referrals?status=PENDING', { token: a.token })).body; assert.equal(pend.total, 1);
-  const stu = (await call('GET', '/api/mentor-referrals/me/referrals?type=student', { token: a.token })).body; assert.equal(stu.total, 5);
+  assert.equal((await call('GET', '/api/mentor-referrals/me/referrals?type=teacher', { token: a.token })).body.total, 5, 'no teacher type exists');
   const srch = (await call('GET', '/api/mentor-referrals/me/referrals?q=asha3', { token: a.token })).body; assert.equal(srch.total, 1);
   assert.equal((await call('GET', `/api/mentor-referrals/me/referrals?q=${encodeURIComponent('.*')}`, { token: a.token })).body.total, 0, 'search is escaped');
   const sum = (await call('GET', '/api/mentor-referrals/me', { token: a.token })).body.stats;
-  assert.equal(sum.totalReferrals, 6); assert.equal(sum.successful + sum.pending, sum.totalReferrals); assert.equal(sum.successful, 5);
+  assert.equal(sum.totalReferrals, 5); assert.equal(sum.successful + sum.pending, sum.totalReferrals); assert.equal(sum.successful, 4); assert.equal(sum.pending, 1);
   assert.equal((await call('GET', '/api/mentor-referrals/me/referrals', { token: (await mkUser()).token })).status, 403);
 });
 
+const row0Id = () => String(fake.MentorReferral.docs[0].referred);
 test('M8: admin overview, filters, details and correction - server-side, authorised, audited, and never a reward', async () => {
   const a = await mkMentor('Mentor Gauri'); const b = await mkMentor('Mentor Hemant'); const ca = await mentorCode(a); const cb = await mentorCode(b);
   await register(regBody({ name: 'Zed Student', mentorRef: ca }));
-  await regTeacher({ email: `t${++seq}@example.com`, name: 'Zoya Teacher', mentorRef: cb });
+  await register(regBody({ name: 'Yana Student', standard: 8, mentorRef: cb }));
   const ov = (await call('GET', '/api/mentor-referrals/admin/overview', admin())).body;
   const docs = fake.MentorReferral.docs;
   assert.equal(ov.metrics.totalReferrals, docs.length); assert.equal(ov.metrics.successful, docs.filter((x) => x.status === 'SUCCESSFUL').length);
   assert.equal(ov.metrics.pending, docs.filter((x) => x.status === 'PENDING').length);
   assert.equal(ov.metrics.participatingMentors, new Set(docs.map((x) => String(x.mentor))).size);
-  assert.ok(ov.metrics.teachersAwaitingApproval >= 1); assert.ok(ov.topMentors.length >= 2 && ov.topMentors[0].referrals >= ov.topMentors[1].referrals);
+  assert.deepEqual(Object.keys(ov.metrics).sort(), ['participatingMentors', 'pending', 'successful', 'totalReferrals']);
+  assert.ok(ov.topMentors.length >= 2 && ov.topMentors[0].referrals >= ov.topMentors[1].referrals);
   assert.ok(!/credit/i.test(JSON.stringify(Object.keys(ov.metrics))), 'no credit metric');
   const byMentor = (await call('GET', `/api/mentor-referrals/admin/referrals?q=${encodeURIComponent('Gauri')}`, admin())).body;
   assert.ok(byMentor.total >= 1 && byMentor.referrals.every((r) => /Gauri/.test(r.mentorName)));
   assert.equal((await call('GET', `/api/mentor-referrals/admin/referrals?mentorId=${b.id}`, admin())).body.referrals.every((r) => r.mentorId === b.id), true);
   assert.equal((await call('GET', `/api/mentor-referrals/admin/referrals?q=${ca}`, admin())).body.referrals.every((r) => r.mentorCode === ca), true);
-  const t = (await call('GET', '/api/mentor-referrals/admin/referrals?type=teacher&approval=PENDING', admin())).body;
-  assert.ok(t.total >= 1 && t.referrals.every((r) => r.referredRole === 'teacher' && r.accountStatus === 'PENDING'));
+  const tt = (await call('GET', '/api/mentor-referrals/admin/referrals?type=teacher&approval=PENDING', admin())).body;
+  assert.equal(tt.total, docs.length, 'teacher / approval filters do not exist'); assert.ok(tt.referrals.every((r) => !('referredRole' in r) && !('accountStatus' in r)));
+  assert.equal((await call('GET', `/api/mentor-referrals/admin/referrals?q=${encodeURIComponent('Yana')}`, admin())).body.total, 1);
+  assert.equal((await call('GET', `/api/mentor-referrals/admin/referrals?q=${row0Id()}`, admin())).body.total >= 1, true);
+  assert.equal((await call('GET', '/api/mentor-referrals/admin/referrals?status=PENDING&q=Gauri', admin())).body.total, 0, 'combined filters');
   assert.equal((await call('GET', '/api/mentor-referrals/admin/referrals?from=2099-01-01', admin())).body.total, 0);
   const paged = (await call('GET', '/api/mentor-referrals/admin/referrals?limit=1&page=2', admin())).body; assert.equal(paged.referrals.length, 1); assert.equal(paged.total, docs.length);
   for (const [m2, u] of [['GET', '/admin/overview'], ['GET', '/admin/referrals'], ['GET', `/admin/referrals/${docs[0]._id}`], ['POST', `/admin/referrals/${docs[0]._id}/correct`]]) {
@@ -315,11 +317,11 @@ test('M9: CREDIT ISOLATION - a referred student\'s exam and interview payments, 
   // a mentor cannot use the student endpoints to earn either
   assert.equal((await call('GET', '/api/referrals/me', { token: m.token })).status, 403);
   assert.equal((await call('GET', '/api/referrals/me/balance', { token: m.token })).status, 403);
-  // teacher approval of a referred teacher: still nothing
+  // teacher approval: still nothing
   await regTeacher({ email: `t${++seq}@example.com`, name: 'Approved Later', mentorRef: code });
   const tid = fake.User.docs.find((u) => u.name === 'Approved Later')._id;
   await call('PUT', `/api/admin/users/${tid}`, { ...admin(), body: { isApproved: true } });
-  assert.equal(fake.MentorReferral.docs.find((x) => String(x.referred) === String(tid)).status, 'SUCCESSFUL');
+  assert.equal(fake.MentorReferral.docs.filter((x) => String(x.referred) === String(tid)).length, 0);
   assert.deepEqual(creditSnapshot(), before);
 });
 

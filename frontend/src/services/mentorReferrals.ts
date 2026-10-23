@@ -1,26 +1,26 @@
 import api from './api';
 
-/** Mentor referral TRACKING. Analytics only: nothing here describes, grants or displays a reward. */
+/** Mentor referral TRACKING of referred STUDENTS. Analytics only: nothing here describes, grants or displays a reward. */
 export interface MentorStats { totalReferrals: number; successful: number; pending: number }
 export interface MentorOverview { code: string; link: string; stats: MentorStats }
-export interface MentorRow { no: number; name: string; userType: 'Student' | 'Teacher'; standard: number | null; registeredAt: string; status: 'Successful' | 'Pending' | 'Pending Approval'; statusCode: 'SUCCESSFUL' | 'PENDING'; successfulAt: string | null }
+export interface MentorRow { no: number; name: string; standard: number | null; registeredAt: string; status: 'Successful' | 'Pending'; statusCode: 'SUCCESSFUL' | 'PENDING'; successfulAt: string | null }
 export interface PageOf<T> { page: number; limit: number; total: number; referrals: T[] }
-export interface MentorQuery { page?: number; limit?: number; q?: string; status?: string; type?: string }
+export interface MentorQuery { page?: number; limit?: number; q?: string; status?: string }
 
 export interface AdminMentorRow {
-  id: string; mentorId: string; mentorName: string; mentorCode: string; referredId: string; referredName: string; referredRole: 'student' | 'teacher';
-  standard: number | null; registeredAt: string; status: 'PENDING' | 'SUCCESSFUL'; successfulAt: string | null; accountStatus: string; source: string;
+  id: string; mentorId: string; mentorName: string; mentorCode: string; referredId: string; referredName: string;
+  standard: number | null; registeredAt: string; status: 'PENDING' | 'SUCCESSFUL'; successfulAt: string | null; source: string;
 }
 export interface AdminMentorOverview {
-  metrics: { totalReferrals: number; successful: number; pending: number; participatingMentors: number; referredStudents: number; referredTeachers: number; teachersAwaitingApproval: number };
+  metrics: { totalReferrals: number; successful: number; pending: number; participatingMentors: number };
   topMentors: { mentorId: string; name: string; referrals: number; successful: number }[];
 }
 export interface Person { id: string | null; name: string; email: string | null; phone: string | null; deleted: boolean }
 export interface AdminMentorDetail extends AdminMentorRow {
-  mentor: Person; referred: Person; approvalStatus: string | null; reward: string;
+  mentor: Person; referred: Person; reward: string;
   timeline: { at: string; event: string; byName: string | null; reason: string | null }[];
 }
-export interface AdminMentorQuery extends MentorQuery { mentorId?: string; standard?: string; from?: string; to?: string; approval?: string }
+export interface AdminMentorQuery extends MentorQuery { mentorId?: string; standard?: string; from?: string; to?: string }
 
 const clean = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== '' && v !== undefined && v !== null));
 
