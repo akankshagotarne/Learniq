@@ -39,6 +39,7 @@ interface RegisterData {
   role: string;
   phone?: string;
   referralCode?: string;
+  mentorRef?: string;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);

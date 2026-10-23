@@ -1,3 +1,4 @@
+import { mentorReferralApi } from '../services/mentorReferrals';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone, AlertCircle, CheckCircle, Clock, Gift, Loader2 } from 'lucide-react';
@@ -11,6 +12,13 @@ const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   // a shared link (/register?ref=CODE) pre-fills the optional referral code; the server validates it again
   const [referralCode, setReferralCode] = useState(() => (searchParams.get('ref') || '').trim().toUpperCase().slice(0, 20));
+  // a mentor link (/register?mentorRef=CODE) is remembered for this tab only; the server validates and attributes it. It never blocks registration.
+  const [mentorRef] = useState(() => {
+    const fromUrl = (searchParams.get('mentorRef') || '').trim().toUpperCase().slice(0, 20);
+    try { if (fromUrl) { sessionStorage.setItem('learniq_mentor_ref', fromUrl); return fromUrl; } return sessionStorage.getItem('learniq_mentor_ref') || ''; } catch { return fromUrl; }
+  });
+  const [mentorValid, setMentorValid] = useState<boolean | null>(null);
+  useEffect(() => { if (!mentorRef) return; mentorReferralApi.validate(mentorRef).then(setMentorValid).catch(() => setMentorValid(null)); }, [mentorRef]);
   const [refState, setRefState] = useState<{ status: 'idle' | 'checking' | 'valid' | 'invalid' | 'unknown'; message?: string }>({ status: 'idle' });
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', role: 'student', phone: '' });
   const [showPass, setShowPass] = useState(false);
@@ -71,9 +79,10 @@ const RegisterPage: React.FC = () => {
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined });
+      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined, mentorRef: mentorRef || undefined });
       if (result.pendingApproval) { setPendingMessage(result.message); return; } // a teacher is NOT signed in
       toast.success('Account created successfully!');
+      try { sessionStorage.removeItem('learniq_mentor_ref'); } catch { /* ignore */ }
       navigate('/student/standard');
     } catch (err: any) {
       const data = err.response?.data;
@@ -145,6 +154,11 @@ const RegisterPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {mentorRef && mentorValid !== null && (
+              <p className={`text-xs rounded-xl px-3 py-2 border ${mentorValid ? 'bg-[#E6F8EE] text-[#117A43] border-[#9BE0BA]' : 'bg-[#FFF4DD] text-[#8A5A00] border-[#F5D58A]'}`} role="status" data-testid="mentor-ref-note">
+                {mentorValid ? 'You were invited by a LearnIQ mentor.' : 'This mentor link is not valid. You can still create your account.'}
+              </p>
+            )}
             {/* Role Select: only chooses which kind of account to REQUEST. Teachers are approved by an administrator; admin is not offered. */}
             <div>
               <span className="text-xs font-semibold text-text-secondary block mb-1.5">I am a</span>

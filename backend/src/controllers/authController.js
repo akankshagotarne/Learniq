@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const referrals = require('../services/referrals');
+const mentorReferrals = require('../services/mentorReferrals');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
@@ -67,7 +68,7 @@ const sendAuthError = (res, e, fallback) => {
 // The role comes from the form but only ever 'student' or 'teacher' is accepted ('admin' cannot be requested here).
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, referralCode } = req.body || {};
+    const { name, email, password, role, phone, referralCode, mentorRef } = req.body || {};
     const fail = (status, code, field, message) => res.status(status).json({ success: false, code, field, message, errors: field ? [{ field, code, message }] : undefined });
 
     if (typeof name !== 'string' || !name.trim()) return fail(400, 'NAME_REQUIRED', 'name', 'Please enter your full name.');
@@ -122,6 +123,11 @@ const register = async (req, res) => {
       if (raced) return res.status(409).json(identity.conflictBody(raced));
       throw createError;
     }
+
+    // Mentor referral TRACKING (a separate program from the student referral above; it only records who referred whom and never rewards anyone).
+    // A wrong / expired link never blocks a registration. Failures are logged inside and never affect the account.
+    const mentorInput = typeof mentorRef === 'string' ? mentorRef.trim() : '';
+    if (mentorInput) await mentorReferrals.attributeRegistration({ newUser: user, code: mentorInput, source: 'LINK' });
 
     if (isTeacher) {
       // Deliberately NO session and NO token: the account exists only as a request until an administrator approves it.

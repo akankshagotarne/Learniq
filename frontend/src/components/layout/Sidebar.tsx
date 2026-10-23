@@ -4,7 +4,8 @@ import {
   Home, BookOpen, Play, FileText, HelpCircle, ClipboardList,
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
-  Menu, X, Trophy, Award, Video, CalendarClock, Gift, ListOrdered, Receipt
+  Menu, X, Trophy, Award, Video, CalendarClock, Gift, ListOrdered, Receipt,
+  Share2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -53,6 +54,7 @@ const teacherNav: NavItem[] = [
   { label: 'Student Questions', href: '/teacher/doubts', icon: MessageCircle },
   { label: 'Exams', href: '/teacher/exams', icon: ClipboardList },
   { label: 'Interview', href: '/teacher/interview', icon: Video },
+  { label: 'Referrals', href: '/teacher/referrals', icon: Share2 },
   { label: 'My Profile', href: '/teacher/profile', icon: User },
   { label: 'Settings', href: '/teacher/settings', icon: Settings },
   { label: 'Help & Support', href: '/help-support', icon: HelpCircle },

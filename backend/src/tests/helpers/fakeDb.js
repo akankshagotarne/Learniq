@@ -266,7 +266,7 @@ class FakeModel {
     return { matchedCount: n, modifiedCount: n };
   }
 
-  async findByIdAndUpdate(id, update, opts = {}) { return this.findOneAndUpdate({ _id: id }, update, opts); }
+  findByIdAndUpdate(id, update, opts = {}) { const p = this.findOneAndUpdate({ _id: id }, update, opts); p.select = () => p; return p; }
 
   async bulkWrite(ops) {
     for (const op of ops) {
@@ -471,9 +471,14 @@ const createFakeDb = () => {
   const ReferralSettings = new FakeModel('ReferralSettings', { registry, unique: [{ fields: ['key'] }], defaults: () => ({ key: 'default', enabled: true, creditsPerReferral: 1, maxBulkSize: 200, maxCreditsPerStudent: 20, rewardUnderReview: false, flagAfterPerHour: 5 }) });
   const referralModels = { ...require('../../models/Referral'), ReferralProfile, Referral, CreditAccount, CreditTransaction, CreditGrantBatch, ReferralSettings };
 
+  // Mentor referral tracking (models/MentorReferral.js): same unique indexes as the real schemas
+  const MentorProfile = new FakeModel('MentorProfile', { registry, unique: [{ fields: ['user'] }, { fields: ['code'] }], defaults: () => ({ status: 'ACTIVE' }) });
+  const MentorReferral = new FakeModel('MentorReferral', { registry, unique: [{ fields: ['referred'] }], defaults: () => ({ status: 'PENDING', source: 'LINK', registeredAt: new Date(), timeline: [] }) });
+  const mentorModels = { ...require('../../models/MentorReferral'), MentorProfile, MentorReferral };
+
   const engineeringModels = { EngineeringRequest, EngineeringAudit, REQUEST_STATUSES: ['PENDING', 'APPROVED', 'REJECTED'] };
 
-  return { referralModels, ReferralProfile, Referral, CreditAccount, CreditTransaction, CreditGrantBatch, ReferralSettings, examAccessModels, OlympiadClearance, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, OlympiadExamAudit, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadEvent, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
+  return { mentorModels, MentorProfile, MentorReferral, referralModels, ReferralProfile, Referral, CreditAccount, CreditTransaction, CreditGrantBatch, ReferralSettings, examAccessModels, OlympiadClearance, OlympiadAccessGrant, OlympiadAttemptHistory, ExamAdminAudit, scheduleModels, InterviewSchedule, InterviewSlot, InterviewReminder, TeacherInterview, InterviewSetting, InterviewEvaluation, interviewModels: { ...require('../../models/TeacherInterview'), TeacherInterview, InterviewSetting, InterviewEvaluation }, engineeringModels, OlympiadExamAudit, EngineeringRequest, EngineeringAudit, sessionStore, sessionToken, authSessionModels, AuthSession: sessionStore.AuthSession, SessionTakeover: sessionStore.SessionTakeover, registry, OlympiadEvent, OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt, User, Notification, Payment, Course, Enrollment, Certificate, Counter, AIInterview, Lecture, Note, LiveSession, Exam, ExamAttempt, Quiz, Assignment, ProctoringSession, ProctoringEvent, proctoringModels };
 };
 
 /**
