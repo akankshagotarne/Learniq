@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Gift, Users, BadgeCheck, Hourglass, ShieldQuestion, Ban, Ticket, Wallet, Download, Search, Loader2, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sidebar from '../../components/layout/Sidebar';
+import AdminMentorReferrals from '../../components/referral/AdminMentorReferrals';
 import SendCredits from '../../components/referral/SendCredits';
 import { Busy, ErrorBox, Field, Modal, Pager, StatusPill, selectCls, useDebounced, useNarrow } from '../../components/referral/adminBits';
 import {
@@ -12,9 +13,9 @@ import {
 import { olympiadErrorCode, olympiadErrorMessage } from '../../services/olympiad';
 import { formatISTDate, formatISTDateTime } from '../../utils/olympiadFormat';
 
-type Tab = 'overview' | 'referrals' | 'transactions' | 'send' | 'settings';
+type Tab = 'overview' | 'referrals' | 'mentors' | 'transactions' | 'send' | 'settings';
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'overview', label: 'Overview' }, { key: 'referrals', label: 'All referrals' }, { key: 'transactions', label: 'Credit transactions' },
+  { key: 'overview', label: 'Overview' }, { key: 'referrals', label: 'All referrals' }, { key: 'mentors', label: 'Mentor Referrals' }, { key: 'transactions', label: 'Credit transactions' },
   { key: 'send', label: 'Send exam credits' }, { key: 'settings', label: 'Settings' },
 ];
 const STD = (n: number | null) => (n === null || n === undefined ? '—' : n === 99 ? 'Others' : `Std ${n}`);
@@ -385,6 +386,7 @@ const AdminReferEarn: React.FC = () => {
           </div>
           {tab === 'overview' && <Overview key={version} />}
           {tab === 'referrals' && <Referrals onChanged={bump} />}
+          {tab === 'mentors' && <AdminMentorReferrals />}
           {tab === 'transactions' && <Transactions key={version} />}
           {tab === 'send' && <SendCredits settings={settings} onChanged={bump} />}
           {tab === 'settings' && <SettingsPanel settings={settings} onSaved={setSettings} />}

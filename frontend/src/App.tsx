@@ -54,6 +54,7 @@ const ReferAndEarnPage = lazy(() => import('./pages/student/ReferAndEarnPage'));
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
 const TeacherCourses = lazy(() => import('./pages/teacher/TeacherCourses'));
 const TeacherLiveSessions = lazy(() => import('./pages/teacher/TeacherLiveSessions'));
+const TeacherReferrals = lazy(() => import('./pages/teacher/TeacherReferrals'));
 const TeacherStudents = lazy(() => import('./pages/teacher/TeacherStudents'));
 const TeacherExamsPage = lazy(() => import('./pages/teacher/TeacherExamsPage'));
 const ExamBuilderPage = lazy(() => import('./pages/teacher/ExamBuilderPage'));
@@ -309,6 +310,11 @@ const AppRoutes: React.FC = () => (
           <TeacherCourses />
         </ProtectedRoute>
       )} />
+      <Route path="/teacher/referrals" element={
+        <ProtectedRoute roles={['teacher']}>
+          <TeacherReferrals />
+        </ProtectedRoute>
+      } />
       <Route path="/teacher/students" element={
         <ProtectedRoute roles={['teacher', 'admin']}>
           <TeacherStudents />

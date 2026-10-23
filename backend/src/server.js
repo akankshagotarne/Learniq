@@ -32,6 +32,7 @@ const miscRoutes = require('./routes/misc');
 const examRoutes = require('./routes/exams');
 const olympiadRoutes = require('./routes/olympiad');
 const referralRoutes = require('./routes/referrals');
+const mentorReferralRoutes = require('./routes/mentorReferrals');
 const interviewRoutes = require('./routes/interviews');
 const engineeringRoutes = require('./routes/engineering');
 const certificateRoutes = require('./routes/certificates');
@@ -111,6 +112,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/mentor-referrals', mentorReferralRoutes);   // mentor referral TRACKING (never any credits)
 app.use('/api/interviews', interviewRoutes); // teacher-led interviews (separate from the AI interview)
 app.use('/api/engineering', engineeringRoutes);
 app.use('/api/certificates', certificateRoutes);
