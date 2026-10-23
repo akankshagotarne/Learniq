@@ -44,6 +44,7 @@ const rzp = { created: [] };
 const razorpayClient = { orders: { create: async (o) => { rzp.created.push(o); return { id: `order_t_${rzp.created.length}`, amount: o.amount, currency: o.currency, receipt: o.receipt }; }, fetchPayments: async () => ({ items: [] }) } };
 const overrides = {
   [path.join(SRC, 'models', 'Referral.js')]: fake.referralModels,
+  [path.join(SRC, 'models', 'MentorReferral.js')]: fake.mentorModels,
   [path.join(SRC, 'models', 'ExamAccess.js')]: fake.examAccessModels,
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels,
   [path.join(SRC, 'models', 'User.js')]: fake.User,

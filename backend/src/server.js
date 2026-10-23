@@ -112,6 +112,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/referral-codes', require('./routes/referralCodes'));   // one validator for the optional Referral Code field (mentor or student)
 app.use('/api/mentor-referrals', mentorReferralRoutes);   // mentor referral TRACKING (never any credits)
 app.use('/api/interviews', interviewRoutes); // teacher-led interviews (separate from the AI interview)
 app.use('/api/engineering', engineeringRoutes);

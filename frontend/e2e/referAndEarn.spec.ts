@@ -40,7 +40,7 @@ test.describe('registration referral field', () => {
   test('a shared link pre-fills the code, validates it live and sends it with the registration', async ({ page }) => {
     const sent: any[] = [];
     await mockApi(page, 'guest', (m, p, body) => {
-      if (m === 'GET' && p === '/referrals/validate') return { body: { success: true, valid: true, message: 'Referral code applied.' } };
+      if (m === 'GET' && p === '/referral-codes/validate') return { body: { success: true, valid: true, message: 'Referral code applied.' } };
       if (m === 'POST' && p === '/auth/register') { sent.push(body); return { status: 201, body: { success: true, token: 't', user: { _id: 'u1', name: 'Asha Patil', role: 'student' } } }; }
       return undefined;
     });
@@ -70,7 +70,7 @@ test.describe('registration referral field', () => {
   test('an invalid code is explained next to the field and blocks the submit until fixed or cleared', async ({ page }) => {
     const sent: any[] = [];
     await mockApi(page, 'guest', (m, p, body) => {
-      if (m === 'GET' && p === '/referrals/validate') return { body: { success: true, valid: false, message: 'Referral code not found.' } };
+      if (m === 'GET' && p === '/referral-codes/validate') return { body: { success: true, valid: false, message: 'Referral code not found. Please check the code and try again.' } };
       if (m === 'POST' && p === '/auth/register') { sent.push(body); return { status: 201, body: { success: true, token: 't', user: { _id: 'u1', name: 'Asha', role: 'student' } } }; }
       return undefined;
     });

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const referrals = require('../services/referrals');
 const mentorReferrals = require('../services/mentorReferrals');
+const referralCodes = require('../services/referralCodes');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { Notification } = require('../models/index');
@@ -91,11 +92,19 @@ const register = async (req, res) => {
 
     // Optional referral code (students only). A code that was typed but is wrong is refused BEFORE the account exists so the student can fix it;
     // a paused program never blocks a registration. Reward/attribution happens after the account is created and can never undo it.
+    let codeType = null;
     const refInput = typeof referralCode === 'string' ? referralCode.trim() : '';
     if (refInput) {
       if (validRole !== 'student') return fail(400, 'REFERRAL_NOT_FOR_TEACHERS', 'referralCode', 'Referral codes can only be used when registering as a student.');
-      const check = await referrals.validateCode(refInput);
-      if (!check.valid && check.reason !== 'DISABLED') return fail(400, 'INVALID_REFERRAL_CODE', 'referralCode', check.message);
+      // the ONE optional field may hold a mentor code (tracking only) or a student code (Refer & Earn): the server decides which, never the client
+      let check;
+      try { check = await referralCodes.resolve(refInput); } catch (e) {
+        console.error('[register] referral code check unavailable:', e && e.message);
+        return res.status(503).json({ success: false, code: 'REFERRAL_CHECK_UNAVAILABLE', message: 'Unable to validate the referral code right now. Please try again.' });
+      }
+      if (check.valid) codeType = check.type;
+      else if (check.reason !== 'DISABLED') return fail(400, 'INVALID_REFERRAL_CODE', 'referralCode', check.message);
+      else codeType = 'student';   // a paused student programme never blocks a registration
     }
 
     // Friendly pre-check across ALL roles (one shared collection). The unique indexes below remain the final authority.
@@ -126,7 +135,7 @@ const register = async (req, res) => {
 
     // Mentor referral TRACKING (students only; a separate program from the student referral above; it only records who referred whom and never rewards anyone).
     // A wrong / expired link never blocks a registration. Failures are logged inside and never affect the account.
-    const mentorInput = typeof mentorRef === 'string' ? mentorRef.trim() : '';
+    const mentorInput = codeType === 'mentor' ? refInput : (typeof mentorRef === 'string' ? mentorRef.trim() : '');
     if (mentorInput && !isTeacher) await mentorReferrals.attributeRegistration({ newUser: user, code: mentorInput, source: 'LINK' });
 
     if (isTeacher) {
@@ -140,7 +149,7 @@ const register = async (req, res) => {
     }
 
     // Referral attribution: only for the account that was JUST created; failures are logged inside and never affect the registration
-    if (refInput) await referrals.attributeRegistration({ newUser: user, code: refInput });
+    if (refInput && codeType === 'student') await referrals.attributeRegistration({ newUser: user, code: refInput });
 
     // Welcome notification
     await Notification.create({

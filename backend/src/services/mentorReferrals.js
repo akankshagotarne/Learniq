@@ -56,9 +56,10 @@ const resolveCode = async (raw) => {
   const code = normalizeCode(raw);
   if (!code) return { valid: false, reason: 'INVALID_FORMAT' };
   const profile = await MentorProfile.findOne({ code });
-  if (!profile || profile.status !== 'ACTIVE') return { valid: false, reason: 'NOT_FOUND' };
+  if (!profile) return { valid: false, reason: 'NOT_FOUND' };
+  if (profile.status !== 'ACTIVE') return { valid: false, reason: 'INACTIVE' };
   const mentor = await User.findById(profile.user);
-  if (!isEligibleMentor(mentor)) return { valid: false, reason: 'MENTOR_UNAVAILABLE' };
+  if (!isEligibleMentor(mentor)) return { valid: false, reason: 'INACTIVE' };   // owner no longer an approved, active mentor
   return { valid: true, code, profile, mentor };
 };
 

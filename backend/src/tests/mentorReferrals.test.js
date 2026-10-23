@@ -127,6 +127,7 @@ test.before(async () => {
   app.use('/api/auth', require('../routes/auth'));
   app.use('/api/referrals', require('../routes/referrals'));
   app.use('/api/mentor-referrals', require('../routes/mentorReferrals'));
+  app.use('/api/referral-codes', require('../routes/referralCodes'));
   app.use('/api/olympiad', require('../routes/olympiad'));
   app.put('/api/admin/users/:id', protect, authorize('admin'), userCtrl.updateUserAdmin);   // the real approval handler
   server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
@@ -339,7 +340,8 @@ test('M10: the student Refer & Earn programme is untouched: a student code still
   assert.equal(rewardsFor(stuRef.id), 1); assert.equal(balanceOf(mentor.id), 0); assert.equal(ledgerOf(mentor.id).length, 0, 'the mentor gets nothing');
   // a student code typed in the mentor field (or the other way round) is not a valid attribution
   const x = await register(regBody({ mentorRef: sCode })); assert.equal(x.status, 201); assert.equal(fake.MentorReferral.docs.filter((y) => String(y.referred) === String(x.body.user._id)).length, 0);
-  const y = await register(regBody({ referralCode: mCode })); assert.equal(y.status, 400); assert.equal(y.body.code, 'INVALID_REFERRAL_CODE');
+  // the ONE field accepts a mentor code too (server decides); the student programme gets nothing from it
+  const y = await register(regBody({ referralCode: mCode })); assert.equal(y.status, 201); assert.equal(fake.Referral.docs.filter((z) => String(z.referred) === String(y.body.user._id)).length, 0);
 });
 
 test('M11: registration / login regressions - student and teacher registration, duplicate protection and login still behave', async () => {
@@ -352,4 +354,62 @@ test('M12: a referral record has a unique index per referred account on the real
   const m = require('fs').readFileSync(path.join(SRC, 'models', 'MentorReferral.js'), 'utf8');
   assert.match(m, /referred:\s*1\s*\}\s*,\s*\{[^}]*unique:\s*true/); assert.match(m, /code:\s*1\s*\}\s*,\s*\{[^}]*unique:\s*true/); assert.match(m, /user:\s*1\s*\}\s*,\s*\{[^}]*unique:\s*true/);
   assert.match(m, /mentor:\s*1,\s*registeredAt:\s*-1/); assert.match(m, /status:\s*1,\s*registeredAt:\s*-1/);
+});
+
+// ── the "Referral code not found" bug: the one registration field must recognise MENTOR codes as well as student codes ────────────────────
+const vcode = (c) => call('GET', `/api/referral-codes/validate?code=${encodeURIComponent(c)}`);
+test('V1: validation recognises a mentor code (any case / padded), a student code, and refuses unknown / non-code values; it creates nothing', async () => {
+  const m = await mkMentor('Mentor Diag');
+  // diagnostic fixture shaped exactly like the reported code (the real production record is NOT reachable from tests)
+  await fake.MentorProfile.create({ user: m.user._id, code: 'MN58PUJ23', status: 'ACTIVE' }).catch(() => {});
+  const code = fake.MentorProfile.docs.find((p) => String(p.user) === m.id).code;
+  for (const v of [code, code.toLowerCase(), `  ${code} `]) { const r = await vcode(v); assert.equal(r.status, 200); assert.equal(r.body.valid, true, v); assert.equal(r.body.type, 'mentor'); assert.equal(r.body.message, 'Valid mentor referral code.'); }
+  assert.ok(!JSON.stringify((await vcode(code)).body).includes(m.user.name), 'owner never revealed');
+  const stu = await mkUser(undefined, 8, 'Student Ref'); const sc = await codeOf(stu);
+  const sr = await vcode(sc); assert.equal(sr.body.valid, true); assert.equal(sr.body.type, 'student');
+  for (const bad of ['MNZZZZZZZ', 'LQ000000', m.user.name, m.user.phone, m.user.email, '']) { const r = await vcode(bad); assert.equal(r.body.valid, false, String(bad)); assert.equal(r.body.message, 'Referral code not found. Please check the code and try again.'); }
+  const before = fake.MentorReferral.docs.length; const snap = creditSnapshot(); await Promise.all([vcode(code), vcode(code), vcode(sc)]);
+  assert.equal(fake.MentorReferral.docs.length, before, 'validation never creates a referral'); assert.deepEqual(creditSnapshot(), snap);
+});
+
+test('V2: a revoked mentor code is refused as inactive; a database failure is a 503, never "not found"', async () => {
+  const m = await mkMentor(); const code = await mentorCode(m);
+  fake.MentorProfile.docs.find((p) => String(p.user) === m.id).status = 'REVOKED';
+  const r = await vcode(code); assert.equal(r.body.valid, false); assert.equal(r.body.reason, 'INACTIVE');
+  assert.equal((await register(regBody({ referralCode: code }))).status, 400, 'a code that became inactive is refused at submit');
+  fake.MentorProfile.docs.find((p) => String(p.user) === m.id).status = 'ACTIVE';
+  const orig = fake.MentorProfile.findOne; fake.MentorProfile.findOne = async () => { throw new Error('db down'); };
+  try {
+    const down = await vcode(code); assert.equal(down.status, 503); assert.notEqual(down.body.valid, false); assert.match(down.body.message, /Unable to validate/);
+    const reg = await register(regBody({ referralCode: code })); assert.equal(reg.status, 503, 'registration is not told the code is invalid'); assert.equal(reg.body.code, 'REFERRAL_CHECK_UNAVAILABLE');
+  } finally { fake.MentorProfile.findOne = orig; }
+});
+
+test('V3: registering with a mentor code in the ONE field attributes exactly one mentor record after the account exists - no credits, no student referral, right owner', async () => {
+  const m = await mkMentor('Mentor Vee'); const other = await mkMentor('Mentor Other'); const code = await mentorCode(m);
+  const before = creditSnapshot();
+  const r = await register(regBody({ name: 'Field Student', referralCode: ` ${code.toLowerCase()} `, mentorId: other.id, mentor: other.id, referrer: other.id }));
+  assert.equal(r.status, 201, r.text);
+  const kid = String(r.body.user._id);
+  const rows = fake.MentorReferral.docs.filter((x) => String(x.referred) === kid);
+  assert.equal(rows.length, 1); assert.equal(String(rows[0].mentor), m.id, 'a client-supplied mentor id is ignored'); assert.equal(rows[0].mentorCode, code);
+  assert.equal(fake.Referral.docs.filter((x) => String(x.referred) === kid).length, 0, 'not a student-programme referral');
+  assert.deepEqual(creditSnapshot(), before, 'no credits to anyone');
+  assert.equal((await call('GET', '/api/mentor-referrals/me/referrals', { token: m.token })).body.referrals[0].name, 'Field S.');
+  assert.ok((await call('GET', `/api/mentor-referrals/admin/referrals?q=${encodeURIComponent('Field Student')}`, admin())).body.referrals.some((x) => x.mentorId === m.id && x.referredName === 'Field Student'));
+  assert.equal(mrows(other.id).length, 0);
+  // retry with the same phone / e-mail is refused as a duplicate account and creates no second record
+  const again = await register({ ...regBody({ referralCode: code }), email: r.body.user.email, phone: r.body.user.phone }); assert.equal(again.status, 409);
+  assert.equal(fake.MentorReferral.docs.filter((x) => String(x.referred) === kid).length, 1);
+  // an existing account cannot claim a mentor afterwards
+  assert.equal((await mentorSvc.attributeRegistration({ newUser: fake.User.docs.find((u) => String(u._id) === kid), code: await mentorCode(other) })).reason, 'ALREADY_ATTRIBUTED');
+});
+
+test('V4: unknown code refused before the account exists; blank field registers normally; a teacher cannot use a code to be attributed', async () => {
+  const users = fake.User.docs.length;
+  const bad = await register(regBody({ referralCode: 'MNZZZZZZZ' })); assert.equal(bad.status, 400); assert.equal(bad.body.code, 'INVALID_REFERRAL_CODE'); assert.equal(fake.User.docs.length, users);
+  assert.equal((await register(regBody({ referralCode: '' }))).status, 201);
+  const m = await mkMentor(); const code = await mentorCode(m);
+  const t = await regTeacher({ email: `t${++seq}@example.com`, referralCode: code }); assert.equal(t.status, 400); assert.equal(t.body.code, 'REFERRAL_NOT_FOR_TEACHERS');
+  const t2 = await regTeacher({ email: `t${++seq}@example.com`, mentorRef: code }); assert.equal(t2.body.pendingApproval, true); assert.equal(mrows(m.id).length, 0);
 });
