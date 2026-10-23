@@ -79,7 +79,7 @@ const RegisterPage: React.FC = () => {
     submitting.current = true;
     setLoading(true);
     try {
-      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined, mentorRef: mentorRef || undefined });
+      const result = await register({ name: form.name.trim(), email: form.email.trim() || undefined, password: form.password, role: form.role, phone: form.phone.trim() || undefined, referralCode: !isTeacher && referralCode.trim() ? referralCode.trim() : undefined, mentorRef: !isTeacher && mentorRef ? mentorRef : undefined });
       if (result.pendingApproval) { setPendingMessage(result.message); return; } // a teacher is NOT signed in
       toast.success('Account created successfully!');
       try { sessionStorage.removeItem('learniq_mentor_ref'); } catch { /* ignore */ }
@@ -154,7 +154,7 @@ const RegisterPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {mentorRef && mentorValid !== null && (
+            {!isTeacher && mentorRef && mentorValid !== null && (
               <p className={`text-xs rounded-xl px-3 py-2 border ${mentorValid ? 'bg-[#E6F8EE] text-[#117A43] border-[#9BE0BA]' : 'bg-[#FFF4DD] text-[#8A5A00] border-[#F5D58A]'}`} role="status" data-testid="mentor-ref-note">
                 {mentorValid ? 'You were invited by a LearnIQ mentor.' : 'This mentor link is not valid. You can still create your account.'}
               </p>

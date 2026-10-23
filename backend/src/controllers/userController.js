@@ -256,7 +256,6 @@ const updateUserAdmin = async (req, res) => {
     }
 
     const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');
-    if (isApproved !== undefined && user && user.role === 'teacher') await require('../services/mentorReferrals').syncForUser(user._id);   // tracking status only; never a reward
     if (revoke) await require('../services/authSessions').endAllSessions(req.params.id, 'access_revoked').catch(() => {});
     res.json({ success: true, user });
   } catch (error) {

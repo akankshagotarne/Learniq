@@ -4,10 +4,11 @@
  * ABSOLUTE RULE: a mentor referral never earns anything. This module does not require services/credits.js, services/referrals.js or any
  * ledger / payment model, and it has no function that changes a balance. A referred student's payments are never looked at.
  *
+ * STUDENTS ONLY: only newly registered student accounts are ever attributed. Teacher registration is never touched by a mentor code.
+ *
  * Status rules (computed here, on the server only):
- *   a referred STUDENT   SUCCESSFUL as soon as the account exists (LearnIQ has no further mandatory verification step for students)
- *   a referred TEACHER   PENDING while the administrator has not approved the account, SUCCESSFUL once approvalStatus is APPROVED
- *                        (a rejected teacher stays PENDING and shows "Rejected" as the account status; nothing is ever approved by a referral)
+ *   a referred STUDENT   SUCCESSFUL as soon as the account exists (LearnIQ has no further mandatory verification step for students).
+ *   Opening / sharing a link never creates or changes a record. Payments are never looked at.
  */
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -63,16 +64,8 @@ const resolveCode = async (raw) => {
 
 // ── status ────────────────────────────────────────────────────────────────────────────────────
 /** The referral status the referred account currently deserves (pure). */
-const statusFor = (referredUser) => {
-  if (!referredUser) return 'PENDING';
-  if (referredUser.role === 'teacher') return identity.approvalStatusOf(referredUser) === 'APPROVED' && referredUser.isApproved === true ? 'SUCCESSFUL' : 'PENDING';
-  return 'SUCCESSFUL';
-};
-const accountStatusOf = (u) => {
-  if (!u) return 'DELETED';
-  if (u.role === 'teacher') return identity.approvalStatusOf(u);
-  return u.isActive === false ? 'INACTIVE' : 'ACTIVE';
-};
+const statusFor = (referredUser) => (referredUser ? 'SUCCESSFUL' : 'PENDING');
+const accountStatusOf = (u) => (!u ? 'DELETED' : u.isActive === false ? 'INACTIVE' : 'ACTIVE');
 
 // ── attribution at registration ───────────────────────────────────────────────────────────────
 /**
@@ -81,7 +74,7 @@ const accountStatusOf = (u) => {
  */
 const attributeRegistration = async ({ newUser, code, source = 'LINK' }) => {
   try {
-    if (!newUser || !['student', 'teacher'].includes(newUser.role)) return { applied: false, reason: 'ROLE_NOT_SUPPORTED' };
+    if (!newUser || newUser.role !== 'student') return { applied: false, reason: 'ROLE_NOT_SUPPORTED' };
     const found = await resolveCode(code);
     if (!found.valid) return { applied: false, reason: found.reason };
     const { mentor, profile } = found;
@@ -97,8 +90,8 @@ const attributeRegistration = async ({ newUser, code, source = 'LINK' }) => {
     try {
       const doc = await MentorReferral.create({
         mentor: mentor._id, mentorName: mentor.name, mentorCode: profile.code,
-        referred: newUser._id, referredName: newUser.name, referredRole: newUser.role,
-        referredStandard: newUser.role === 'student' ? newUser.currentStandard : undefined,
+        referred: newUser._id, referredName: newUser.name, referredRole: 'student',
+        referredStandard: newUser.currentStandard,
         source: source === 'CODE' ? 'CODE' : 'LINK', status, registeredAt: now, successfulAt: status === 'SUCCESSFUL' ? now : undefined,
         timeline: [{ at: now, event: 'REGISTERED', reason: `Registered through mentor code ${profile.code}` }, ...(status === 'SUCCESSFUL' ? [{ at: now, event: 'SUCCESSFUL', reason: 'Account registration complete' }] : [])],
       });
@@ -110,37 +103,6 @@ const attributeRegistration = async ({ newUser, code, source = 'LINK' }) => {
   } catch (e) {
     console.error('[mentor-referrals] attribution failed (the registration itself succeeded):', e && e.message);
     return { applied: false, reason: 'ERROR' };
-  }
-};
-
-/**
- * Re-evaluate the status of the referral of `userId` after an account change (called after an administrator approves / rejects a teacher).
- * Only moves PENDING -> SUCCESSFUL; the status is never taken from a client. Never throws.
- */
-const syncForUser = async (userId) => {
-  try {
-    const ref = await MentorReferral.findOne({ referred: userId });
-    if (!ref) return { changed: false };
-    const u = await User.findById(userId);
-    if (!u) return { changed: false };
-    const want = statusFor(u);
-    if (want === 'SUCCESSFUL' && ref.status !== 'SUCCESSFUL') {
-      const now = new Date();
-      const updated = await MentorReferral.findOneAndUpdate(
-        { _id: ref._id, status: { $ne: 'SUCCESSFUL' } },
-        { $set: { status: 'SUCCESSFUL', successfulAt: now }, $push: { timeline: { at: now, event: 'SUCCESSFUL', reason: 'Referred teacher was approved by an administrator' } } },
-        { new: true },
-      );
-      return { changed: !!updated };
-    }
-    if (u.role === 'teacher' && identity.approvalStatusOf(u) === 'REJECTED') {
-      const had = (ref.timeline || []).some((e) => e.event === 'APPROVAL_REJECTED');
-      if (!had) { await MentorReferral.updateOne({ _id: ref._id }, { $push: { timeline: { at: new Date(), event: 'APPROVAL_REJECTED', reason: 'The referred teacher account was not approved' } } }); return { changed: true }; }
-    }
-    return { changed: false };
-  } catch (e) {
-    console.error('[mentor-referrals] status sync failed:', e && e.message);
-    return { changed: false };
   }
 };
 
@@ -174,7 +136,7 @@ const withAccounts = async (rows) => {
 };
 
 const mentorSummary = async (mentorId) => {
-  const [total, successful] = await Promise.all([MentorReferral.countDocuments({ mentor: mentorId }), MentorReferral.countDocuments({ mentor: mentorId, status: 'SUCCESSFUL' })]);
+  const [total, successful] = await Promise.all([MentorReferral.countDocuments({ mentor: mentorId, referredRole: 'student' }), MentorReferral.countDocuments({ mentor: mentorId, referredRole: 'student', status: 'SUCCESSFUL' })]);
   return { totalReferrals: total, successful, pending: total - successful };
 };
 
@@ -186,9 +148,8 @@ const myOverview = async (user, link) => {
 const myReferrals = async (user, q = {}) => {
   if (!user || user.role !== 'teacher') throw new MentorError(403, 'NOT_A_MENTOR', 'Only teachers / mentors can view mentor referrals.');
   const { page, limit, skip } = pageOf(q, 10);
-  const filter = { mentor: user._id };            // ALWAYS the authenticated mentor: no id from the request is ever used
+  const filter = { mentor: user._id, referredRole: 'student' };            // ALWAYS the authenticated mentor: no id from the request is ever used
   if (['PENDING', 'SUCCESSFUL'].includes(q.status)) filter.status = q.status;
-  if (['student', 'teacher'].includes(q.type)) filter.referredRole = q.type;
   const s = clip(q.q, 60);
   if (s) filter.referredName = { $regex: esc(s), $options: 'i' };
   const [rows, total] = await Promise.all([MentorReferral.find(filter).sort({ registeredAt: -1 }).skip(skip).limit(limit), MentorReferral.countDocuments(filter)]);
@@ -198,10 +159,9 @@ const myReferrals = async (user, q = {}) => {
     referrals: joined.map(({ r, u }, i) => ({
       no: skip + i + 1,
       name: maskName(u ? u.name : r.referredName),   // first name + last initial: no phone / e-mail is ever returned to the mentor
-      userType: r.referredRole === 'teacher' ? 'Teacher' : 'Student',
-      standard: r.referredRole === 'student' ? (u ? u.currentStandard ?? null : r.referredStandard ?? null) : null,
+      standard: u ? u.currentStandard ?? null : r.referredStandard ?? null,
       registeredAt: r.registeredAt,
-      status: r.referredRole === 'teacher' && r.status === 'PENDING' ? 'Pending Approval' : STATUS_LABEL[r.status] || r.status,
+      status: STATUS_LABEL[r.status] || r.status,
       statusCode: r.status,
       successfulAt: r.successfulAt || null,
       code: r.mentorCode,
@@ -212,14 +172,14 @@ const myReferrals = async (user, q = {}) => {
 // ── admin ─────────────────────────────────────────────────────────────────────────────────────
 const adminRow = (r, u) => ({
   id: idStr(r), mentorId: idStr(r.mentor), mentorName: r.mentorName, mentorCode: r.mentorCode,
-  referredId: idStr(r.referred), referredName: u ? u.name : r.referredName, referredRole: r.referredRole,
-  standard: r.referredRole === 'student' ? (u ? u.currentStandard ?? null : r.referredStandard ?? null) : null,
+  referredId: idStr(r.referred), referredName: u ? u.name : r.referredName,
+  standard: u ? u.currentStandard ?? null : r.referredStandard ?? null,
   registeredAt: r.registeredAt, status: r.status, successfulAt: r.successfulAt || null,
-  accountStatus: accountStatusOf(u), source: r.source,
+  source: r.source,
 });
 
-const adminFilter = async (q = {}) => {
-  const f = {};
+const adminFilter = (q = {}) => {
+  const f = { referredRole: 'student' };
   const s = clip(q.q, 80);
   if (s) {
     if (validId(s)) f.$or = [{ mentor: s }, { referred: s }, { _id: s }];
@@ -227,56 +187,38 @@ const adminFilter = async (q = {}) => {
   }
   if (validId(clip(q.mentorId, 40))) f.mentor = q.mentorId;
   if (['PENDING', 'SUCCESSFUL'].includes(q.status)) f.status = q.status;
-  if (['student', 'teacher'].includes(q.type)) f.referredRole = q.type;
   if (q.standard !== undefined && q.standard !== '' && q.standard !== 'all' && Number.isInteger(Number(q.standard))) f.referredStandard = Number(q.standard);
   const range = dateRange(q.from, q.to); if (range) f.registeredAt = range;
-  if (['PENDING', 'APPROVED', 'REJECTED'].includes(q.approval)) {
-    // teacher approval status lives on the account: resolve the matching referred teacher ids first (server-side)
-    const teachers = await User.find({ role: 'teacher' });
-    const ids = teachers.filter((t) => identity.approvalStatusOf(t) === q.approval).map((t) => t._id);
-    f.referredRole = 'teacher'; f.referred = { $in: ids };
-  }
   return f;
 };
 
 const adminList = async (q = {}) => {
   const { page, limit, skip } = pageOf(q, 20);
-  const filter = await adminFilter(q);
+  const filter = adminFilter(q);
   const [rows, total] = await Promise.all([MentorReferral.find(filter).sort({ registeredAt: -1 }).skip(skip).limit(limit), MentorReferral.countDocuments(filter)]);
   const joined = await withAccounts(rows);
   return { page, limit, total, referrals: joined.map(({ r, u }) => adminRow(r, u)) };
 };
 
 const adminOverview = async () => {
-  const [total, successful, byRole, perMentor, okPerMentor, teachers] = await Promise.all([
-    MentorReferral.countDocuments({}), MentorReferral.countDocuments({ status: 'SUCCESSFUL' }),
-    MentorReferral.aggregate([{ $group: { _id: '$referredRole', n: { $sum: 1 } } }]),
-    MentorReferral.aggregate([{ $group: { _id: '$mentor', n: { $sum: 1 } } }]),
-    MentorReferral.aggregate([{ $match: { status: 'SUCCESSFUL' } }, { $group: { _id: '$mentor', n: { $sum: 1 } } }]),
-    MentorReferral.find({ referredRole: 'teacher', status: 'PENDING' }),
+  const only = { referredRole: 'student' };
+  const [total, successful, perMentor, okPerMentor] = await Promise.all([
+    MentorReferral.countDocuments(only), MentorReferral.countDocuments({ ...only, status: 'SUCCESSFUL' }),
+    MentorReferral.aggregate([{ $match: only }, { $group: { _id: '$mentor', n: { $sum: 1 } } }]),
+    MentorReferral.aggregate([{ $match: { ...only, status: 'SUCCESSFUL' } }, { $group: { _id: '$mentor', n: { $sum: 1 } } }]),
   ]);
   const okOf = new Map(okPerMentor.map((x) => [idStr(x._id), x.n]));
   const top = perMentor.slice().sort((a, b) => b.n - a.n).slice(0, 10);
   const topUsers = top.length ? await User.find({ _id: { $in: top.map((t) => t._id) } }) : [];
   const nameOf = new Map(topUsers.map((u) => [idStr(u), u.name]));
-  const mentors = top.map((t) => ({ _id: t._id, n: t.n, ok: okOf.get(idStr(t._id)) || 0, name: nameOf.get(idStr(t._id)) || 'Former mentor' }));
-  const distinctMentors = (await MentorReferral.distinct('mentor')).length;
-  const roleN = (k) => (byRole.find((x) => x._id === k) || { n: 0 }).n;
-  // "awaiting approval" is read from the live account state (a rejected teacher is not awaiting)
-  const pendingTeacherUsers = teachers.length ? await User.find({ _id: { $in: teachers.map((t) => t.referred) } }) : [];
-  const awaiting = pendingTeacherUsers.filter((u) => identity.approvalStatusOf(u) === 'PENDING').length;
   return {
-    metrics: {
-      totalReferrals: total, successful, pending: total - successful, participatingMentors: distinctMentors,
-      referredStudents: roleN('student'), referredTeachers: roleN('teacher'), teachersAwaitingApproval: awaiting,
-      conversionRate: total ? Math.round((successful / total) * 1000) / 10 : 0,
-    },
-    topMentors: mentors.map((m) => ({ mentorId: idStr(m._id), name: m.name, referrals: m.n, successful: m.ok })),
+    metrics: { totalReferrals: total, successful, pending: total - successful, participatingMentors: perMentor.length },
+    topMentors: top.map((t) => ({ mentorId: idStr(t._id), name: nameOf.get(idStr(t._id)) || 'Former mentor', referrals: t.n, successful: okOf.get(idStr(t._id)) || 0 })),
     definitions: {
-      totalReferrals: 'Accounts that registered through a mentor referral code (one per account; link visits and copies are not counted).',
-      successful: 'Referred students that registered, and referred teachers that an administrator approved.',
-      pending: 'Registered through a mentor code but not yet successful (a referred teacher awaiting approval).',
-      conversionRate: 'Successful referrals divided by total referrals.',
+      totalReferrals: 'Student accounts that registered through a mentor referral code (one per account; link visits are not counted).',
+      successful: 'Referred students whose registration is complete.',
+      pending: 'Attributed students whose registration is not complete yet.',
+      participatingMentors: 'Mentors with at least one recorded student referral.',
     },
     note: 'Mentor referrals are tracking only. They never earn exam credits or money.',
   };
@@ -285,13 +227,12 @@ const adminOverview = async () => {
 const adminDetail = async (id) => {
   if (!validId(String(id))) throw new MentorError(404, 'REFERRAL_NOT_FOUND', 'Referral not found.');
   const r = await MentorReferral.findById(id);
-  if (!r) throw new MentorError(404, 'REFERRAL_NOT_FOUND', 'Referral not found.');
+  if (!r || r.referredRole !== 'student') throw new MentorError(404, 'REFERRAL_NOT_FOUND', 'Referral not found.');
   const [mentor, referred] = await Promise.all([User.findById(r.mentor), User.findById(r.referred)]);
   const person = (u, name) => ({ id: u ? idStr(u) : null, name: u ? u.name : name, email: u ? u.email || null : null, phone: u ? u.phone || null : null, deleted: !u });
   return {
     ...adminRow(r, referred),
     mentor: person(mentor, r.mentorName), referred: person(referred, r.referredName),
-    approvalStatus: referred && referred.role === 'teacher' ? identity.approvalStatusOf(referred) : null,
     timeline: (r.timeline || []).map((e) => ({ at: e.at, event: e.event, byName: e.byName || null, reason: e.reason || null })),
     reward: 'None. Mentor referrals never earn exam credits or money.',
   };
@@ -319,5 +260,5 @@ const correctAttribution = async (id, { mentorId, reason }, admin) => {
 
 module.exports = {
   MentorError, generateCode, normalizeCode, isEligibleMentor, getOrCreateProfile, resolveCode, statusFor,
-  attributeRegistration, syncForUser, myOverview, myReferrals, mentorSummary, adminList, adminOverview, adminDetail, correctAttribution,
+  attributeRegistration, myOverview, myReferrals, mentorSummary, adminList, adminOverview, adminDetail, correctAttribution,
 };

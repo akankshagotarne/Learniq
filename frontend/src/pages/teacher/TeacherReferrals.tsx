@@ -35,7 +35,6 @@ const TeacherReferrals: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
-  const [type, setType] = useState('');
   const [search, setSearch] = useState('');
   const q = useDebounced(search);
   const [loading, setLoading] = useState(true);
@@ -44,14 +43,14 @@ const TeacherReferrals: React.FC = () => {
   const loadOverview = useCallback(() => { setOvError(''); mentorReferralApi.me().then(setOv).catch(() => setOvError('We could not load your referral code. Please try again.')); }, []);
   const loadRows = useCallback(() => {
     setLoading(true); setError('');
-    mentorReferralApi.list({ page, limit: LIMIT, q, status, type })
+    mentorReferralApi.list({ page, limit: LIMIT, q, status })
       .then(r => { setRows(r.referrals); setTotal(r.total); })
       .catch(() => setError('We could not load your referrals. Please try again.'))
       .finally(() => setLoading(false));
-  }, [page, q, status, type]);
+  }, [page, q, status]);
   useEffect(loadOverview, [loadOverview]);
   useEffect(loadRows, [loadRows]);
-  useEffect(() => { setPage(1); }, [q, status, type]);
+  useEffect(() => { setPage(1); }, [q, status]);
 
   const share = async () => {
     if (!ov) return;
@@ -59,7 +58,7 @@ const TeacherReferrals: React.FC = () => {
     try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if ((e as Error).name === 'AbortError') return; }
     copy(ov.link, 'Link');
   };
-  const filtered = !!(q || status || type);
+  const filtered = !!(q || status);
 
   return (
     <div className="flex min-h-screen bg-page transition-colors">
@@ -67,8 +66,8 @@ const TeacherReferrals: React.FC = () => {
       <main className="flex-1 min-w-0 ml-0 lg:ml-[var(--sidebar-w,16rem)] pt-14 lg:pt-0">
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto" data-testid="teacher-referrals">
           <h1 className="font-heading font-bold text-2xl md:text-3xl text-text-primary">Mentor Referrals</h1>
-          <p className="text-text-secondary text-sm mt-1">Invite people to LearnIQ and track your referrals.</p>
-          <p className="text-text-muted text-xs mt-2 mb-5 max-w-2xl">Share your referral link to help people discover LearnIQ. Track registrations, approval status, and successful referrals in one place.</p>
+          <p className="text-text-secondary text-sm mt-1">Track the students who joined LearnIQ through your referral link.</p>
+          <p className="text-text-muted text-xs mt-2 mb-5 max-w-2xl">Share your referral link with students. View their registrations and track the referral status. This feature is for tracking only and does not provide exam credits or monetary rewards to mentors.</p>
 
           {ovError && <ErrorBox message={ovError} onRetry={loadOverview} />}
           <section aria-label="Your referral code" className="card-soft rounded-card border border-border-subtle p-4 sm:p-5 mb-5" data-testid="mentor-code-card">
@@ -76,53 +75,51 @@ const TeacherReferrals: React.FC = () => {
             <p className="font-mono text-xl tracking-widest text-text-primary mt-1 break-all" data-testid="mentor-code">{ov ? ov.code : '…'}</p>
             <p className="text-xs text-text-muted mt-3 break-all" data-testid="mentor-link">{ov ? ov.link : ''}</p>
             <div className="flex flex-wrap gap-2 mt-3">
-              <button disabled={!ov} onClick={() => ov && copy(ov.code, 'Code')} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface disabled:opacity-50" data-testid="copy-code"><Copy className="w-3.5 h-3.5" aria-hidden /> Copy Code</button>
-              <button disabled={!ov} onClick={() => ov && copy(ov.link, 'Link')} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface disabled:opacity-50" data-testid="copy-link"><Link2 className="w-3.5 h-3.5" aria-hidden /> Copy Link</button>
-              <button disabled={!ov} onClick={share} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-brand-primary text-white disabled:opacity-50" data-testid="share-link"><Share2 className="w-3.5 h-3.5" aria-hidden /> Share</button>
+              <button disabled={!ov} onClick={() => ov && copy(ov.code, 'Code')} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface disabled:opacity-50" data-testid="copy-code"><Copy className="w-3.5 h-3.5" aria-hidden /> Copy Referral Code</button>
+              <button disabled={!ov} onClick={() => ov && copy(ov.link, 'Link')} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface disabled:opacity-50" data-testid="copy-link"><Link2 className="w-3.5 h-3.5" aria-hidden /> Copy Referral Link</button>
+              <button disabled={!ov} onClick={share} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-brand-primary text-white disabled:opacity-50" data-testid="share-link"><Share2 className="w-3.5 h-3.5" aria-hidden /> Share Referral Link</button>
             </div>
           </section>
 
           <section aria-label="Summary" className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-3 mb-6">
-            <Stat id="total" icon={Users} label="Total referrals" value={ov ? ov.stats.totalReferrals : '—'} />
-            <Stat id="successful" icon={BadgeCheck} label="Successful" value={ov ? ov.stats.successful : '—'} />
-            <Stat id="pending" icon={Hourglass} label="Pending" value={ov ? ov.stats.pending : '—'} />
+            <Stat id="total" icon={Users} label="Total Student Referrals" value={ov ? ov.stats.totalReferrals : '—'} />
+            <Stat id="successful" icon={BadgeCheck} label="Successful Student Referrals" value={ov ? ov.stats.successful : '—'} />
+            <Stat id="pending" icon={Hourglass} label="Pending Student Referrals" value={ov ? ov.stats.pending : '—'} />
           </section>
 
-          <section aria-label="Referrals" data-testid="mentor-table">
+          <section aria-label="My Student Referrals" data-testid="mentor-table">
+            <h2 className="font-heading font-semibold text-lg text-text-primary mb-3">My Student Referrals</h2>
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <label className="relative flex-1"><span className="sr-only">Search by name</span>
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name" className={`${selectCls} pl-9`} data-testid="mentor-search" /></label>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by student name" className={`${selectCls} pl-9`} data-testid="mentor-search" /></label>
               <select aria-label="Status" value={status} onChange={e => setStatus(e.target.value)} className={`${selectCls} sm:w-40`} data-testid="mentor-status"><option value="">All statuses</option><option value="SUCCESSFUL">Successful</option><option value="PENDING">Pending</option></select>
-              <select aria-label="User type" value={type} onChange={e => setType(e.target.value)} className={`${selectCls} sm:w-40`} data-testid="mentor-type"><option value="">All types</option><option value="student">Student</option><option value="teacher">Teacher</option></select>
             </div>
             {error && <ErrorBox message={error} onRetry={loadRows} />}
             {loading ? (
               <div className="space-y-2" data-testid="mentor-skeleton" aria-busy="true" aria-label="Loading referrals">{[0, 1, 2, 3].map(i => <div key={i} className="h-12 rounded-xl bg-surface-alt animate-pulse" />)}</div>
             ) : !error && rows.length === 0 ? (
               <div className="text-center py-12 rounded-card border border-dashed border-border-subtle" data-testid="mentor-empty">
-                <p className="font-semibold text-text-primary text-sm">{filtered ? 'No referrals match your filters.' : 'No referrals yet.'}</p>
-                <p className="text-xs text-text-muted mt-1">{filtered ? 'Try clearing the search or filters.' : 'Share your link. People who register with it will show up here.'}</p>
+                <p className="font-semibold text-text-primary text-sm">{filtered ? 'No referrals match your filters.' : 'No students have registered through your referral link yet.'}</p>
+                {filtered ? <p className="text-xs text-text-muted mt-1">Try clearing the search or filters.</p> : <button disabled={!ov} onClick={() => ov && copy(ov.link, 'Link')} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border-subtle bg-surface disabled:opacity-50" data-testid="empty-copy-link"><Link2 className="w-3.5 h-3.5" aria-hidden /> Copy Referral Link</button>}
               </div>
             ) : !error && (
               <>
                 <div className="hidden md:block overflow-x-auto rounded-card border border-border-subtle">
                   <table className="w-full text-sm">
                     <thead className="bg-surface-alt text-left text-[11px] uppercase tracking-wide text-text-secondary"><tr>
-                      {['#', 'Referred Person', 'User Type', 'Standard/Class', 'Joined On', 'Status', 'Actions'].map(h => <th key={h} scope="col" className="px-3 py-2.5 font-semibold">{h}</th>)}
+                      {['#', 'Student Name', 'Standard/Class', 'Joined On', 'Status'].map(h => <th key={h} scope="col" className="px-3 py-2.5 font-semibold">{h}</th>)}
                     </tr></thead>
                     <tbody>{rows.map(r => (
                       <tr key={r.no} className="border-t border-border-subtle" data-testid="mentor-row">
-                        <td className="px-3 py-2.5">{r.no}</td><td className="px-3 py-2.5 font-medium text-text-primary">{r.name}</td><td className="px-3 py-2.5">{r.userType}</td>
-                        <td className="px-3 py-2.5">{std(r.standard)}</td><td className="px-3 py-2.5 whitespace-nowrap">{formatISTDate(r.registeredAt)}</td><td className="px-3 py-2.5"><Badge row={r} /></td>
-                        <td className="px-3 py-2.5 text-text-muted">—</td>
+                        <td className="px-3 py-2.5">{r.no}</td><td className="px-3 py-2.5 font-medium text-text-primary">{r.name}</td>                        <td className="px-3 py-2.5">{std(r.standard)}</td><td className="px-3 py-2.5 whitespace-nowrap">{formatISTDate(r.registeredAt)}</td><td className="px-3 py-2.5"><Badge row={r} /></td>
                       </tr>))}</tbody>
                   </table>
                 </div>
                 <ul className="md:hidden space-y-2" data-testid="mentor-cards">{rows.map(r => (
                   <li key={r.no} className="rounded-xl border border-border-subtle bg-surface p-3" data-testid="mentor-card">
                     <div className="flex items-start justify-between gap-2"><p className="font-semibold text-text-primary text-sm">#{r.no} · {r.name}</p><Badge row={r} /></div>
-                    <p className="text-xs text-text-secondary mt-1">{r.userType}{r.userType === 'Student' ? ` · ${std(r.standard)}` : ''} · Joined {formatISTDate(r.registeredAt)}</p>
+                    <p className="text-xs text-text-secondary mt-1">{std(r.standard)} · Joined {formatISTDate(r.registeredAt)}</p>
                   </li>))}</ul>
                 <Pager page={page} limit={LIMIT} total={total} onPage={setPage} />
               </>

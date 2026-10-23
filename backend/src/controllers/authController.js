@@ -124,10 +124,10 @@ const register = async (req, res) => {
       throw createError;
     }
 
-    // Mentor referral TRACKING (a separate program from the student referral above; it only records who referred whom and never rewards anyone).
+    // Mentor referral TRACKING (students only; a separate program from the student referral above; it only records who referred whom and never rewards anyone).
     // A wrong / expired link never blocks a registration. Failures are logged inside and never affect the account.
     const mentorInput = typeof mentorRef === 'string' ? mentorRef.trim() : '';
-    if (mentorInput) await mentorReferrals.attributeRegistration({ newUser: user, code: mentorInput, source: 'LINK' });
+    if (mentorInput && !isTeacher) await mentorReferrals.attributeRegistration({ newUser: user, code: mentorInput, source: 'LINK' });
 
     if (isTeacher) {
       // Deliberately NO session and NO token: the account exists only as a request until an administrator approves it.
