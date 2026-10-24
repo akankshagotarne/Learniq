@@ -1,3 +1,5 @@
+// PUBLIC DEMO CONTENT: generic classroom practice quizzes for LOCAL DEVELOPMENT only (this script refuses NODE_ENV=production).
+// Not examination material; reviewed 2026-10-24. Real exam papers and answer keys must never be added here.
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');

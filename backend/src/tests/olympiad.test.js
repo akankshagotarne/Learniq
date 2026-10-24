@@ -82,7 +82,8 @@ const M = USE_REAL
 
 const ctrl = require('../controllers/olympiadController');
 const router = require('../routes/olympiad');
-const paper = require('../data/olympiad10Questions');
+const { REAL_BANK, loadBank } = require('./helpers/bank');   // synthetic fixtures unless a real private bank folder is supplied
+const paper = loadBank('olympiad10Questions');
 
 // ── test helpers ──────────────────────────────────────────────────────
 let server; let BASE;
@@ -222,7 +223,10 @@ test('question paper: exactly 60 questions, 60 marks, valid options and key', ()
   assert.deepEqual(bySection, {
     Mathematics: 15, Science: 15, English: 10, 'Social Science / Reasoning': 10, 'Achievers / HOTS': 10,
   });
-  // spot-check a few answers that can be verified by hand
+});
+
+test('question paper (real private bank only): hand-verified answers of the Standard 10 paper', { skip: !REAL_BANK }, () => {
+  const qs = paper.questions;
   const key = (n) => qs[n - 1].options[qs[n - 1].correctAnswer];
   assert.equal(key(1), '2, 3');
   assert.equal(key(2), '47');
@@ -1024,7 +1028,7 @@ test('auto-seed creates the Std 1-10 exams on an empty database and each student
 test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
   onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
   for (const std of [4, 5, 6, 7, 8]) {
-    const paper = require(`../data/olympiad${std}Questions`);
+    const paper = loadBank(`olympiad${std}Questions`);
     assert.equal(paper.questions.length, 60, `std ${std}`);
     assert.equal(paper.questions.reduce((s, q) => s + q.marks, 0), 60);
     paper.questions.forEach((q, i) => {
@@ -1037,12 +1041,14 @@ test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a ful
     assert.deepEqual(paper.sections.map((x) => x.count), [15, 15, 10, 10, 10]);
   }
   // spot checks of the hand-verified corrections
-  assert.equal(require('../data/olympiad6Questions').questions[0].questionText, 'What is the value of 3⁴?');
-  assert.equal(require('../data/olympiad5Questions').questions[59].correctAnswer, 1); // 5×8−7 = 33
-  assert.equal(require('../data/olympiad4Questions').questions[11].options[0], '₹62.50');
+  if (REAL_BANK) { // wording / answers of the real papers (private bank only)
+    assert.equal(loadBank('olympiad6Questions').questions[0].questionText, 'What is the value of 3⁴?');
+    assert.equal(loadBank('olympiad5Questions').questions[59].correctAnswer, 1); // 5×8−7 = 33
+    assert.equal(loadBank('olympiad4Questions').questions[11].options[0], '₹62.50');
+  }
 
   // full attempt on the Std 7 exam: 30 correct, 10 wrong, 20 blank
-  const paper7 = require('../data/olympiad7Questions');
+  const paper7 = loadBank('olympiad7Questions');
   const exam7 = await M.OlympiadExam.findOne({ slug: 'learniq-all-india-olympiad-2026-std-7' });
   const student = await mkUser({ standard: 7 });
   await M.OlympiadPayment.create({
@@ -1066,7 +1072,7 @@ test('Std 4-8 papers: 60 questions each, key intact, no unreadable glyphs, a ful
 test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
   onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
   for (const std of [1, 2, 3]) {
-    const paper = require(`../data/olympiad${std}Questions`);
+    const paper = loadBank(`olympiad${std}Questions`);
     assert.equal(paper.questions.length, 40, `std ${std}`);
     assert.equal(paper.questions.reduce((s, q) => s + q.marks, 0), 40);
     assert.deepEqual(paper.sections.map((x) => x.count), [10, 10, 10, 5, 5]);
@@ -1081,11 +1087,13 @@ test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full a
       assert.ok(!/^\d+\)/.test(q.questionText), `std ${std} Q${q.questionNumber} has a stray question marker`);
     });
   }
-  assert.equal(require('../data/olympiad1Questions').questions[0].explanation, '4 wheels per car x 2');
-  assert.equal(require('../data/olympiad2Questions').questions[23].correctAnswer, 1);
+  if (REAL_BANK) { // wording / answers of the real papers (private bank only)
+    assert.equal(loadBank('olympiad1Questions').questions[0].explanation, '4 wheels per car x 2');
+    assert.equal(loadBank('olympiad2Questions').questions[23].correctAnswer, 1);
+  }
 
   // full attempt on the Std 2 exam: 25 correct, 5 wrong, 10 blank; the review shows the paper's explanation
-  const paper2 = require('../data/olympiad2Questions');
+  const paper2 = loadBank('olympiad2Questions');
   const exam2 = await M.OlympiadExam.findOne({ slug: 'learniq-all-india-olympiad-2026-std-2' });
   assert.equal(exam2.totalQuestions, 40);
   const student = await mkUser({ standard: 2 });
@@ -1110,13 +1118,13 @@ test('Std 1-3 papers: 40 questions each, key intact, explanations kept, a full a
   const rv = await api('GET', `/exams/${exam2._id}/review`, { token: student.token });
   assert.equal(rv.status, 200, rv.text);
   assert.equal(rv.body.review.length, 40);
-  const withExpl = rv.body.review.find((r) => r.explanation === '45 + 32 = 77');
+  const withExpl = rv.body.review.find((r) => r.explanation === (REAL_BANK ? '45 + 32 = 77' : 'Synthetic explanation 2-5'));
   assert.ok(withExpl, 'the paper\'s explanation is shown in the review');
 });
 
 test('Std 9 paper: 60 questions, key intact, a full attempt scores correctly', { skip: USE_REAL }, async (t) => {
   onExamDay(t); // the seeded exams are open on 17 Oct 2026 (IST) only
-  const paper9 = require('../data/olympiad9Questions');
+  const paper9 = loadBank('olympiad9Questions');
   assert.equal(paper9.questions.length, 60);
   assert.equal(paper9.questions.reduce((s, q) => s + q.marks, 0), 60);
   paper9.questions.forEach((q, i) => {

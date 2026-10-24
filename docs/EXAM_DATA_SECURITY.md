@@ -19,11 +19,33 @@ explicitly (`.select('+correctAnswer')`). Student-facing endpoints never return 
 3. The admin screen "Import question papers" reads `OLYMPIAD_PAPER_DIR` on the server; if it is not set, that button reports
    "paper source not configured" and changes nothing.
 
+## Standard-exam banks (Std 1-10 Olympiad papers and the BE Engineering mock test)
+These banks used to be bundled in `backend/src/data/` and were loaded by the start-up auto-seed, the admin "seed" action and the
+engineering service. They are now read from a **private folder on the server**, named by `OLYMPIAD_BANK_DIR`:
+
+    <OLYMPIAD_BANK_DIR>/olympiad1Questions.js ... olympiad10Questions.js     (same module shape as before: { sections, questions })
+    <OLYMPIAD_BANK_DIR>/engineeringQuestions.js
+    <OLYMPIAD_BANK_DIR>/engineeringKey.txt      (optional: an independent answer key, only used by the private test run)
+
+Behaviour when the variable is NOT set (nothing is bundled as a fallback):
+- exams, attempts, results and certificates already in the database are untouched and keep working;
+- start-up logs one warning and skips the auto-seed; the admin "seed" action answers 503 `BANK_NOT_CONFIGURED`;
+- a brand-new, empty database cannot create these exams until the folder is configured.
+
+**Before deploying this change** the owner must (1) copy the 11 files from the previous commit (`git show b21d56a:<path>`; they
+remain in history) into a private folder on the Render server or its persistent disk, (2) set `OLYMPIAD_BANK_DIR` in Render, and
+(3) restart. Production data is not migrated or modified by this change.
+
+Tests use **synthetic fixture banks** (`backend/src/tests/fixtures/banks/`, clearly marked `SYNTHETIC TEST FIXTURE`) so scoring, sections,
+seeding and answer-leak checks run in CI. Tests that check the real printed wording/answers run only when a real private folder is
+supplied (`OLYMPIAD_BANK_DIR=<private folder> node --test src/tests/olympiad.test.js ...`).
+
 ## What the repository checks
-`scripts/check-no-confidential-data.js` (run in CI) fails if a paper directory, `stdN.json`, `.env`, private key, keystore, dump or any
-file shaped like a question bank with answer keys is tracked. A short list of **older banks that were already public** is
-allow-listed by exact path (`backend/src/data/olympiad1..10Questions.js`, `engineeringQuestions.js`, `seed/seedData.js` demo data).
-They are used by seed scripts and were NOT removed automatically - see "Owner decisions" in the remediation report.
+`scripts/check-no-confidential-data.js` (run in CI) fails if a paper directory, `stdN.json`, an exam document (`*paper*.pdf`, ...),
+`.env`, private key, keystore, dump or any file shaped like a question bank with answer keys is tracked. There is **no path allowlist**.
+A file with answer-shaped data passes only with an explicit in-file declaration in its first 600 characters - `SYNTHETIC TEST FIXTURE`
+(test fixture folders only) or `PUBLIC DEMO CONTENT` (`backend/src/seed/` only) - and the guard lists every such file in its output.
+`backend/src/seed/seedData.js` (generic classroom demo quizzes for a local dev database; refuses production) is the only declared demo file.
 
 ## Already exposed
 The Oct-24 files were public from 2026-10-21 and remain in Git history; deleting them from the current tree cannot undo that.

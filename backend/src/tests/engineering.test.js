@@ -40,7 +40,8 @@ Module._load = function patched(request, parent, isMain) {
 };
 
 const svc = require('../services/engineering');
-const QUESTIONS = require('../data/engineeringQuestions');
+const { REAL_BANK, loadBank, engineeringKey } = require('./helpers/bank');
+const QUESTIONS = loadBank('engineeringQuestions');
 const results = require('../services/engineeringResults');
 const pdfSvc = require('../services/engineeringPdf');
 const { STANDARD_OTHERS } = require('../constants/standards');
@@ -55,8 +56,8 @@ let server; let base;
 test.before(async () => { await new Promise((r) => { server = http.createServer(app).listen(0, r); }); base = `http://127.0.0.1:${server.address().port}/api`; });
 test.after(async () => { await new Promise((r) => server.close(r)); Module._load = originalLoad; });
 
-// ── the PDF's printed answer key (page 7 of LearnIQ_BE_Students_MCQ_Test_Paper.pdf), questions 1..40, written out independently ──
-const PDF_KEY = 'BBCBACACDB' + 'CADBCCBCBA' + 'CCDBBABABB' + 'BBCABCBBBC';
+// ── independent answer key, questions 1..40: generated for the synthetic fixture, or supplied privately next to the real bank (never in the repository) ──
+const PDF_KEY = engineeringKey();
 const SECTION_SIZES = { 'Programming Languages (Java, Python, C++)': 10, 'Operating Systems': 5, 'Database Management Systems (DBMS)': 5, 'Logical Reasoning and Aptitude': 5, 'Object-Oriented Programming (OOP)': 5, 'Data Structures and Algorithms (Theory)': 10 };
 const LOGO_SHA256 = '5e385abc632d6d0fa95c08ff534b2bb19403504a73f502b6b38845f842c61e9d'; // the supplied logo, byte for byte
 
@@ -143,10 +144,11 @@ test('1. exactly 40 questions are seeded, each with 4 options and ONE valid corr
   });
   const sizes = {}; qs.forEach((q) => { sizes[q.subject] = (sizes[q.subject] || 0) + 1; });
   assert.deepEqual(sizes, SECTION_SIZES);
-  // spot-check text taken from the paper (not placeholders)
-  assert.match(qs[0].questionText, /method overloading/);
-  assert.equal(qs[0].options[1], 'It allows methods with the same name but different parameter lists');
-  assert.match(qs[39].questionText, /stable sorting/);
+  if (REAL_BANK) { // text taken from the real paper (private bank only)
+    assert.match(qs[0].questionText, /method overloading/);
+    assert.equal(qs[0].options[1], 'It allows methods with the same name but different parameter lists');
+    assert.match(qs[39].questionText, /stable sorting/);
+  }
 });
 
 test('2. configuration: title, category, Others, 40 marks, 45 min, free, no negative marking, deadline 14 Oct 2026 6 PM IST', async () => {

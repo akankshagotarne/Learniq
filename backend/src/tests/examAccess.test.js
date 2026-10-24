@@ -50,7 +50,7 @@ Module._load = function patched(request, parent, isMain) {
 };
 test.after(() => { Module._load = originalLoad; });
 
-const paper = require('../data/olympiad10Questions');
+const paper = require('./helpers/bank').loadBank('olympiad10Questions');
 let server; let BASE; let seq = 0;
 const S = {};
 const call = async (method, url, { token, body } = {}) => {

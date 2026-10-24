@@ -1418,6 +1418,9 @@ const adminSeedExam = handler(async (req, res) => {
     if (errors.every((e) => /refusing to modify/i.test(e.err.message))) {
       throw new ApiError(409, 'Students have already attempted these exams, so their questions cannot be changed.', 'HAS_ATTEMPTS');
     }
+    if (errors[0].err && errors[0].err.code === 'BANK_NOT_CONFIGURED') {
+      throw new ApiError(503, 'The exam content source is not configured on the server (OLYMPIAD_BANK_DIR).', 'BANK_NOT_CONFIGURED');
+    }
     throw errors[0].err;
   }
   res.json({

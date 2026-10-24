@@ -78,3 +78,75 @@ test('no confidential data is tracked by Git (question banks with answer keys, k
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'check-no-confidential-data.js')], { cwd: ROOT, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr || r.stdout);
 });
+
+// ───────────────────────── question-bank protection ─────────────────────────
+const guardRun = (files) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-'));
+  try {
+    for (const [rel, body] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), body); }
+    return spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'check-no-confidential-data.js')],
+      { encoding: 'utf8', env: { ...process.env, CONFIDENTIAL_GUARD_ROOT: dir, CONFIDENTIAL_GUARD_FILES: Object.keys(files).join('\n') } });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
+const bankText = (head = '') => `${head}\nmodule.exports = [\n${Array.from({ length: 12 }, (_, i) => `  { q: 'x${i}', options: ['a','b','c','d'], correctAnswer: ${i % 4} },`).join('\n')}\n];\n`;
+
+test('guard: an answer-key bank is rejected anywhere - including test, seed and data folders - unless it carries a valid declaration', () => {
+  for (const where of ['backend/src/data/bank.js', 'backend/src/tests/bank.js', 'backend/src/seed/bank.js', 'frontend/e2e/bank.ts', 'docs/bank.md']) {
+    const r = guardRun({ [where]: bankText() });
+    assert.equal(r.status, 1, `${where} must be rejected`); assert.match(r.stderr, /question bank with answer keys/);
+  }
+  // other spellings of the key are caught too
+  const alt = `module.exports = [\n${Array.from({ length: 10 }, (_, i) => `{ options: ['a','b'], correctOption: ${i % 2} },`).join('\n')}\n];`;
+  assert.equal(guardRun({ 'backend/src/data/alt.js': alt }).status, 1);
+});
+
+test('guard: a declaration is honoured only in the matching folder, and is listed in the output', () => {
+  assert.equal(guardRun({ 'backend/src/tests/fixtures/banks/a.js': bankText('// SYNTHETIC TEST FIXTURE - invented') }).status, 0);
+  assert.equal(guardRun({ 'backend/src/data/a.js': bankText('// SYNTHETIC TEST FIXTURE - invented') }).status, 1, 'a fixture declaration does not work in a data folder');
+  assert.equal(guardRun({ 'backend/src/seed/a.js': bankText('// PUBLIC DEMO CONTENT: demo') }).status, 0);
+  assert.equal(guardRun({ 'backend/src/data/a.js': bankText('// PUBLIC DEMO CONTENT: demo') }).status, 1, 'a demo declaration does not work in a data folder');
+  const ok = guardRun({ 'backend/src/seed/a.js': bankText('// PUBLIC DEMO CONTENT: demo') });
+  assert.match(ok.stdout, /backend\/src\/seed\/a\.js \(declared public demo content\)/);
+});
+
+test('guard: exam documents, per-standard papers, keys and env files are rejected', () => {
+  for (const f of ['docs/Olympiad_Paper_Std5.pdf', 'docs/BE_MCQ_Test_Paper.docx', 'exports/exam_questions.xlsx', 'backend/src/data/oct24/std1.json', 'backend/.env', 'mobile/release.keystore']) {
+    assert.equal(guardRun({ [f]: 'x' }).status, 1, `${f} must be rejected`);
+  }
+  assert.equal(guardRun({ 'backend/.env.example': 'A=1', 'docs/README.md': '# hi' }).status, 0);
+});
+
+test('private bank loader: no folder -> refuses (no bundled fallback); unknown names and path tricks are rejected', () => {
+  const saved = process.env.OLYMPIAD_BANK_DIR;
+  try {
+    delete process.env.OLYMPIAD_BANK_DIR;
+    const { loadBank, isBankConfigured } = require('../services/privateBank');
+    assert.equal(isBankConfigured(), false);
+    assert.throws(() => loadBank('olympiad4Questions'), (e) => e.code === 'BANK_NOT_CONFIGURED');
+    process.env.OLYMPIAD_BANK_DIR = os.tmpdir();
+    for (const bad of ['../../etc/passwd', 'olympiad11Questions', 'olympiad4Questions.js', '', undefined]) assert.throws(() => loadBank(bad), /Unknown question bank/);
+    assert.throws(() => loadBank('olympiad4Questions'), (e) => e.code === 'BANK_NOT_CONFIGURED', 'missing file in the folder is reported, not a crash');
+  } finally { if (saved === undefined) delete process.env.OLYMPIAD_BANK_DIR; else process.env.OLYMPIAD_BANK_DIR = saved; }
+});
+
+test('auto-seed without a private bank folder changes nothing and reports why (start-up stays safe)', async () => {
+  const saved = process.env.OLYMPIAD_BANK_DIR;
+  try {
+    delete process.env.OLYMPIAD_BANK_DIR;
+    const seedAll = require('../seed/seedOlympiadAll');
+    const r = await seedAll({ ifMissing: true });
+    assert.deepEqual(r.exams, []); assert.equal(r.errors.length, 1); assert.equal(r.errors[0].err.code, 'BANK_NOT_CONFIGURED');
+  } finally { if (saved === undefined) delete process.env.OLYMPIAD_BANK_DIR; else process.env.OLYMPIAD_BANK_DIR = saved; }
+});
+
+test('synthetic fixture banks mirror the structure of the real papers and are clearly marked', () => {
+  const dir = path.join(__dirname, 'fixtures', 'banks');
+  for (let std = 1; std <= 10; std++) {
+    const f = path.join(dir, `olympiad${std}Questions.js`);
+    assert.match(fs.readFileSync(f, 'utf8').slice(0, 300), /SYNTHETIC TEST FIXTURE/);
+    const { sections, questions } = require(f);
+    assert.equal(questions.length, std <= 3 ? 40 : 60);
+    assert.equal(sections.reduce((s, x) => s + x.count, 0), questions.length);
+    assert.ok(questions.every((q) => q.options.length === 4 && q.correctAnswer >= 0 && q.correctAnswer < 4 && /^Synthetic /.test(q.questionText)));
+  }
+});
