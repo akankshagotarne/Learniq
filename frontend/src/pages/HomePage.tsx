@@ -12,7 +12,7 @@ import { getCourseThumbnail } from '../utils/courseImage';
 import { COURSES_ENABLED } from '../constants/features';
 
 /** Public download link of the Android app (a GitHub release asset, so the big file never lives in the website repo). */
-const ANDROID_APP_URL = 'https://github.com/akankshagotarne/Learniq/releases/download/android-app-v13/LearnIQ.apk';
+const ANDROID_APP_URL = 'https://github.com/akankshagotarne/Learniq/releases/download/android-app-arm64/LearnIQ-arm64.apk';
 
 function AndroidLogo({ className }: { className?: string }) {
   return (
@@ -135,7 +135,7 @@ const HomePage: React.FC = () => {
                 </Link>
                 <a
                   href={ANDROID_APP_URL}
-                  download="LearnIQ.apk"
+                  download="LearnIQ-arm64.apk"
                   data-testid="cta-download-app"
                   className="btn-secondary rounded-full px-8 py-4 min-h-[48px] text-base font-semibold border-[#3DDC84] text-[#1B7F4B] dark:text-[#3DDC84] flex items-center justify-center gap-2 w-full sm:w-auto"
                 >
