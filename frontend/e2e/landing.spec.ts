@@ -20,6 +20,7 @@ for (const s of SIZES) {
     await expect(page.getByTestId('cta-get-started')).toHaveAttribute('href', '/register');
     await expect(page.getByTestId('cta-log-in')).toHaveAttribute('href', '/login');
     await expect(page.getByTestId('cta-sign-up')).toHaveAttribute('href', '/register');
+    await expect(page.getByTestId('cta-download-app')).toHaveAttribute('href', /releases\/download\/.*\.apk$/);
     const box = await page.getByTestId('cta-get-started').boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
     // visible without scrolling on a phone as well

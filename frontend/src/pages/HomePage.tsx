@@ -11,6 +11,18 @@ import { Course, LiveSession } from '../types';
 import { getCourseThumbnail } from '../utils/courseImage';
 import { COURSES_ENABLED } from '../constants/features';
 
+/** Public download link of the Android app (a GitHub release asset, so the big file never lives in the website repo). */
+const ANDROID_APP_URL = 'https://github.com/akankshagotarne/Learniq/releases/download/android-app-v13/LearnIQ.apk';
+
+function AndroidLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="#3DDC84" aria-hidden="true">
+      <path d="M17.6 9.5a5.6 5.6 0 0 0-11.2 0h11.2ZM8.9 7.3a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4Zm6.2 0a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4ZM6.4 10.3v6.4c0 .6.5 1.1 1.1 1.1h.9v2.4a1.2 1.2 0 0 0 2.4 0v-2.4h2.4v2.4a1.2 1.2 0 0 0 2.4 0v-2.4h.9c.6 0 1.1-.5 1.1-1.1v-6.4H6.4ZM4.1 10.3a1.2 1.2 0 0 0-1.2 1.2v4.5a1.2 1.2 0 0 0 2.4 0v-4.5a1.2 1.2 0 0 0-1.2-1.2Zm15.8 0a1.2 1.2 0 0 0-1.2 1.2v4.5a1.2 1.2 0 0 0 2.4 0v-4.5a1.2 1.2 0 0 0-1.2-1.2Z" />
+      <path d="m7.7 4.6 1 1.6M16.3 4.6l-1 1.6" stroke="#3DDC84" strokeWidth="0.9" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
   if (s.includes('math')) return 'badge-subject-math';
@@ -121,7 +133,17 @@ const HomePage: React.FC = () => {
                 >
                   Sign Up
                 </Link>
+                <a
+                  href={ANDROID_APP_URL}
+                  download="LearnIQ.apk"
+                  data-testid="cta-download-app"
+                  className="btn-secondary rounded-full px-8 py-4 min-h-[48px] text-base font-semibold border-[#3DDC84] text-[#1B7F4B] dark:text-[#3DDC84] flex items-center justify-center gap-2 w-full sm:w-auto"
+                >
+                  <AndroidLogo className="w-5 h-5" />
+                  <span>Download App</span>
+                </a>
               </div>
+              <p className="text-xs text-[#6B6E8C] dark:text-[#A6A8C4] -mt-1">Android app (APK). After downloading, open the file to install it.</p>
 
               {/* Section 6.6 Stats row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 border-t border-[#E7E7F2] dark:border-[#2E2F4A]/60">
