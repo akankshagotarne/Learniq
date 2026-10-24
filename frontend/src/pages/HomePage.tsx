@@ -12,7 +12,7 @@ import { getCourseThumbnail } from '../utils/courseImage';
 import { COURSES_ENABLED } from '../constants/features';
 
 /** Public download link of the Android app (a GitHub release asset, so the big file never lives in the website repo). */
-const ANDROID_APP_URL = 'https://github.com/akankshagotarne/Learniq/releases/download/android-app-arm64/LearnIQ-arm64.apk';
+const ANDROID_APP_URL = 'https://github.com/akankshagotarne/Learniq/releases/download/android-app-v13/LearnIQ-arm64.apk';
 
 function AndroidLogo({ className }: { className?: string }) {
   return (
