@@ -1,22 +1,18 @@
 /**
- * Policy for passwords that are SUPPLIED by an operator (creating or replacing an administrator): long enough, and not a known placeholder /
- * default. Pure function; never logs or returns the password itself.
+ * ONE password rule for registration and password reset (the frontend shows the same rule: frontend/src/constants/passwordPolicy.ts).
+ * Simple on purpose for school students and parents: at least 8 characters, any characters allowed (passphrases and punctuation are fine).
+ * It is only a *shape* check - passwords are always hashed with bcrypt before they are stored, and existing passwords are never touched.
  */
-const MIN_LENGTH = 12;
-const WEAK = [
-  /^(your[_-]|change[_-]?me|replace[_-]|example[_-]?|placeholder)/i,
-  /(password|passwd|changeme|change_me|admin@?123|qwerty|letmein|welcome|learniq@?123)/i,
-  /^(.)\1+$/,                        // the same character repeated
-  /^(0123456789|1234567890|abcdefgh)/i,
-];
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128; // bcrypt only uses the first 72 bytes; this also stops absurdly large request bodies
+const PASSWORD_HELP = `Create a password with at least ${PASSWORD_MIN_LENGTH} characters.`;
 
-/** @returns {string[]} human-readable problems (empty = acceptable) */
-const assessPassword = (pw) => {
-  const problems = [];
-  if (typeof pw !== 'string' || pw.length < MIN_LENGTH) problems.push(`must be at least ${MIN_LENGTH} characters`);
-  if (typeof pw === 'string' && WEAK.some((r) => r.test(pw))) problems.push('looks like a placeholder or well-known default');
-  if (typeof pw === 'string' && pw.length >= MIN_LENGTH && new Set(pw).size < 6) problems.push('uses too few different characters');
-  return problems;
+/** @returns {string|null} a user-facing problem, or null when the password is acceptable */
+const passwordProblem = (password) => {
+  if (typeof password !== 'string' || !password) return 'Please enter a password.';
+  if (password.length < PASSWORD_MIN_LENGTH) return PASSWORD_HELP;
+  if (password.length > PASSWORD_MAX_LENGTH) return `Please use a password with at most ${PASSWORD_MAX_LENGTH} characters.`;
+  return null;
 };
 
-module.exports = { assessPassword, MIN_LENGTH };
+module.exports = { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_HELP, passwordProblem };

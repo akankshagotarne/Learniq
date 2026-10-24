@@ -22,7 +22,7 @@
  */
 const path = require('path');
 
-const { assessPassword } = require('../services/passwordPolicy');
+const { assessPassword } = require('../services/adminPasswordPolicy');
 const MIN_PASSWORD = 8;
 const MIN_PASSWORD_REPLACE = 12;
 

@@ -17,7 +17,7 @@ const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..', '..');
 
 test('password policy refuses short, placeholder and repetitive admin passwords, accepts a strong one', () => {
-  const { assessPassword } = require('../services/passwordPolicy');
+  const { assessPassword } = require('../services/adminPasswordPolicy');
   for (const bad of ['short', 'your_admin_password', 'changeme-please-12', 'aaaaaaaaaaaaaa', 'MyPassword123456', 'Welcome12345678', undefined, null, 12345678901234])
     assert.ok(assessPassword(bad).length > 0, `should refuse ${String(bad).replace(/./g, '*')}`);
   assert.deepEqual(assessPassword('t7!Rk-Qm2#vLx9$Pw'), []);

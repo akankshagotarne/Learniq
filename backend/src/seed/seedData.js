@@ -89,7 +89,7 @@ async function seedDatabase() {
     // They are validated BEFORE any data is cleared so a missing value can never leave you with a wiped, admin-less database.
     const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD || '';
-    const pwProblems = require('../services/passwordPolicy').assessPassword(adminPassword);
+    const pwProblems = require('../services/adminPasswordPolicy').assessPassword(adminPassword);
     if (!adminEmail || pwProblems.length) {
       console.error(`❌ Set ADMIN_EMAIL and a strong ADMIN_PASSWORD in backend/.env before seeding (${pwProblems.join('; ') || 'ADMIN_EMAIL missing'}). Nothing was changed.`);
       process.exit(1);
