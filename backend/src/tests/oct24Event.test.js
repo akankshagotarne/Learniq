@@ -10,6 +10,14 @@ const path = require('path');
 const Module = require('module');
 const express = require('express');
 
+// The question papers are confidential and live OUTSIDE the repository (see docs/EXAM_DATA_SECURITY.md). These tests exercise the real papers, so they
+// run only where OLYMPIAD_PAPER_DIR points at them (a developer machine); everywhere else (CI) they are skipped and securityHardening.test.js covers the importer.
+const fsPapers = require('fs');
+if (!process.env.OLYMPIAD_PAPER_DIR || !fsPapers.existsSync(path.join(process.env.OLYMPIAD_PAPER_DIR, 'std1.json'))) {
+  test('Oct-24 paper import tests need the private papers (set OLYMPIAD_PAPER_DIR)', { skip: 'private question papers not available in this environment' }, () => {});
+  return;
+}
+
 Object.assign(process.env, { JWT_SECRET: 'test-jwt-secret-value-for-refer-and-earn-0123456789', NODE_ENV: 'test', CLIENT_URL: 'https://learniq.example.com', RAZORPAY_KEY_ID: 'rzp_test_abc123', RAZORPAY_KEY_SECRET: 'test_key_secret' });
 
 const SRC = path.join(__dirname, '..');
@@ -507,7 +515,7 @@ test('U: the 24 Oct event published normally; nothing else was published and the
 
 // ───────────────────────── Marathi answer options (Std 1-3): every option bilingual, answers and order untouched ─────────────────────────
 const DEV = /[ऀ-ॿ]/; const fsx = require('fs'); const pathx = require('path');
-const paperFile = (n) => JSON.parse(fsx.readFileSync(pathx.join(__dirname, '..', 'data', 'oct24', `std${n}.json`), 'utf8'));
+const paperFile = (n) => JSON.parse(fsx.readFileSync(pathx.join(process.env.OLYMPIAD_PAPER_DIR, `std${n}.json`), 'utf8'));
 const optLang = require('../services/optionLanguage');
 const ensurePaid = async (stu, exam) => { const o = await order(stu, exam, 'EXAM'); if (o.status === 200) await payFor(stu, exam, 'EXAM'); else assert.equal(o.body.code, 'ALREADY_PAID', o.text); };
 

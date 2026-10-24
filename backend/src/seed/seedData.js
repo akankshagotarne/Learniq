@@ -89,8 +89,9 @@ async function seedDatabase() {
     // They are validated BEFORE any data is cleared so a missing value can never leave you with a wiped, admin-less database.
     const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD || '';
-    if (!adminEmail || adminPassword.length < 12) {
-      console.error('❌ Set ADMIN_EMAIL and ADMIN_PASSWORD (at least 12 characters) in backend/.env before seeding. Nothing was changed.');
+    const pwProblems = require('../services/passwordPolicy').assessPassword(adminPassword);
+    if (!adminEmail || pwProblems.length) {
+      console.error(`❌ Set ADMIN_EMAIL and a strong ADMIN_PASSWORD in backend/.env before seeding (${pwProblems.join('; ') || 'ADMIN_EMAIL missing'}). Nothing was changed.`);
       process.exit(1);
     }
     // Demo teacher/student accounts: use SEED_DEMO_PASSWORD from backend/.env, otherwise a random password

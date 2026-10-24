@@ -22,6 +22,7 @@
  */
 const path = require('path');
 
+const { assessPassword } = require('../services/passwordPolicy');
 const MIN_PASSWORD = 8;
 const MIN_PASSWORD_REPLACE = 12;
 
@@ -51,15 +52,18 @@ const diagnose = async ({ User, identity, email, input, log }) => {
 };
 
 /** Explicit, narrow password replacement for an EXISTING administrator. */
-const replacePassword = async ({ User, email, input, log }) => {
+const replacePassword = async ({ User, email, input, log, endSessions }) => {
   if (!email) return { status: 'INVALID', reason: 'NEW_ADMIN_EMAIL is missing.' };
-  if (typeof input.password !== 'string' || input.password.length < MIN_PASSWORD_REPLACE) return { status: 'INVALID', reason: `NEW_ADMIN_PASSWORD must be at least ${MIN_PASSWORD_REPLACE} characters.` };
+  const weak = assessPassword(input.password);
+  if (weak.length) return { status: 'INVALID', reason: `NEW_ADMIN_PASSWORD ${weak.join(' and ')}.` };
   const u = await User.findOne({ email });
   if (!u) { log('NOT FOUND: no account with this e-mail in this database. Nothing was changed.'); return { status: 'NOT_FOUND' }; }
   if (u.role !== 'admin') { log('REFUSED: that account is not an administrator. Nothing was changed.'); return { status: 'CONFLICT', reason: 'not an administrator' }; }
   u.password = input.password; // hashed by the User model's pre-save hook
   await u.save();
-  log(`PASSWORD REPLACED for ${email}. No other field was changed.`);
+  let ended = 0;
+  if (typeof endSessions === 'function') { await endSessions(u._id, 'password_reset'); ended = 1; } // a replaced password must also end every session that was opened with the old one
+  log(`PASSWORD REPLACED for ${email}. No other field was changed${ended ? '; all existing sign-in sessions of this account were ended' : ''}.`);
   return { status: 'PASSWORD_REPLACED', id: String(u._id) };
 };
 
@@ -67,14 +71,15 @@ const replacePassword = async ({ User, email, input, log }) => {
  * @param {{ User: any, identity: any, input: {email,phone,password,name}, apply?: boolean, log?: Function }} deps
  * @returns {Promise<{ status: 'CREATED'|'WOULD_CREATE'|'ALREADY_EXISTS'|'CONFLICT'|'INVALID', reason?: string, id?: string }>}
  */
-const run = async ({ User, identity, input, apply = false, check = false, setPassword = false, log = console.log }) => {
+const run = async ({ User, identity, input, apply = false, check = false, setPassword = false, log = console.log, endSessions }) => {
   const email = identity.normalizeEmail(input.email);
   if (check) return diagnose({ User, identity, email, input, log });
-  if (setPassword) return replacePassword({ User, email, input, log });
+  if (setPassword) return replacePassword({ User, email, input, log, endSessions });
   const phone = identity.normalizePhone(input.phone);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { status: 'INVALID', reason: 'NEW_ADMIN_EMAIL is missing or not a valid e-mail address.' };
   if (!phone.valid) return { status: 'INVALID', reason: 'NEW_ADMIN_PHONE is missing or not a valid phone number.' };
   if (typeof input.password !== 'string' || input.password.length < MIN_PASSWORD) return { status: 'INVALID', reason: `NEW_ADMIN_PASSWORD must be at least ${MIN_PASSWORD} characters.` };
+  if (assessPassword(input.password).some((p) => /placeholder|default/.test(p))) return { status: 'INVALID', reason: 'NEW_ADMIN_PASSWORD looks like a placeholder or well-known default.' };
 
   const byEmail = await User.findOne({ email });
   const byPhone = (await identity.findPhoneCandidates(User, phone.e164)).filter((u) => !byEmail || String(u._id) !== String(byEmail._id));
@@ -121,7 +126,7 @@ async function main() {
   try {
     console.log(`Database: ${mongoose.connection.name}  -  ${apply ? 'APPLY' : setPassword ? 'SET PASSWORD' : check ? 'CHECK (read-only)' : 'DRY RUN (nothing is written)'}`);
     const r = await run({
-      User, identity, apply, check, setPassword,
+      User, identity, apply, check, setPassword, endSessions: require('../services/authSessions').endAllSessions,
       input: { email: process.env.NEW_ADMIN_EMAIL, phone: process.env.NEW_ADMIN_PHONE, password: process.env.NEW_ADMIN_PASSWORD, name: process.env.NEW_ADMIN_NAME },
     });
     if (r.status === 'INVALID') { console.error(`Invalid input: ${r.reason}`); code = 1; }

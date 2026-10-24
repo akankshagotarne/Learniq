@@ -32,6 +32,7 @@ const locks = new Set(); // one import per event at a time inside this process; 
 
 /** Reads and validates one standard's paper file. Returns { paper, problems } - problems make the standard un-importable. */
 const loadPaper = (standard, dir = cfg.DATA_DIR) => {
+  if (!dir) return { paper: null, problems: ['The paper source folder is not configured: set OLYMPIAD_PAPER_DIR (a private folder outside the repository, see docs/EXAM_DATA_SECURITY.md).'] };
   const file = path.join(dir, `std${standard}.json`);
   if (!fs.existsSync(file)) return { paper: null, problems: [`Paper file std${standard}.json is missing.`] };
   let paper;
