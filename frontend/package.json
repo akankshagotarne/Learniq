@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "test:e2e:media": "playwright test -c playwright.media.config.ts",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
-    "test:unit": "node --experimental-strip-types --test tests-unit/*.test.ts"
+    "test:unit": "node --experimental-strip-types --test tests-unit/*.test.ts",
+    "test:headers": "node scripts/verify-security-headers.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
