@@ -16,9 +16,23 @@ const DEMO_VIDEOS = [
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
 ];
 
+const { assessPassword } = require('../services/adminPasswordPolicy');
+
+/**
+ * Demo-teacher password for LOCAL seeding. There is no built-in default: it must be supplied in SEED_TEACHER_PASSWORD, must pass the
+ * operator password policy, and the script refuses to run at all when NODE_ENV=production.
+ */
+const resolveTeacherPassword = (env = process.env) => {
+  if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo teachers: NODE_ENV=production.');
+  const problems = assessPassword(env.SEED_TEACHER_PASSWORD);
+  if (problems.length) throw new Error(`Set SEED_TEACHER_PASSWORD to a strong password for the demo teachers (${problems.join('; ')}).`);
+  return env.SEED_TEACHER_PASSWORD;
+};
+
 async function seedSyllabusCourses() {
   try {
     console.log('Connecting to database...');
+    const teacherPassword = resolveTeacherPassword(); // fails fast, before any database connection
     await connectDB();
 
     console.log(`Upserting ${TEACHERS_SPEC.length} Subject Teachers...`);
@@ -26,7 +40,6 @@ async function seedSyllabusCourses() {
     // model's pre('save') hook already hashes `password` whenever it's
     // set/modified - hashing it here too would double-hash it and lock
     // everyone out with "Invalid email or password."
-    const DEFAULT_TEACHER_PASSWORD = 'teacher123';
     const teacherMap = {};
 
     for (const tSpec of TEACHERS_SPEC) {
@@ -35,7 +48,7 @@ async function seedSyllabusCourses() {
         teacher = await User.create({
           name: tSpec.name,
           email: tSpec.email,
-          password: DEFAULT_TEACHER_PASSWORD,
+          password: teacherPassword,
           role: 'teacher',
           avatar: tSpec.avatar,
           qualification: tSpec.qualification,
@@ -56,9 +69,7 @@ async function seedSyllabusCourses() {
         teacher.standards = tSpec.standards;
         teacher.isApproved = true;
         teacher.isActive = true;
-        // Re-set (and thus re-hash, correctly this time) the password for
-        // any teacher account created by the earlier double-hashing bug.
-        teacher.password = DEFAULT_TEACHER_PASSWORD;
+        // An existing account's password is never changed by this script.
         await teacher.save();
       }
       teacherMap[tSpec.name] = teacher;
@@ -149,3 +160,4 @@ if (require.main === module) {
 }
 
 module.exports = seedSyllabusCourses;
+module.exports.resolveTeacherPassword = resolveTeacherPassword;

@@ -150,3 +150,28 @@ test('synthetic fixture banks mirror the structure of the real papers and are cl
     assert.ok(questions.every((q) => q.options.length === 4 && q.correctAnswer >= 0 && q.correctAnswer < 4 && /^Synthetic /.test(q.questionText)));
   }
 });
+
+// ───────────────────────── no built-in default passwords ─────────────────────────
+test('demo-teacher seeding has no built-in password: needs a strong SEED_TEACHER_PASSWORD and refuses production', () => {
+  const { resolveTeacherPassword } = require('../seed/seedSyllabusCourses');
+  const strong = 't7!Rk-Qm2#vLx9$Pw';
+  assert.equal(resolveTeacherPassword({ SEED_TEACHER_PASSWORD: strong }), strong);
+  assert.throws(() => resolveTeacherPassword({}), /SEED_TEACHER_PASSWORD/);
+  assert.throws(() => resolveTeacherPassword({ SEED_TEACHER_PASSWORD: 'teacher123' }), /SEED_TEACHER_PASSWORD/);
+  assert.throws(() => resolveTeacherPassword({ SEED_TEACHER_PASSWORD: strong, NODE_ENV: 'production' }), /NODE_ENV=production/);
+});
+
+test('source code (outside tests) contains no well-known default password literals', () => {
+  const WEAK = /['"`](teacher123|student123|admin123|Admin@123\w*|password123|changeme\w*|learniq@?123)['"`]/i;
+  const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', 'tests', 'dist', 'e2e', 'tests-unit'].includes(e.name)) continue;
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) walk(f, out); else if (/\.(js|ts|tsx|json|md)$/.test(e.name)) out.push(f);
+    }
+    return out;
+  };
+  const hits = [...walk(path.join(ROOT, 'backend', 'src')), ...walk(path.join(ROOT, 'frontend', 'src'))]
+    .filter((f) => WEAK.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(ROOT, f));
+  assert.deepEqual(hits, []);
+});
