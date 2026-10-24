@@ -4,6 +4,7 @@
  * and that payments already made keep the amount that was charged.
  */
 const test = require('node:test');
+require('./helpers/bank'); // question banks come from the private folder in production; tests use the synthetic fixture banks
 const assert = require('node:assert/strict');
 const path = require('path');
 const Module = require('module');

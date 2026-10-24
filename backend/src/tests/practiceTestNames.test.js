@@ -1,5 +1,6 @@
 /** Standard-specific exam names ("LearnIQ Practice Test – 4th Standard") - seed config + idempotent sync of existing exams (title only). */
 const test = require('node:test');
+require('./helpers/bank'); // question banks come from the private folder in production; tests use the synthetic fixture banks
 const assert = require('node:assert/strict');
 const { createFakeDb } = require('./helpers/fakeDb');
 const fake = createFakeDb();
