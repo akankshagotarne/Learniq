@@ -1,0 +1,50 @@
+{
+  "description": "Backend tests that ALREADY fail on main (commit 31c1475) with the same Node 22 / UTC / no-frontend-node_modules environment CI uses. Reproduced on both main and the PR branch; none was introduced by the security remediation. The CI gate (backend/scripts/ci-regression-gate.js) fails on ANY failing test that is not listed here, so a new regression still turns CI red. Remove an entry as soon as its test is fixed.",
+  "recordedAt": "2026-10-25",
+  "baselineCommit": "31c1475",
+  "known": [
+    {
+      "name": "10. Frontend: field names match the API, All Standards is offered, and failed loads clear stale rows"
+    },
+    {
+      "name": "12. non-admins (student, teacher) and anonymous callers cannot use ANY admin endpoint"
+    },
+    {
+      "name": "13. no hard-coded 2-second / 0.3 / 0.25 limits remain in the proctoring flow"
+    },
+    {
+      "name": "2. configuration: title, category, Others, 40 marks, 45 min, free, no negative marking, deadline 14 Oct 2026 6 PM IST"
+    },
+    {
+      "name": "26. the admin changes the deadline: validated, audited, effective at once for everyone, running attempts follow it"
+    },
+    {
+      "name": "28. proctoring is ON for this exam; answers need a proctoring session; consent + camera/face + full-screen precheck are enforced"
+    },
+    {
+      "name": "35. report PDF: valid A4 PDF, correct filename, logo embedded, summary + rows from the stored data, admin only"
+    },
+    {
+      "name": "5. a student who selected \"Others\" sees the exam, FREE, with state \"request\"; a Std 9 student is not eligible"
+    },
+    {
+      "name": "F — before the official release nothing is available and every endpoint is blocked"
+    },
+    {
+      "name": "a later date is not called \"tomorrow\"; a past date is not a promise"
+    },
+    {
+      "name": "auto-seed creates the Std 1-10 exams on an empty database and each student sees only their own"
+    },
+    {
+      "name": "next-day schedule: exact congratulation text from the spec"
+    },
+    {
+      "name": "the signature stays hidden and the unique-success index does NOT cover UNCONFIRMED (a real payment can still be recorded)"
+    },
+    {
+      "name": "page: an ACCOUNT problem at the speech provider (no credit / quota / bad key) stops the interview with the real reason; a one-off failed turn does not",
+      "note": "Only runs when frontend/node_modules is installed next to the backend (skipped in CI). Fails on main too: the test looks for PROVIDER_ACCOUNT_ERRORS in frontend/src/pages/student/AIInterviewPage.tsx, which does not define it."
+    }
+  ]
+}

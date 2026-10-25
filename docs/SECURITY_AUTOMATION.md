@@ -28,3 +28,10 @@ another origin being able to frame the app. Run it with:
 
 It is not part of CI (needs a browser). The deployed policy is **Report-Only** on purpose: Razorpay checkout, WebRTC/TURN relays, the real API origin
 and WebSockets cannot be exercised from this sandbox, so promote it to enforcing (rename the header) only after a day of clean reports in production.
+
+## Backend test gate (regression gate)
+CI runs `node scripts/ci-regression-gate.js` in `backend/` instead of a bare `node --test`. It runs **every** backend test (none skipped, output kept) and
+compares the failures with `backend/tests-known-failures.json`: failures that **already exist on `main`** (verified on commit `31c1475` with the same
+Node 22 / UTC environment, before the security remediation; mostly tests tied to dates in October 2026 and to the real question banks that are no longer
+in the repository). Any failing test that is *not* in that list turns CI red, so a new regression is still caught; a listed test that starts passing is
+reported so the entry can be removed. This is a stop-gap: the listed tests should be fixed or removed, then the list emptied.
