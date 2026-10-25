@@ -26,7 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
-      - run: node --test src/tests/*.test.js
+      # Runs every test (nothing skipped). Fails on any failing test that is NOT in tests-known-failures.json (failures that already exist on main).
+      - run: node scripts/ci-regression-gate.js
   frontend:
     name: Frontend unit tests and build
     runs-on: ubuntu-latest
