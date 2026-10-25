@@ -14,8 +14,8 @@
     "test:headers": "node scripts/verify-security-headers.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
-    "autoprefixer": "^10.5.5",
+    "@playwright/test": "1.64.1",
+    "autoprefixer": "^10.6.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.2",
@@ -23,19 +23,19 @@
   },
   "dependencies": {
     "@heygen/liveavatar-web-sdk": "^0.0.19",
-    "@mediapipe/tasks-vision": "1.0.1",
-    "@types/node": "^26.5.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@mediapipe/tasks-vision": "1.1.1",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "axios": "^1.20.0",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.43.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^7.18.3",
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-hot-toast": "^2.6.1",
+    "react-router-dom": "^7.18.4",
     "recharts": "^3.10.1",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.4"
   }
 }
