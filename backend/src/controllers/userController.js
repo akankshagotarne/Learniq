@@ -65,10 +65,19 @@ const getStudents = async (req, res) => {
 const getStudentDetail = async (req, res) => {
   try {
     const student = await User.findById(req.params.id).select('-password');
-    if (!student) return res.status(404).json({ success: false, message: 'Student not found.' });
+    if (!student || student.role !== 'student') {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
 
-    const enrollments = await Enrollment.find({ student: student._id })
+    // A teacher may only open students enrolled in one of THEIR courses (same rule as the student list).
+    // 404, not 403, so ids of other people cannot be probed.
+    const ownCourseIds = (await Course.find({ teacher: req.user._id }).select('_id')).map((c) => c._id);
+    const scope = req.user.role === 'admin' ? {} : { course: { $in: ownCourseIds } };
+    const enrollments = await Enrollment.find({ student: student._id, ...scope })
       .populate('course', 'title subject standard thumbnail');
+    if (req.user.role !== 'admin' && enrollments.length === 0) {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
 
     const quizAttempts = await QuizAttempt.find({ student: student._id })
       .populate('quiz', 'title subject standard totalMarks')

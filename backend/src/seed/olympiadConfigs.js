@@ -12,7 +12,7 @@ const { examTitleFor, slugFor } = require('./olympiadTitles');
 const STANDARDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const configFor = (standard) => {
-  const data = require(`../data/olympiad${standard}Questions`);
+  const data = require('../services/privateBank').loadBank(`olympiad${standard}Questions`);
   const subjects = data.sections.map((s) => s.name).join(', ');
   return {
     slug: slugFor(standard),

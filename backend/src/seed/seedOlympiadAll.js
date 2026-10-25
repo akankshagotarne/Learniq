@@ -13,6 +13,12 @@ async function seedOlympiadAll({ standalone = false, ifMissing = false } = {}) {
   if (standalone) await connectDB();
   const exams = [];
   const errors = [];
+  if (!require('../services/privateBank').isBankConfigured()) {
+    // No private content source: nothing can be created or repaired. Existing exams, attempts and results are untouched.
+    const err = new (require('../services/privateBank').BankNotConfiguredError)('the Olympiad papers');
+    console.warn(`⚠️  Olympiad auto-seed skipped: ${err.message}`);
+    return { exams, errors: [{ label: 'all standards', err }] };
+  }
   for (const standard of [...STANDARDS].reverse()) {
     const label = `Standard ${standard}`;
     try {

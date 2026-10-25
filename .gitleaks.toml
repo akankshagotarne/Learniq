@@ -1,0 +1,13 @@
+title = "LearnIQ gitleaks configuration"
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake keys used by tests and placeholder examples"
+paths = [
+  '''backend/src/tests/''',
+  '''frontend/e2e/''',
+  '''frontend/tests-unit/''',
+  '''backend/\.env\.example''',
+  '''frontend/\.env\.example''',
+]

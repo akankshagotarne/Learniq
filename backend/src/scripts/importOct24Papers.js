@@ -3,6 +3,7 @@
  *
  *   node src/scripts/importOct24Papers.js                    # dry run (default): prints what WOULD change, writes nothing
  *   node src/scripts/importOct24Papers.js --apply            # imports + applies the agreed event settings (fees, deadline, interview, results)
+ *   node src/scripts/importOct24Papers.js --dir <private folder>   # where std1.json..std10.json are (or set OLYMPIAD_PAPER_DIR); never inside the repository
  *   node src/scripts/importOct24Papers.js --event <id>       # pick the event when more than one qualifies
  *   node src/scripts/importOct24Papers.js --standards 1,2,3  # limit to some standards
  *   node src/scripts/importOct24Papers.js --apply --durations  # also take the exam durations printed in the PDFs (Std 6/7 = 120, Std 8 = 60)
@@ -20,6 +21,7 @@ const paper = require('../services/paperImport');
 const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 
 (async () => {
+  if (arg('--dir')) process.env.OLYMPIAD_PAPER_DIR = path.resolve(arg('--dir'));
   const apply = process.argv.includes('--apply');
   await connectDB();
   let eventId = arg('--event');

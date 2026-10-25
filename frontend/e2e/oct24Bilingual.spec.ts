@@ -45,13 +45,17 @@ for (const vp of [{ width: 1280, height: 800 }, { width: 360, height: 740 }]) {
 
 // Marathi answer options: the REAL paper data (Std 1 Q16-19 and Std 3 Q20 / Q37, the longest labels) rendered in the exam page - every option carries Marathi,
 // the labels wrap inside the card, selecting an option works and nothing reveals an answer.
-const paper = (n: number) => JSON.parse(fs.readFileSync(path.join(process.cwd(), '..', 'backend', 'src', 'data', 'oct24', `std${n}.json`), 'utf8'));
+// The Oct-24 papers are confidential and no longer live in the repository: point OLYMPIAD_PAPER_DIR at the private folder to run this test.
+const PAPER_DIR = String(process.env.OLYMPIAD_PAPER_DIR || '').trim();
+const HAS_PAPERS = !!PAPER_DIR && fs.existsSync(path.join(PAPER_DIR, 'std1.json'));
+const paper = (n: number) => JSON.parse(fs.readFileSync(path.join(PAPER_DIR, `std${n}.json`), 'utf8'));
 const real = (n: number, nums: number[]) => paper(n).questions.filter((q: any) => nums.includes(q.n)).map((q: any, i: number) => ({
   _id: `r${n}-${q.n}`, questionNumber: q.n, subject: paper(n).sections[q.section].name, section: paper(n).sections[q.section].name, sectionMr: paper(n).sections[q.section].nameMr,
   questionText: q.text, questionTextMr: q.textMr, visual: q.visual || undefined, options: q.options, marks: q.marks, _i: i }));
 
 for (const vp of [{ width: 1280, height: 800 }, { width: 360, height: 740 }]) {
   test(`every answer option shows English + Marathi (${vp.width}px)`, async ({ page }) => {
+    test.skip(!HAS_PAPERS, 'needs the private Oct-24 papers (OLYMPIAD_PAPER_DIR)');
     await page.setViewportSize(vp);
     const qs = [...real(1, [16, 17, 18, 19]), ...real(3, [20, 37])];
     await mockApi(page, 'student', (method, path) => {

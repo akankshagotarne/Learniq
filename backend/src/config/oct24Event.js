@@ -8,7 +8,9 @@ const at = (s) => new Date(`${s}+05:30`);
 module.exports = {
   PAPER_SET: 'oct24-2026',
   EVENT_DAY: '2026-10-24',                       // IST calendar day of the event; the import refuses any other event
-  DATA_DIR: require('path').join(__dirname, '..', 'data', 'oct24'),
+  // The question papers (WITH answer keys) are confidential: they live OUTSIDE this public repository. Point OLYMPIAD_PAPER_DIR (or the
+  // importer's --dir option) at the private folder that holds std1.json ... std10.json. null = not configured -> the import refuses to run.
+  get DATA_DIR() { return String(process.env.OLYMPIAD_PAPER_DIR || '').trim() || null; },
   FEES: { exam: 15, interview: 15 },             // whole rupees: exam and interview are always separate components
   // Registration is a separate gate from exam access: it closes at 8:00 PM IST, while the exam window (9:00 AM - 9:00 PM) stays as configured.
   registrationClosesAt: at('2026-10-24T20:00:00'),

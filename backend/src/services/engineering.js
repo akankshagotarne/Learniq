@@ -6,7 +6,8 @@ const mongoose = require('mongoose');
 const { OlympiadExam, OlympiadQuestion, OlympiadAttempt } = require('../models/Olympiad');
 const { EngineeringRequest, EngineeringAudit } = require('../models/Engineering');
 const { STANDARD_OTHERS } = require('../constants/standards');
-const QUESTIONS = require('../data/engineeringQuestions');
+const { loadBank, isBankConfigured } = require('./privateBank');
+const questions = () => loadBank('engineeringQuestions'); // confidential: read from the private folder (OLYMPIAD_BANK_DIR), never bundled
 
 const EXAM_SLUG = 'learniq-be-engineering-mock-test-2026';
 const EXAM_TITLE = 'LearnIQ BE Engineering Mock Test 2026';
@@ -78,7 +79,7 @@ const readinessProblems = (exam, questions) => {
 // ── idempotent seed ─────────────────────────────────────────────────────────────────────────────────
 const examFields = () => {
   const counts = new Map();
-  QUESTIONS.forEach((q) => counts.set(q.section, (counts.get(q.section) || 0) + 1));
+  questions().forEach((q) => counts.set(q.section, (counts.get(q.section) || 0) + 1));
   return {
     title: EXAM_TITLE,
     slug: EXAM_SLUG,
@@ -117,6 +118,8 @@ const isDuplicateKey = (e) => e && (e.code === 11000 || e.code === 11001);
 const ensureEngineeringExam = async () => {
   let exam = await OlympiadExam.findOne({ slug: EXAM_SLUG });
   let created = false;
+  // Without the private content source an existing exam is simply left as it is (nothing to add, nothing to overwrite).
+  if (exam && !isBankConfigured()) return { exam, created: false, questionsAdded: 0 };
   if (!exam) {
     try { exam = await OlympiadExam.create({ ...examFields(), isPublished: false }); created = true; } catch (e) {
       if (!isDuplicateKey(e)) throw e;
@@ -125,7 +128,7 @@ const ensureEngineeringExam = async () => {
   }
   const have = new Set((await OlympiadQuestion.find({ exam: exam._id }).select('questionNumber')).map((q) => q.questionNumber));
   let added = 0;
-  for (const q of QUESTIONS) {
+  for (const q of questions()) {
     if (have.has(q.n)) continue;
     try {
       await OlympiadQuestion.create({ exam: exam._id, questionNumber: q.n, subject: q.section, questionText: q.text, options: q.options, correctAnswer: q.answer, marks: 1 });
