@@ -198,9 +198,17 @@ const plan = async (eventId, { standards } = {}) => {
   const eventInfo = { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null };
   const folder = inspectFolder(cfg);
   if (folder.state !== 'ok') {
+    // What is already in the database for this event (the papers may have been imported from the administrator's computer).
+    const have = await events.examsOfEvent(event._id);
+    const imported = [];
+    for (const std of list) {
+      const ex = have.find((e) => e.standard === std);
+      const done = !!(ex && ex.paperImport && ex.paperImport.set === cfg.PAPER_SET);
+      imported.push({ standard: std, imported: done, questions: ex ? await OlympiadQuestion.countDocuments({ exam: ex._id }) : 0, expected: cfg.expectedQuestions[std], durationMinutes: ex ? ex.durationMinutes : null });
+    }
     // ONE global message instead of the same problem repeated for every standard; nothing was read, nothing is ready.
     return { dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET, settings: [], rows: [], summary: summarize([]), blocking: [{ standard: null, problems: [folder.message] }], canApply: false,
-      storage: { state: folder.state, message: folder.message, hint: folder.hint, standards: [] } };
+      storage: { state: folder.state, message: folder.message, hint: folder.hint, standards: [], imported } };
   }
   const exams = await events.examsOfEvent(event._id);
   const rows = [];

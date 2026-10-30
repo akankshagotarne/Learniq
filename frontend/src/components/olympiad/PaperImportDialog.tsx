@@ -22,6 +22,19 @@ const STAGE: Record<string, { label: string; cls: string }> = {
 const StorageStatus: React.FC<{ storage: NonNullable<PaperImportReport['storage']>; applied: boolean; canApply: boolean }> = ({ storage, applied, canApply }) => {
   const st = applied ? { label: 'Import completed', cls: 'bg-emerald-50 text-emerald-800 border-emerald-300' } : storage.state === 'valid' && canApply ? { label: 'Import ready', cls: 'bg-emerald-50 text-emerald-800 border-emerald-300' } : STAGE[storage.state];
   const bad = storage.state !== 'valid';
+  const imp = storage.imported || [];
+  const all = imp.length > 0 && imp.every(x => x.imported && x.questions === x.expected);
+  if (bad && all) {
+    const total = imp.reduce((n, x) => n + x.questions, 0);
+    return (
+      <div className="rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 p-3" role="status" data-testid="paper-already-imported">
+        <p className="font-semibold">Question papers are already imported</p>
+        <p className="text-xs mt-0.5">All {imp.length} standards are in this event&apos;s exams ({total} questions). Nothing needs to be imported here.</p>
+        <ul className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-0.5 text-xs">{imp.map(x => <li key={x.standard} className="whitespace-nowrap">Std {x.standard}: ✓ {x.questions}/{x.expected} · {x.durationMinutes} min</li>)}</ul>
+        <details className="text-xs mt-2"><summary className="cursor-pointer">Re-importing from this screen</summary><p className="mt-1">This screen can only re-read papers from a private server folder, which is not set up ({storage.message.toLowerCase()}) To update the papers, run the import script from the administrator&apos;s computer. Open Manage Exams to check the questions.</p></details>
+      </div>
+    );
+  }
   return (
     <div className={`rounded-xl border p-3 ${st.cls}`} role={bad ? 'alert' : 'status'} data-testid="paper-storage-status">
       <p className="font-semibold">{st.label}</p>

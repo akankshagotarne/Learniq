@@ -118,6 +118,8 @@ test('storage: not configured -> a single global state, no per-standard rows, ap
     assert.equal(r.canApply, false);
     assert.equal(r.blocking.length, 1);
     assert.ok(!JSON.stringify(r).includes(base), 'no folder path leaks to the client');
+    assert.equal(r.storage.imported.length, 10);
+    assert.ok(r.storage.imported.every((x) => x.imported && x.questions === x.expected), 'the dialog can show what is already imported');
     await assert.rejects(() => paperImport.apply(event._id, admin), (e) => e.code === 'PAPER_STORAGE_UNAVAILABLE');
   } finally { process.env.OLYMPIAD_PAPER_DIR = saved; }
 });

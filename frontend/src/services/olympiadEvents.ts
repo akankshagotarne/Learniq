@@ -29,6 +29,7 @@ export interface PaperImportReport {
   blocking: { standard: number | null; problems: string[] }[]; canApply: boolean; note?: string;
   /** state of the private paper storage on the server (never contains a path) */
   storage?: { state: 'not-configured' | 'folder-missing' | 'unreadable' | 'files-missing' | 'invalid' | 'valid'; message: string; hint: string;
+    imported?: { standard: number; imported: boolean; questions: number; expected: number; durationMinutes: number | null }[];
     standards: { standard: number; file: string; status: 'ok' | 'missing' | 'invalid'; questions: number; expected: number; problems: string[] }[] };
   /** server-side completeness check of every paper of the event (what publishing enforces) */
   readiness?: { ready: boolean; standards: { standard: number; ok: boolean; count: number; issues: { question: number | null; issue: string }[] }[] };
