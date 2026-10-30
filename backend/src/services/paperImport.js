@@ -29,6 +29,22 @@ const oid = (v) => String(v && v._id ? v._id : v);
 const sameInstant = (a, b) => (a ? new Date(a).getTime() : null) === (b ? new Date(b).getTime() : null);
 const PUBLIC_ROOT = path.join(__dirname, '..', '..', '..', 'frontend', 'public');
 
+const MAX_PAPER_BYTES = 40 * 1024 * 1024; // one standard's file (diagrams are embedded); far above the real ~0.1-0.4 MB
+
+/**
+ * Looks at the private paper folder WITHOUT reading any question: is it configured, does it exist, can the server read it.
+ * Returns { state, message, hint } where state is 'not-configured' | 'folder-missing' | 'unreadable' | 'ok'.
+ * The folder path itself is never returned (it is an environment value).
+ */
+const inspectFolder = (cfg = defaultCfg) => {
+  const dir = cfg.DATA_DIR;
+  if (!dir) return { state: 'not-configured', message: 'Question paper storage is not configured on the server.', hint: 'Set OLYMPIAD_PAPER_DIR to a private folder on the server that contains the paper files (see docs/EXAM_DATA_SECURITY.md), or run the import script from the administrator\'s computer.' };
+  let st = null; try { st = fs.statSync(dir); } catch (e) { st = null; }
+  if (!st || !st.isDirectory()) return { state: 'folder-missing', message: 'The configured question paper folder does not exist on the server.', hint: `OLYMPIAD_PAPER_DIR is set, but the folder (and its "${path.basename(dir)}" sub-folder, if used) was not found. Render's free plan has no persistent disk, so files placed on the server are lost at every restart.` };
+  try { fs.accessSync(dir, fs.constants.R_OK); } catch (e) { return { state: 'unreadable', message: 'The question paper folder exists but the server may not read it.', hint: 'Check the folder permissions for the user the backend runs as.' }; }
+  return { state: 'ok', message: '', hint: '' };
+};
+
 const locks = new Set(); // one import per event at a time inside this process; the unique indexes guard across processes
 
 /** Reads and validates one standard's paper file. Returns { paper, problems } - problems make the standard un-importable. */
@@ -105,7 +121,7 @@ const loadTarget = async (eventId) => {
 /** The Olympiad events that may receive this import (for the admin's selector). */
 const candidates = async () => {
   const all = await OlympiadEvent.find({});
-  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && paperSets.byDay(ymdIST(e.examDate))).map((e) => ({ _id: oid(e), name: e.name, state: e.state, paperSet: e.paperSet || null }));
+  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && paperSets.byDay(ymdIST(e.examDate))).map((e) => ({ _id: oid(e), name: e.name, state: e.state, day: ymdIST(e.examDate), paperSet: e.paperSet || null }));
 };
 
 const settingsDiff = (event, cfg) => {
@@ -128,6 +144,10 @@ const imageState = (image) => {
 const planStandard = async (event, standard, exam, cfg) => {
   const { paper, problems, warnings } = loadPaper(standard, undefined, cfg);
   const out = { completions: paper ? (paper.completions || []) : [], warnings: warnings || [], standard, source: paper && paper.source, found: paper ? (paper.questions || []).length : 0, expected: cfg.expectedQuestions[standard], examId: exam ? oid(exam) : null, examExists: !!exam, problems, review: [], inserted: 0, updated: 0, unchanged: 0, removed: 0, duplicatesAvoided: 0, imagesAssociated: 0, imageFiles: [], locked: false, lockedReason: null, durationInPdf: paper ? paper.durationMinutes : null, durationNow: exam ? exam.durationMinutes : null, sourceIssues: paper ? paper.sourceIssues || [] : [] };
+  const target = cfg.durations ? cfg.durations[standard] : null;
+  out.durationTarget = target || null;
+  out.durationUpdate = !!(exam && target && exam.durationMinutes !== target);
+  if (paper && target && paper.durationMinutes && paper.durationMinutes !== target) out.warnings.push({ question: 0, issue: `The paper file says ${paper.durationMinutes} minutes; the configured duration is ${target}.` });
   if (!paper || problems.length) return { out, paper: null };
   out.review = reviewOf(standard, paper, cfg);
   const attempts = exam ? await OlympiadAttempt.countDocuments({ exam: exam._id }) : 0;
@@ -158,8 +178,11 @@ const summarize = (rows) => ({
   found: rows.reduce((s, r) => s + r.found, 0), inserted: rows.reduce((s, r) => s + r.inserted, 0), updated: rows.reduce((s, r) => s + r.updated, 0),
   unchanged: rows.reduce((s, r) => s + r.unchanged, 0), duplicatesAvoided: rows.reduce((s, r) => s + r.duplicatesAvoided, 0),
   manualReview: rows.reduce((s, r) => s + r.review.length, 0), sourceWarnings: rows.reduce((s, r) => s + (r.warnings || []).length, 0), completed: rows.reduce((s, r) => s + (r.completions || []).length, 0), imagesAssociated: rows.reduce((s, r) => s + r.imagesAssociated, 0),
-  examsToCreate: rows.filter((r) => !r.examExists).length, locked: rows.filter((r) => r.locked).length,
+  examsToCreate: rows.filter((r) => !r.examExists).length, durationUpdates: rows.filter((r) => r.durationUpdate).length, locked: rows.filter((r) => r.locked).length,
 });
+
+/** The duration plan shown by the dry run: one line per standard. */
+const durationPlan = (rows) => rows.map((r) => ({ standard: r.standard, examId: r.examId, currentMinutes: r.durationNow, targetMinutes: r.durationTarget, updateRequired: !!r.durationUpdate }));
 
 const parseStandards = (raw) => {
   if (raw === undefined || raw === null || raw === 'all') return events.STANDARDS;
@@ -172,13 +195,25 @@ const parseStandards = (raw) => {
 const plan = async (eventId, { standards } = {}) => {
   const { event, cfg } = await loadTarget(eventId);
   const list = parseStandards(standards);
+  const eventInfo = { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null };
+  const folder = inspectFolder(cfg);
+  if (folder.state !== 'ok') {
+    // ONE global message instead of the same problem repeated for every standard; nothing was read, nothing is ready.
+    return { dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET, settings: [], rows: [], summary: summarize([]), blocking: [{ standard: null, problems: [folder.message] }], canApply: false,
+      storage: { state: folder.state, message: folder.message, hint: folder.hint, standards: [] } };
+  }
   const exams = await events.examsOfEvent(event._id);
   const rows = [];
   for (const std of list) rows.push((await planStandard(event, std, exams.find((e) => e.standard === std), cfg)).out);
   const blocking = rows.filter((r) => r.problems.length).map((r) => ({ standard: r.standard, problems: r.problems }));
+  const fileStatus = (r) => (!r.problems.length ? 'ok' : r.problems.some((x) => /is missing\.$/.test(x) && /^Paper file/.test(x)) ? 'missing' : 'invalid');
+  const perStandard = rows.map((r) => ({ standard: r.standard, file: `std${r.standard}.json`, status: fileStatus(r), questions: r.found, expected: r.expected, problems: r.problems }));
+  const state = perStandard.every((x) => x.status === 'ok') ? (rows.some((r) => r.review.length) ? 'invalid' : 'valid') : perStandard.some((x) => x.status === 'invalid') ? 'invalid' : 'files-missing';
+  const messages = { valid: 'All papers were read and passed the checks.', 'files-missing': 'The folder is configured, but some paper files are missing.', invalid: 'Paper files were found, but some are invalid or incomplete.' };
   return {
-    dryRun: true, event: { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null }, paperSet: cfg.PAPER_SET,
-    settings: settingsDiff(event, cfg), rows, summary: summarize(rows), blocking, canApply: blocking.length === 0,
+    dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET,
+    settings: settingsDiff(event, cfg), rows, summary: summarize(rows), durations: durationPlan(rows), blocking, canApply: blocking.length === 0,
+    storage: { state, message: messages[state], hint: '', standards: perStandard },
   };
 };
 
@@ -192,7 +227,7 @@ const audit = async (admin, exam, field, previous, next, note) => {
 const createExam = async (event, std, paper, cfg) => OlympiadExam.create({
   event: event._id, title: `${event.name} – ${ordinal(std)} Standard`, slug: `${event.slug}-std-${std}`, examType: 'olympiad', standard: std,
   accessMode: 'payment', accessEnabled: true, hardClose: false, instructions: events.DEFAULT_INSTRUCTIONS,
-  startDate: cfg.examWindow.start, endDate: cfg.examWindow.end, durationMinutes: paper.durationMinutes || 60,
+  startDate: cfg.examWindow.start, endDate: cfg.examWindow.end, durationMinutes: (cfg.durations && cfg.durations[std]) || paper.durationMinutes || 60,
   fee: cfg.FEES.exam + cfg.FEES.interview, currency: 'INR', isPublished: event.state === 'published',
 });
 
@@ -217,6 +252,8 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
   locks.add(key);
   try {
     const { event, cfg } = await loadTarget(eventId);
+    const folder = inspectFolder(cfg);
+    if (folder.state !== 'ok') throw new EventError(422, folder.message, 'PAPER_STORAGE_UNAVAILABLE', { storage: { state: folder.state } });
     if (cfg.APPLY_EVENT_SETTINGS === false) applySettings = false;
     const list = parseStandards(standards);
     const exams = await events.examsOfEvent(event._id);
@@ -251,10 +288,12 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
           description: paper.title,
           paperImport: { set: cfg.PAPER_SET, source: paper.source, importedAt: now, questionCount: paper.questions.length, review: row.review, completions: paper.completions || [] },
         });
-        if (applyDurations && paper.durationMinutes && paper.durationMinutes !== exam.durationMinutes) set.durationMinutes = paper.durationMinutes;
+        if (cfg.durations && cfg.durations[std]) { if (cfg.durations[std] !== exam.durationMinutes) { set.durationMinutes = cfg.durations[std]; row.durationChanged = true; } }
+        else if (applyDurations && paper.durationMinutes && paper.durationMinutes !== exam.durationMinutes) set.durationMinutes = paper.durationMinutes;
       }
       if (applySettings && !exam.resultsPublishedAt) Object.assign(set, { resultsPublishAt: cfg.resultsPublishAt, resultsScheduleSeeded: true });
       await OlympiadExam.updateOne({ _id: exam._id }, { $set: set });
+      if (set.durationMinutes) { row.durationNow = set.durationMinutes; row.durationUpdate = false; }
       await audit(admin, exam, 'paperImport', null, { set: cfg.PAPER_SET, ...counts, review: row.review.length, locked: row.locked }, row.lockedReason);
     }
 
@@ -268,7 +307,7 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
     const readiness = await readinessOf(event._id);
     return {
       dryRun: false, event: { _id: oid(fresh), name: fresh.name, state: fresh.state, paperSet: fresh.paperSet }, paperSet: cfg.PAPER_SET,
-      settings: settingsDiff(fresh, cfg), rows, summary: summarize(rows), blocking: [], canApply: true,
+      settings: settingsDiff(fresh, cfg), rows, summary: summarize(rows), durations: durationPlan(rows), blocking: [], canApply: true,
       needsReview: rows.filter((r) => r.review.length).map((r) => ({ standard: r.standard, review: r.review })),
       readiness,
       note: 'The event stays in its current state; publishing is a separate step and is blocked while a paper has unresolved review items.',
@@ -292,4 +331,4 @@ const unresolvedReview = async (eventId) => {
     .map((e) => ({ standard: e.standard, review: e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) }));
 };
 
-module.exports = { loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, readinessOf, loadTarget };
+module.exports = { inspectFolder, loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, readinessOf, loadTarget };
