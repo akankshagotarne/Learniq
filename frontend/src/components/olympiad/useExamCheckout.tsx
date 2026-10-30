@@ -6,10 +6,10 @@ import { setCreditBalanceFromServer, refreshCreditBalance } from '../../hooks/us
 import { referralApi, ExamCreditInfo } from '../../services/referrals';
 import { olympiadErrorCode, olympiadErrorMessage, ExamComponent } from '../../services/olympiad';
 
-interface PayableExam { _id: string; title: string; fee: number; prices?: { EXAM: number; INTERVIEW: number } }
+interface PayableExam { _id: string; title: string; fee: number; interviewIncluded?: boolean; prices?: { EXAM: number; INTERVIEW?: number } }
 
 /** What the student pays for one component. Display only - the server decides the real amount for every order. */
-export const priceOf = (exam: PayableExam, component: ExamComponent): number => (exam.prices ? exam.prices[component] : exam.fee);
+export const priceOf = (exam: PayableExam, component: ExamComponent): number => (exam.prices ? (exam.prices[component] ?? exam.fee) : exam.fee);
 
 /**
  * The single entry point for unlocking ONE component (exam or interview). Each is its own purchase: Rs 10 online or 1 credit. Credit use is a
@@ -74,7 +74,7 @@ export const useExamCheckout = (onUnlocked: (examId: string, component: ExamComp
   }, [choice, busy, unlockWithPayment]);
 
   const dialog: React.ReactNode = choice ? (
-    <ExamPaymentDialog exam={choice.exam} component={choice.component} price={priceOf(choice.exam, choice.component)} credit={choice.credit} busy={busy} onUseCredit={useCredit} onPay={payOnline} onClose={() => { if (!busy) setChoice(null); }} />
+    <ExamPaymentDialog interviewIncluded={choice.exam.interviewIncluded !== false} exam={choice.exam} component={choice.component} price={priceOf(choice.exam, choice.component)} credit={choice.credit} busy={busy} onUseCredit={useCredit} onPay={payOnline} onClose={() => { if (!busy) setChoice(null); }} />
   ) : null;
 
   return { checkout: start, unlockWithCredit, unlockWithPayment, busyId: payingId || checkingId, dialog };

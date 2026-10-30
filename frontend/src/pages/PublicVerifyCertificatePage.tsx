@@ -70,13 +70,13 @@ const PublicVerifyCertificatePage: React.FC = () => {
                 {state.data.type === 'PARTICIPATION' ? (
                   <>
                     <Row label="Test status" value="Participated" />
-                    <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
+                    {!/^not applicable$/i.test(state.data.interviewStatus ?? '') && <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />}
                     <Row label="Overall remarks" value={<span className="text-[#16A34A]">Active Participant</span>} />
                   </>
                 ) : (
                   <>
                     <Row label="Test score" value={state.data.scoreLabel ?? `${state.data.percentage}%`} />
-                    <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />
+                    {!/^not applicable$/i.test(state.data.interviewStatus ?? '') && <Row label="Interview status" value={state.data.interviewStatus ?? '—'} />}
                     <Row label="Overall result" value={<span className="text-[#16A34A]">{state.data.resultLabel ?? state.data.result}{state.data.grade ? ` / ${state.data.grade}` : ''}</span>} />
                   </>
                 )}

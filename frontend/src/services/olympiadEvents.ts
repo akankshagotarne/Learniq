@@ -7,6 +7,8 @@ export interface OlympiadEventRow {
   registration: 'draft' | 'cancelled' | 'not_open' | 'open' | 'closed'; startDate: string | null; endDate: string | null; startDateIST: string; endDateIST: string;
   registrationOpensAt: string | null; registrationClosesAt: string | null; registrationOpensAtIST: string; registrationClosesAtIST: string;
   examCount: number; isLegacy: boolean; cancelReason: string; updatedAt: string | null;
+  /** event-level setting: false = Exam Only (no interview anywhere); legacy events without a saved value report true */
+  interviewEnabled?: boolean; examinationMode?: 'EXAM_ONLY' | 'EXAM_INTERVIEW';
   examFee?: number | null; interviewFee?: number | null; totalFee?: number | null;
   interviewOpensAt?: string | null; interviewClosesAt?: string | null; interviewOpensAtIST?: string; interviewClosesAtIST?: string;
   resultsPublishAt?: string | null; resultsPublishAtIST?: string; paperSet?: string | null;
@@ -34,12 +36,14 @@ export interface PaperImportReport {
   /** server-side completeness check of every paper of the event (what publishing enforces) */
   readiness?: { ready: boolean; standards: { standard: number; ok: boolean; count: number; issues: { question: number | null; issue: string }[] }[] };
 }
-export interface EventOption { _id: string; name: string; examDate: string; examDateIST: string; status: EventStatus; state: string; standards: number[]; isLegacy: boolean }
+export interface EventOption { _id: string; name: string; examDate: string; examDateIST: string; status: EventStatus; state: string; standards: number[]; isLegacy: boolean; interviewEnabled?: boolean }
 export interface CreateEventPayload {
   name: string; standards: number[]; description?: string;
   schedule: { startDate: string; endDate: string; durationMinutes: number; fee: number };
   registrationOpensAt?: string; registrationClosesAt?: string;
   copyFromEventId?: string; copyQuestions?: boolean; publish?: boolean;
+  /** omitted = Exam Only */
+  interviewEnabled?: boolean; interviewFee?: number; interviewOpensAt?: string; interviewClosesAt?: string;
 }
 
 export const STATUS_LABEL: Record<EventStatus, string> = {

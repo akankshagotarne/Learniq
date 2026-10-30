@@ -107,6 +107,8 @@ const grantAccess = async ({ studentId, examId, targetStandard, includesIntervie
   const target = typeof targetStandard === 'number' ? targetStandard : (typeof targetStandard === 'string' && /^\d+$/.test(targetStandard) ? Number(targetStandard) : NaN);
   if (!Number.isInteger(target) || target < 1 || target > 10) throw new ExamAccessError(400, 'INVALID_STANDARD', 'Please select a Standard from 1 to 10.');
   const { student, exam } = await loadTarget(studentId, examId);
+  // an Exam Only event can never carry an interview entitlement, whatever the administrator asked for
+  includesInterview = includesInterview !== false && await require('./interviewPolicy').enabledForExam(exam);
   if (exam.standard !== target) {
     throw new ExamAccessError(400, 'STANDARD_MISMATCH', `The selected examination belongs to Standard ${exam.standard}, not Standard ${target}. Please choose an examination of the selected Standard.`);
   }

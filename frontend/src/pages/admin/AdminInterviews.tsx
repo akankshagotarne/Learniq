@@ -21,7 +21,7 @@ const TABS: { id: string; label: string; status: string }[] = [
 
 /** Admin "Interview Management": real counts, filters, assign / reassign waiting interviews, presence-only monitoring, history, CSV. */
 const AdminInterviews: React.FC = () => {
-  const ev = useOlympiadEvent();
+  const ev = useOlympiadEvent({ interviewOnly: true });
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [teachers, setTeachers] = useState<AdminTeacher[]>([]);
   const [rows, setRows] = useState<AdminRow[]>([]);

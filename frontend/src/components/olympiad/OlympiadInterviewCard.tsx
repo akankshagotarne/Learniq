@@ -38,7 +38,7 @@ const VIA_TEXT: Record<UnlockVia, string> = {
  */
 const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance, unlocking, onUseCredit, onPay, interviewBusy, onStartInterview }) => {
   const unlocked = !!exam.interviewUnlocked || !!interview; // /interviews/mine only lists exams whose interview the backend has unlocked
-  const price = exam.prices ? exam.prices.INTERVIEW : 10; // the server always sends exam.prices; 10 is only a display fallback
+  const price = exam.prices && exam.prices.INTERVIEW !== undefined ? exam.prices.INTERVIEW : 10; // the server always sends exam.prices; 10 is only a display fallback
   const examSubmitted = exam.state === 'completed';
 
   return (
@@ -53,6 +53,7 @@ const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance
         )}
       </div>
       <p className="text-xs text-text-muted mt-1">Standard {exam.standard} · {exam.title}</p>
+      <p className="text-[11px] text-text-secondary mt-1" data-testid="interview-included-line"><b>Interview Included</b> · Interview fee {formatRupees(price)} · <span data-testid="interview-payment-status">{unlocked ? 'Interview Payment Successful' : 'Interview Payment Pending'}</span></p>
 
       {!unlocked && (
         <div className="mt-3 space-y-2" data-testid="interview-unlock-options">

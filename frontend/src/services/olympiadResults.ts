@@ -1,6 +1,6 @@
 import api from './api';
 
-export type InterviewStatus = 'NOT_ELIGIBLE' | 'NOT_STARTED' | 'REQUESTED' | 'SCHEDULED' | 'IN_PROGRESS' | 'AWAITING_EVALUATION' | 'COMPLETED';
+export type InterviewStatus = 'NOT_APPLICABLE' | 'NOT_ELIGIBLE' | 'NOT_STARTED' | 'REQUESTED' | 'SCHEDULED' | 'IN_PROGRESS' | 'AWAITING_EVALUATION' | 'COMPLETED';
 export type ResultStatus = 'PENDING' | 'PROVISIONAL' | 'FINALIZED' | 'PUBLISHED';
 export type RankScope = 'event' | 'standard';
 export type ResultSort = 'rank' | 'name' | 'standard' | 'exam' | 'interview' | 'overall';
@@ -21,7 +21,7 @@ export interface ResultRow {
 
 export interface ResultsResponse {
   success: boolean;
-  event: { _id: string; name: string; examDateIST: string; interviewDate: string; publication: 'published' | 'partial' | 'unpublished' | 'none'; examCount: number; standards: number[] };
+  event: { _id: string; name: string; examDateIST: string; interviewIncluded?: boolean; interviewDate: string; publication: 'published' | 'partial' | 'unpublished' | 'none'; examCount: number; standards: number[] };
   scope: { label: string; rankScope: RankScope; rankScopeLabel: string };
   cards: { registered: number; examsSubmitted: number; interviewsCompleted: number; resultsFinalized: number; interviewsPending: number; averageOverallPct: number | null; highestOverallPct: number | null };
   topRankers: { scope: RankScope; label: string; rows: ResultRow[] };
@@ -59,7 +59,7 @@ export const resultsApi = {
 };
 
 export const INTERVIEW_LABEL: Record<InterviewStatus, string> = {
-  NOT_ELIGIBLE: 'Exam not submitted', NOT_STARTED: 'Not started', REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In progress', AWAITING_EVALUATION: 'Awaiting evaluation', COMPLETED: 'Completed',
+  NOT_APPLICABLE: 'Not applicable', NOT_ELIGIBLE: 'Exam not submitted', NOT_STARTED: 'Not started', REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In progress', AWAITING_EVALUATION: 'Awaiting evaluation', COMPLETED: 'Completed',
 };
 export const RESULT_LABEL: Record<ResultStatus, string> = { PENDING: 'Pending', PROVISIONAL: 'Provisional', FINALIZED: 'Finalized', PUBLISHED: 'Published' };
 export const RESULT_CLS: Record<ResultStatus, string> = {

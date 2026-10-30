@@ -20,6 +20,7 @@ const { OlympiadEvent } = require('../models/OlympiadEvent');
 const { OlympiadExam, OlympiadQuestion, OlympiadPayment, OlympiadAttempt } = require('../models/Olympiad');
 const { formatIST, parseInstant } = require('./engineering');
 const { ordinal } = require('../seed/olympiadTitles');
+const interviewPolicy = require('./interviewPolicy');
 
 class EventError extends Error {
   constructor(status, message, code, extra = {}) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -130,7 +131,7 @@ const validateCreate = (body, now = new Date()) => {
   const errors = {};
   const b = body && typeof body === 'object' && !Array.isArray(body) ? body : null;
   if (!b) return { errors: { _: 'Invalid request.' }, value: null };
-  const allowed = ['name', 'description', 'reference', 'standards', 'schedule', 'standardConfig', 'registrationOpensAt', 'registrationClosesAt', 'copyFromEventId', 'copyQuestions', 'publish'];
+  const allowed = ['name', 'description', 'reference', 'standards', 'schedule', 'standardConfig', 'registrationOpensAt', 'registrationClosesAt', 'copyFromEventId', 'copyQuestions', 'publish', 'interviewEnabled', 'interviewFee', 'interviewOpensAt', 'interviewClosesAt'];
   const unknown = Object.keys(b).filter((k) => !allowed.includes(k));
   if (unknown.length) errors._ = `These settings are not accepted: ${unknown.join(', ')}.`;
 
@@ -168,23 +169,40 @@ const validateCreate = (body, now = new Date()) => {
   for (const f of ['copyQuestions', 'publish']) if (b[f] !== undefined && typeof b[f] !== 'boolean') errors[f] = `${f} must be true or false.`;
   if (b.publish === true && b.copyQuestions !== true) errors.publish = 'An event can be published only when every exam has questions. Save it as a draft, or copy the questions from an earlier event.';
 
+  // Examination Configuration: a new event is Exam Only unless the administrator chooses Exam + Interview
+  if (b.interviewEnabled !== undefined && typeof b.interviewEnabled !== 'boolean') errors.interviewEnabled = 'Choose Exam Only or Exam + Interview.';
+  const interviewEnabled = b.interviewEnabled === true;
+  let interviewFee = null; let interviewOpensAt = null; let interviewClosesAt = null;
+  if (interviewEnabled) {
+    if (b.interviewFee !== undefined && b.interviewFee !== null && b.interviewFee !== '') {
+      if (typeof b.interviewFee !== 'number' || !Number.isInteger(b.interviewFee) || b.interviewFee < 1 || b.interviewFee > 100000) errors.interviewFee = 'The interview fee must be a whole number of rupees from 1 to 100000.';
+      else interviewFee = b.interviewFee;
+    }
+    if (b.interviewOpensAt) { interviewOpensAt = parseInstant(b.interviewOpensAt); if (!interviewOpensAt) errors.interviewOpensAt = 'Enter a valid interview opening date and time.'; }
+    if (b.interviewClosesAt) { interviewClosesAt = parseInstant(b.interviewClosesAt); if (!interviewClosesAt) errors.interviewClosesAt = 'Enter a valid interview closing date and time.'; }
+    if ((interviewOpensAt && !interviewClosesAt) || (!interviewOpensAt && interviewClosesAt)) errors.interviewClosesAt = 'Set both the interview opening and closing time, or neither.';
+    else if (interviewOpensAt && interviewClosesAt && interviewClosesAt <= interviewOpensAt) errors.interviewClosesAt = 'The interview window must close after it opens.';
+  } // Exam Only: any interview fee / window sent along is ignored, so nothing interview-related is stored or required
+
   if (Object.keys(errors).length) return { errors, value: null };
   const configs = {};
   standards.forEach((n) => { configs[n] = perStandard[n] || schedule; });
   // the registration window must not close after every exam has closed
   const lastEnd = Math.max(...Object.values(configs).map((c) => c.endDate.getTime()));
   if (closes && closes.getTime() > lastEnd) return { errors: { registrationClosesAt: 'Registration cannot close after the examination closes.' }, value: null };
+  if (interviewOpensAt && interviewOpensAt.getTime() < lastEnd) return { errors: { interviewOpensAt: 'Interviews cannot open before the examination closes.' }, value: null };
   return {
     errors,
     value: {
+      interviewEnabled, interviewFee, interviewOpensAt, interviewClosesAt,
       name, description, reference, standards, configs, registrationOpensAt: opens, registrationClosesAt: closes,
       copyFromEventId: b.copyFromEventId ? String(b.copyFromEventId) : null, copyQuestions: b.copyQuestions === true, publish: b.publish === true,
     },
   };
 };
 
-const EDITABLE_EVENT = ['name', 'description', 'reference', 'registrationOpensAt', 'registrationClosesAt', 'examFee', 'interviewFee', 'interviewOpensAt', 'interviewClosesAt', 'resultsPublishAt'];
-const CONTROL = ['expectedUpdatedAt'];
+const EDITABLE_EVENT = ['name', 'description', 'reference', 'registrationOpensAt', 'registrationClosesAt', 'examFee', 'interviewFee', 'interviewOpensAt', 'interviewClosesAt', 'resultsPublishAt', 'interviewEnabled'];
+const CONTROL = ['expectedUpdatedAt', 'confirmImpact'];
 
 const validateEventEdit = (event, body, exams = []) => {
   const errors = {};
@@ -228,6 +246,16 @@ const validateEventEdit = (event, body, exams = []) => {
         if (b.registrationClosesAt !== undefined) put('registrationClosesAt', event.registrationClosesAt || null, closes, same(closes, event.registrationClosesAt));
       }
     }
+  }
+  // Examination Configuration (Exam Only / Exam + Interview). A legacy event with no saved value is Exam + Interview.
+  const wasEnabled = interviewPolicy.enabledForEvent(event);
+  let willBeEnabled = wasEnabled;
+  if (b.interviewEnabled !== undefined) {
+    if (typeof b.interviewEnabled !== 'boolean') errors.interviewEnabled = 'Choose Exam Only or Exam + Interview.';
+    else { willBeEnabled = b.interviewEnabled; if (willBeEnabled !== wasEnabled) put('interviewEnabled', wasEnabled, willBeEnabled, false); }
+  }
+  if (!willBeEnabled) {
+    for (const f of ['interviewFee', 'interviewOpensAt', 'interviewClosesAt']) if (b[f] !== undefined) errors[f] = interviewPolicy.NOT_INCLUDED_MESSAGE;
   }
   // fees (whole rupees), the interview window and the results release time of THIS event
   for (const [field, label] of [['examFee', 'exam fee'], ['interviewFee', 'interview fee']]) {
@@ -291,7 +319,8 @@ const countsFor = async (eventId) => {
 
 const eventView = (event, exams, counts, now = new Date()) => {
   const { start, end } = windowOf(event, exams);
-  return {
+  const interviewEnabled = interviewPolicy.enabledForEvent(event);
+  const view = {
     _id: oid(event), name: event.name, slug: event.slug, reference: event.reference || '', description: event.description || '',
     examDate: event.examDate, examDateIST: istDay(event.examDate),
     standards: (event.standards && event.standards.length ? event.standards : exams.map((e) => e.standard)).slice().sort((a, b) => a - b),
@@ -311,12 +340,19 @@ const eventView = (event, exams, counts, now = new Date()) => {
     updatedAt: event.updatedAt || event.createdAt || null,
     ...(counts || {}),
   };
+  view.interviewEnabled = interviewEnabled;
+  view.examinationMode = interviewEnabled ? 'EXAM_INTERVIEW' : 'EXAM_ONLY';
+  if (!interviewEnabled) { // Exam Only: nothing interview-related is exposed
+    Object.assign(view, { interviewFee: null, totalFee: null, interviewOpensAt: null, interviewClosesAt: null, interviewOpensAtIST: '', interviewClosesAtIST: '' });
+    delete view.interviewEligible;
+  }
+  return view;
 };
 
 const examSummary = (e, now) => ({
   _id: oid(e), title: e.title, standard: e.standard, startDate: e.startDate, endDate: e.endDate,
   startDateIST: formatIST(e.startDate), endDateIST: formatIST(e.endDate), durationMinutes: e.durationMinutes,
-  totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, fee: e.fee, examFee: e.examFee ?? null, interviewFee: e.interviewFee ?? null, isPublished: e.isPublished !== false,
+  totalQuestions: e.totalQuestions, totalMarks: e.totalMarks, fee: e.fee, examFee: e.examFee ?? null, interviewFee: e.interviewEnabled === false ? null : (e.interviewFee ?? null), isPublished: e.isPublished !== false,
   paperImported: !!(e.paperImport && e.paperImport.set), paperReview: (e.paperImport && e.paperImport.review) ? e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) : [],
   status: e.isPublished === false ? 'draft' : now < e.startDate ? 'upcoming' : now >= e.endDate ? 'closed' : 'live',
 });
@@ -348,7 +384,9 @@ const listEvents = async (query = {}, now = new Date()) => {
     if (status && view.status !== status) continue;
     if (from && new Date(ev.examDate) < from) continue;
     if (to && new Date(ev.examDate) > to) continue;
-    out.push({ ...view, ...(await countsFor(ev._id)) });
+    const row = { ...view, ...(await countsFor(ev._id)) };
+    if (!view.interviewEnabled) delete row.interviewEligible; // Exam Only: no interview eligibility is reported
+    out.push(row);
   }
   return out;
 };
@@ -360,7 +398,7 @@ const eventOptions = async (now = new Date()) => {
   for (const ev of events) {
     const exams = await examsOfEvent(ev._id);
     const v = eventView(ev, exams, null, now);
-    options.push({ _id: v._id, name: v.name, examDate: v.examDate, examDateIST: v.examDateIST, status: v.status, state: v.state, standards: v.standards, isLegacy: v.isLegacy });
+    options.push({ _id: v._id, name: v.name, examDate: v.examDate, examDateIST: v.examDateIST, status: v.status, state: v.state, standards: v.standards, isLegacy: v.isLegacy, interviewEnabled: v.interviewEnabled });
   }
   const pick = (st) => options.filter((o) => st.includes(o.status));
   const live = pick(['live']);
@@ -427,6 +465,9 @@ const createEvent = async (body, admin, now = new Date()) => {
       name: value.name, slug, reference: value.reference || undefined, description: value.description || undefined,
       examDate: istMidnight(firstStart), standards: value.standards, state: 'draft',
       registrationOpensAt: value.registrationOpensAt, registrationClosesAt: value.registrationClosesAt, createdBy: admin._id, updatedBy: admin._id,
+      interviewEnabled: value.interviewEnabled,
+      ...(value.interviewEnabled && value.interviewFee ? { interviewFee: value.interviewFee } : {}),
+      ...(value.interviewEnabled && value.interviewOpensAt ? { interviewOpensAt: value.interviewOpensAt, interviewClosesAt: value.interviewClosesAt } : {}),
     });
   } catch (err) {
     if (isDuplicateKey(err)) throw new EventError(409, 'An Olympiad event with this name already exists.', 'DUPLICATE_NAME', { errors: { name: 'This name is already used by another event.' } });
@@ -450,6 +491,7 @@ const createEvent = async (body, admin, now = new Date()) => {
         totalMarks: srcQuestions.length ? srcQuestions.reduce((s, q) => s + (q.marks || 0), 0) : (cfg.totalMarks || 0),
         negativeMarking: src ? !!src.negativeMarking : false, negativeMarkValue: src ? src.negativeMarkValue || 0 : 0,
         fee: cfg.fee, currency: 'INR', isPublished: false,
+        ...(value.interviewEnabled && value.interviewFee ? { interviewFee: value.interviewFee } : {}),
         ...(src && src.proctoring ? { proctoring: typeof src.proctoring.toObject === 'function' ? src.proctoring.toObject() : src.proctoring } : {}),
       });
       created.push(exam);
@@ -474,6 +516,31 @@ const createEvent = async (body, admin, now = new Date()) => {
   return { ...(await eventDetail(event._id, now)), created: true };
 };
 
+/** What an Exam Only <-> Exam + Interview change would touch. Read-only; nothing is changed here. */
+const interviewImpact = async (examIds) => {
+  const empty = { registrations: 0, payments: 0, submissions: 0, interviewPayments: 0, interviewRecords: 0, blocking: false };
+  if (!examIds.length) return empty;
+  const { TeacherInterview, InterviewEvaluation } = require('../models/TeacherInterview');
+  const { InterviewSlot } = require('../models/InterviewSchedule');
+  const { OlympiadAccessGrant } = require('../models/ExamAccess');
+  const [pays, submissions, grants, interviews, evaluations, slots] = await Promise.all([
+    OlympiadPayment.find({ exam: { $in: examIds }, status: 'SUCCESS' }).select('student component').lean(),
+    OlympiadAttempt.countDocuments({ exam: { $in: examIds }, status: 'COMPLETED' }),
+    OlympiadAccessGrant.countDocuments({ exam: { $in: examIds } }),
+    TeacherInterview.countDocuments({ exam: { $in: examIds } }),
+    InterviewEvaluation.countDocuments({ exam: { $in: examIds } }),
+    InterviewSlot.countDocuments({ exam: { $in: examIds } }),
+  ]);
+  const attempts = await OlympiadAttempt.countDocuments({ exam: { $in: examIds } });
+  // an INTERVIEW payment, or the legacy bundle (no component / PACKAGE), is a paid interview entitlement
+  const interviewPayments = pays.filter((p) => p.component !== 'EXAM').length;
+  const interviewRecords = interviews + evaluations + slots;
+  return {
+    registrations: new Set(pays.map((p) => String(p.student))).size + grants, payments: pays.length, submissions, attempts,
+    interviewPayments, interviewRecords, blocking: interviewPayments > 0 || interviewRecords > 0,
+  };
+};
+
 const updateEvent = async (id, body, admin, now = new Date()) => {
   const event = await loadEvent(id);
   const exams = await examsOfEvent(event._id);
@@ -491,6 +558,18 @@ const updateEvent = async (id, body, admin, now = new Date()) => {
     if (clash) throw new EventError(409, 'An Olympiad event with this name already exists.', 'DUPLICATE_NAME', { errors: { name: 'This name is already used by another event.' } });
   }
   if (!changes.length) return { ...(await eventDetail(event._id, now)), changed: [] };
+  if (next.interviewEnabled !== undefined) {
+    const impact = await interviewImpact(exams.map((e) => e._id));
+    const touches = impact.payments > 0 || impact.submissions > 0 || impact.attempts > 0 || impact.registrations > 0 || impact.interviewRecords > 0;
+    if (next.interviewEnabled === false && impact.blocking) {
+      throw new EventError(409, 'This event already has paid or completed interview records, so it cannot be changed to Exam Only. Nothing was changed; all payments, interviews and results are kept.', 'INTERVIEW_CHANGE_BLOCKED', { impact });
+    }
+    if (touches && body.confirmImpact !== true) {
+      throw new EventError(409, next.interviewEnabled
+        ? 'Students have already registered for this event. Adding the interview will show the interview section and fee to them. Confirm to continue.'
+        : 'Students have already registered or paid for this event. Switching to Exam Only will hide the interview from them. No payment, submission or result is deleted. Confirm to continue.', 'CONFIRMATION_REQUIRED', { impact });
+    }
+  }
   const guard = { _id: event._id };
   if (event.updatedAt) guard.updatedAt = event.updatedAt;
   const set = { ...next, updatedBy: admin._id };
@@ -622,8 +701,12 @@ const assertEventAvailable = async (exam, purpose = 'view', now = new Date()) =>
 const eventLabels = async (exams) => {
   const ids = [...new Set(exams.map((e) => (e.event ? oid(e.event) : null)).filter(Boolean))];
   if (!ids.length) return new Map();
-  const events = await OlympiadEvent.find({ _id: { $in: ids } }).select('name examDate state');
-  return new Map(events.map((e) => [oid(e), { eventId: oid(e), eventName: e.name, eventDate: e.examDate, eventState: e.state }]));
+  const events = await OlympiadEvent.find({ _id: { $in: ids } }).select('name examDate state interviewEnabled');
+  const policy = require('./interviewPolicy');
+  const included = new Map(events.map((e) => [oid(e), policy.enabledForEvent(e)]));
+  // stamp the (non-persisted) flag on the exam documents so examPublic() / the completion payload never describe an interview an Exam Only event does not have
+  exams.forEach((e) => { if (e && e.event) e._interviewIncluded = included.get(oid(e.event)) !== false; });
+  return new Map(events.map((e) => [oid(e), { eventId: oid(e), eventName: e.name, eventDate: e.examDate, eventState: e.state, interviewIncluded: policy.enabledForEvent(e) }]));
 };
 
 // ──────────────────────────────────────────────

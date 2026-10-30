@@ -4,6 +4,7 @@ const { TeacherInterview, InterviewEvaluation } = require('../models/TeacherInte
 const { InterviewSchedule, InterviewSlot } = require('../models/InterviewSchedule');
 const User = require('../models/User');
 const analytics = require('./olympiadAnalytics');
+const interviewPolicy = require('./interviewPolicy');
 const { isReleased } = require('./resultsRelease');
 const { standardLabel, istDate, istStamp } = require('./exports/formats');
 
@@ -47,7 +48,7 @@ const OID_RE = /^[a-f0-9]{24}$/i;
 const PAGE_SIZES = [10, 25, 50, 100];
 const SORTS = ['rank', 'name', 'standard', 'exam', 'interview', 'overall'];
 const RANK_SCOPES = ['event', 'standard'];
-const INTERVIEW_STATUSES = ['NOT_ELIGIBLE', 'NOT_STARTED', 'REQUESTED', 'SCHEDULED', 'IN_PROGRESS', 'AWAITING_EVALUATION', 'COMPLETED'];
+const INTERVIEW_STATUSES = ['NOT_APPLICABLE', 'NOT_ELIGIBLE', 'NOT_STARTED', 'REQUESTED', 'SCHEDULED', 'IN_PROGRESS', 'AWAITING_EVALUATION', 'COMPLETED'];
 const RESULT_STATUSES = ['PENDING', 'PROVISIONAL', 'FINALIZED', 'PUBLISHED'];
 const MAX_ROWS = 50000;
 
@@ -179,6 +180,7 @@ const loadEvent = async (eventId) => {
   const event = await OlympiadEvent.findById(eventId);
   if (!event) throw new ResultsError(404, 'That Olympiad event was not found.', 'EVENT_NOT_FOUND');
   const data = await analytics.loadRegistrations({ event: String(event._id), exam: 'all', standard: 'all' });
+  const interviewIncluded = interviewPolicy.enabledForEvent(event); // Exam Only: the exam is the whole result
   const exams = data.exams.filter((e) => e.examType !== 'engineering');
   const examIds = exams.map((e) => e._id);
   const examById = new Map(exams.map((e) => [String(e._id), e]));
@@ -202,10 +204,13 @@ const loadEvent = async (eventId) => {
     const exam = examById.get(r.examId);
     const k = sk(r.studentId, r.examId);
     const ex = examComponent(attemptBy.get(k), exam);
-    const iv = interviewComponent({ evaluations: evalsBy.get(k) || [], interviews: interviewsBy.get(k) || [], slot: slotBy.get(k), examSubmitted: ex.submitted });
+    // Exam Only: there is no interview component, so it never blocks a result; overall = the official formula with an interview max of 0
+    const iv = interviewIncluded
+      ? interviewComponent({ evaluations: evalsBy.get(k) || [], interviews: interviewsBy.get(k) || [], slot: slotBy.get(k), examSubmitted: ex.submitted })
+      : { status: 'NOT_APPLICABLE', done: true, marks: 0, max: 0, flags: [] };
     const finalized = ex.scored && iv.done;
     const examPct = ex.scored ? pctOf(ex.marks, ex.max) : null;
-    const interviewPct = iv.done ? pctOf(iv.marks, iv.max) : null;
+    const interviewPct = iv.done && interviewIncluded ? pctOf(iv.marks, iv.max) : null;
     const overallMarks = finalized ? ex.marks + iv.marks : null;
     const overallMax = finalized ? ex.max + iv.max : null;
     const overallPct = finalized ? pctOf(overallMarks, overallMax) : null;
@@ -215,7 +220,7 @@ const loadEvent = async (eventId) => {
     return {
       key: k, studentId: r.studentId, examId: r.examId, name: r.name, standard: exam.standard, examTitle: exam.title,
       examSubmitted: ex.submitted, examScored: ex.scored, examMarks: ex.marks, examMax: ex.max, examPct,
-      interviewStatus: iv.status, interviewMarks: iv.marks, interviewMax: iv.max, interviewPct,
+      interviewStatus: iv.status, interviewMarks: interviewIncluded ? iv.marks : null, interviewMax: interviewIncluded ? iv.max : null, interviewPct,
       overallMarks, overallMax, overallPct, finalized, resultStatus,
       eventRank: null, standardRank: null,
       flags: [...r.flags.filter((f) => f !== 'SUBMITTED_NOT_EVALUATED'), ...ex.flags, ...iv.flags],
@@ -239,7 +244,7 @@ const loadEvent = async (eventId) => {
 
   const publishedExams = exams.filter((e) => isReleased(e)).length;
   return {
-    event, exams, rows, truncated: rows.length > MAX_ROWS, unregistered, rankedCount,
+    event, interviewIncluded, exams, rows, truncated: rows.length > MAX_ROWS, unregistered, rankedCount,
     interviewDates: interviewDatesOf(schedules),
     publication: !exams.length ? 'none' : publishedExams === exams.length ? 'published' : publishedExams ? 'partial' : 'unpublished',
   };
@@ -258,7 +263,7 @@ const cardsFor = (rows) => {
     examsSubmitted: uniq(rows, (r) => r.examSubmitted),
     interviewsCompleted: uniq(rows, (r) => r.interviewStatus === 'COMPLETED'),
     resultsFinalized: uniq(rows, (r) => r.finalized),
-    interviewsPending: uniq(rows, (r) => r.examSubmitted && r.interviewStatus !== 'COMPLETED'),
+    interviewsPending: uniq(rows, (r) => r.examSubmitted && r.interviewStatus !== 'COMPLETED' && r.interviewStatus !== 'NOT_APPLICABLE'),
     averageOverallPct: round2(avg),
     highestOverallPct: done.length ? round2(Math.max(...done.map((r) => r.overallPct))) : null,
   };
@@ -326,7 +331,7 @@ const eventInfo = (data) => {
   const starts = exams.map((x) => x.startDate).filter(Boolean).map((d) => new Date(d)).sort((a, b) => a - b);
   return {
     _id: String(e._id), name: e.name, state: e.state, standards: e.standards,
-    examDate: e.examDate, examDateIST: istDate(e.examDate), interviewDate: data.interviewDates.text, publication: data.publication,
+    examDate: e.examDate, examDateIST: istDate(e.examDate), interviewIncluded: data.interviewIncluded !== false, interviewDate: data.interviewIncluded === false ? '' : data.interviewDates.text, publication: data.publication,
     examWindowStart: starts[0] || null, examCount: exams.length,
   };
 };
@@ -386,7 +391,7 @@ const studentDetail = async (studentId, query = {}) => {
   const teachers = teacherIds.length ? await User.find({ _id: { $in: teacherIds } }).select('name').lean() : [];
   const teacherName = (id) => (teachers.find((t) => String(t._id) === String(id)) || {}).name || null;
   const student = await User.findById(studentId).select('name').lean();
-  const finalizedAt = r.finalized ? new Date(Math.max(new Date(att.evaluatedAt).getTime(), new Date(ev.submittedAt || 0).getTime())) : null;
+  const finalizedAt = r.finalized ? new Date(Math.max(new Date(att.evaluatedAt).getTime(), new Date((ev && ev.submittedAt) || 0).getTime())) : null; // Exam Only: no evaluation exists
   const slot = r._slot;
   return {
     student: { _id: String(studentId), name: (student && student.name) || r.name, standard: r.standard, standardLabel: standardLabel(r.standard) },
@@ -410,7 +415,7 @@ const studentDetail = async (studentId, query = {}) => {
       eventRank: r.eventRank, standardRank: r.standardRank, rankedInEvent: data.rankedCount.event, rankedInStandard: data.rankedCount[r.standard] || 0, tied: Boolean(r.tied),
     },
     flags: r.flags,
-    formula: 'Overall % = (exam marks + interview marks) ÷ (exam maximum + interview maximum) × 100',
+    formula: data.interviewIncluded === false ? 'Overall % = exam marks ÷ exam maximum × 100 (this event has no interview)' : 'Overall % = (exam marks + interview marks) ÷ (exam maximum + interview maximum) × 100',
   };
 };
 
@@ -427,7 +432,7 @@ const exportData = async (query) => {
   if (f.minOverall !== null) active.push(`Overall ≥ ${f.minOverall}%`);
   if (f.maxOverall !== null) active.push(`Overall ≤ ${f.maxOverall}%`);
   if (f.minExam !== null) active.push(`Exam ≥ ${f.minExam}%`);
-  const finalizedAtOf = (r) => (r.finalized ? new Date(Math.max(new Date(r._attempt.evaluatedAt).getTime(), new Date(r._evaluation.submittedAt || 0).getTime())) : null);
+  const finalizedAtOf = (r) => (r.finalized ? new Date(Math.max(new Date(r._attempt.evaluatedAt).getTime(), new Date((r._evaluation && r._evaluation.submittedAt) || 0).getTime())) : null);
   return {
     f, event: eventInfo(data), eventName: data.event.name, truncated: data.truncated,
     rows: rows.map((r) => ({ ...publicRow(r, f.rankScope), finalizedAt: finalizedAtOf(r) })),
@@ -435,7 +440,7 @@ const exportData = async (query) => {
       { label: 'Section', value: 'Admin › Olympiad › Results' },
       { label: 'Olympiad event', value: data.event.name },
       { label: 'Exam date', value: istDate(data.event.examDate) },
-      { label: 'Interview date', value: data.interviewDates.text || 'Not scheduled' },
+      ...(data.interviewIncluded === false ? [] : [{ label: 'Interview date', value: data.interviewDates.text || 'Not scheduled' }]),
       { label: 'Standard', value: f.standard === 'all' ? 'All Standards' : standardLabel(f.standard) },
       { label: 'Ranking', value: f.rankScope === 'event' ? 'Overall event rank (all standards)' : 'Rank within standard' },
       { label: 'Order', value: `${f.sort}${f.sort === 'rank' ? ` (${f.rankScope === 'event' ? 'event' : 'standard'} rank)` : ''}, ${f.order === 'desc' ? 'descending' : 'ascending'}` },

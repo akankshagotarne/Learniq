@@ -55,3 +55,11 @@ test('hasValidStandard accepts 1-10 and Others, rejects blanks', () => {
   assert.equal(hasValidStandard(''), false);
   assert.equal(hasValidStandard(null), false);
 });
+
+test('an Exam Only event: a submitted exam is Completed even though no interview is (or can be) unlocked', () => {
+  assert.equal(olympiadTab({ state: 'completed', tab: 'completed', interviewUnlocked: false, interviewIncluded: false }), 'completed');
+  assert.equal(olympiadTab({ state: 'completed', tab: 'completed', interviewUnlocked: false, interviewIncluded: false }, { stage: 'REQUESTED', workflowComplete: false }), 'completed');
+  // an Exam + Interview (or legacy) event keeps the earlier rule: the interview is still to be bought / done
+  assert.equal(olympiadTab({ state: 'completed', tab: 'completed', interviewUnlocked: false, interviewIncluded: true }), 'available');
+  assert.equal(olympiadTab({ state: 'completed', tab: 'completed', interviewUnlocked: false }), 'available');
+});

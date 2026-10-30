@@ -16,6 +16,7 @@ const {
 const { CRITERIA, MAX_TOTAL, KEYS } = require('../config/interviewCriteria');
 const { INTERVIEW_OPENS_AT, INTERVIEW_CLOSES_AT, INTERVIEW_RESULTS_AT, istDate, istTime } = require('../config/schedule');
 const eventSchedule = require('./eventSchedule');
+const interviewPolicy = require('./interviewPolicy');
 
 class InterviewError extends Error {
   constructor(status, message, code, extra) {
@@ -92,6 +93,10 @@ const setRequestsEnabled = async (admin, enabled) => {
 /**
  * @returns {{ eligible: boolean, code?: string, message?: string, exam?, attempt?, payment? }}
  */
+/** Exam Only event: no interview operation exists for it. HTTP 409, whatever the client shows. */
+const notIncludedError = () => new InterviewError(409, interviewPolicy.NOT_INCLUDED_MESSAGE, interviewPolicy.NOT_INCLUDED_CODE);
+const assertIncluded = async (examOrId) => { if (!(await interviewPolicy.enabledForExam(typeof examOrId === 'object' && examOrId && examOrId.standard ? examOrId : await OlympiadExam.findById(oid(examOrId)).select('event')))) throw notIncludedError(); };
+
 const checkEligibility = async (studentId, examId) => {
   if (!isValidId(examId)) return { eligible: false, code: 'EXAM_NOT_FOUND', message: 'Examination not found.' };
   const exam = await OlympiadExam.findById(examId);
@@ -100,6 +105,8 @@ const checkEligibility = async (studentId, examId) => {
   if (exam.examType !== 'olympiad' || !(exam.standard >= 1 && exam.standard <= 10)) {
     return { eligible: false, code: 'NOT_OLYMPIAD', message: 'Interviews are available for Olympiad exams only.', exam };
   }
+  // an Exam Only event has no interview at all: no payment, eligibility, request or session
+  if (!(await interviewPolicy.enabledForExam(exam))) return { eligible: false, code: interviewPolicy.NOT_INCLUDED_CODE, message: interviewPolicy.NOT_INCLUDED_MESSAGE, exam };
   // The interview is its own component: unlocked by a Rs 10 interview payment, one credit, a legacy Rs 20 bundle, or an administrator
   // exception that includes it. Exam access alone never unlocks it (and the reverse).
   const ent = await examAccess.interviewEntitlementFor(studentId, exam._id);
@@ -115,7 +122,7 @@ const checkEligibility = async (studentId, examId) => {
 const requireEligible = async (studentId, examId) => {
   const e = await checkEligibility(studentId, examId);
   if (!e.eligible) {
-    const status = e.code === 'EXAM_NOT_FOUND' ? 404 : 403;
+    const status = e.code === 'EXAM_NOT_FOUND' ? 404 : e.code === interviewPolicy.NOT_INCLUDED_CODE ? 409 : 403;
     throw new InterviewError(status, e.message, e.code);
   }
   return e;
@@ -208,6 +215,7 @@ const requestInterview = async (student, examId) => {
 const studentJoinRequest = async (student, id) => {
   const iv = await load(id);
   if (!same(iv.student, student._id)) throw new InterviewError(403, 'This is not your interview.', 'FORBIDDEN');
+  await assertIncluded(iv.exam);
   if (iv.status === 'WAITING_FOR_APPROVAL') return iv; // idempotent
   const win = await eventSchedule.windowForExam(iv.exam);
   if (interviewWindow(new Date(), win) === 'closed') throw notOpenError(409, new Date(), win); // a new start after the close is refused
@@ -309,6 +317,7 @@ const finish = async (iv, filter, { status, by, role, action, reason, remarks })
  */
 const teacherAccept = async (teacher, id) => {
   const iv = await load(id);
+  await assertIncluded(iv.exam);
   if (!isGenuineRequest(iv)) throw NOT_REQUESTED_ERROR(); // a record the student never requested can not be accepted
   const win = await eventSchedule.windowForExam(iv.exam);
   if (!interviewOpen(new Date(), win)) throw notOpenError(409, new Date(), win); // accepting is a NEW start: only inside the window
@@ -592,6 +601,7 @@ const cancel = async (actor, id, reason) => {
 // ── admin ────────────────────────────────────────────────────────────────────────────────────
 const adminAssign = async (admin, id, teacherId) => {
   const iv = await load(id);
+  await assertIncluded(iv.exam);
   if (!isValidId(teacherId)) throw new InterviewError(400, 'Choose a teacher.', 'INVALID_REQUEST');
   const teacher = await User.findOne({ _id: teacherId, role: 'teacher', isApproved: true, isActive: { $ne: false } });
   if (!teacher) throw new InterviewError(404, 'Approved teacher not found.', 'TEACHER_NOT_FOUND');
@@ -754,7 +764,7 @@ const standardOf = (exam) => (exam ? exam.standard : null);
 
 /** Everyone who PAID and SUBMITTED a Std 1-10 Olympiad exam, joined with their interview (if any). One query set, no per-row lookups. */
 const eligibleRows = async () => {
-  const exams = await OlympiadExam.find({ examType: 'olympiad' });
+  const exams = await interviewPolicy.filterInterviewExams(await OlympiadExam.find({ examType: 'olympiad' }));   // Exam Only events have no interview rows
   const examById = new Map(exams.filter((e) => e.standard >= 1 && e.standard <= 10).map((e) => [oid(e._id), e]));
   if (!examById.size) return [];
   const attempts = await OlympiadAttempt.find({ exam: { $in: [...examById.keys()] }, status: 'COMPLETED', submittedAt: { $exists: true } });
@@ -924,7 +934,11 @@ const studentOverview = async (student) => {
     TeacherInterview.find({ student: student._id }),
   ]);
   // one entry per exam the student is entitled to (verified payment, or an administrator exception that includes the interview)
-  const payments = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
+  const entitled = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
+  const entitledExams = entitled.length ? await OlympiadExam.find({ _id: { $in: entitled.map((p) => oid(p.exam)) } }).select('event') : [];
+  const offEvents = await interviewPolicy.disabledEventIds(entitledExams); // Exam Only events contribute nothing to the interview overview
+  const offExamIds = new Set(entitledExams.filter((e) => e.event && offEvents.has(String(e.event._id || e.event))).map((e) => oid(e._id)));
+  const payments = entitled.filter((p) => !offExamIds.has(oid(p.exam)));
   const evals = interviews.length ? await InterviewEvaluation.find({ student: student._id, state: 'SUBMITTED' }) : [];
   const settings = await getSettings();
   const released = resultsReleased(settings);   // the ORIGINAL event's announcement; each exam below uses its own event's
@@ -978,7 +992,20 @@ const detailFor = async (user, id) => {
 const examIdsForEvent = async (eventId) => {
   if (!eventId) return null;
   if (!isValidId(eventId)) return [];
+  const { OlympiadEvent } = require('../models/OlympiadEvent');
+  const ev = await OlympiadEvent.findById(eventId).select('interviewEnabled'); // an Exam Only event has no interview management at all
+  if (ev && !interviewPolicy.enabledForEvent(ev)) throw notIncludedError();
   return (await OlympiadExam.find({ event: eventId, examType: { $ne: 'engineering' } }).select('_id')).map((e) => oid(e._id));
+};
+
+/** Interviews whose exam belongs to an Exam Only event never appear in admin interview management. */
+const keepIncluded = async (ivs) => {
+  if (!ivs.length) return ivs;
+  const exams = await OlympiadExam.find({ _id: { $in: [...new Set(ivs.map((i) => oid(i.exam)))] } }).select('event');
+  const off = await interviewPolicy.disabledEventIds(exams);
+  if (!off.size) return ivs;
+  const offExam = new Set(exams.filter((e) => e.event && off.has(String(e.event._id || e.event))).map((e) => oid(e._id)));
+  return ivs.filter((i) => !offExam.has(oid(i.exam)));
 };
 
 const adminList = async ({ q, status, standard, teacher, from, to, event } = {}) => {
@@ -993,7 +1020,8 @@ const adminList = async ({ q, status, standard, teacher, from, to, event } = {})
     if (to && !Number.isNaN(Date.parse(to))) filter.requestedAt.$lte = new Date(to);
     if (!Object.keys(filter.requestedAt).length) delete filter.requestedAt;
   }
-  const ivs = await TeacherInterview.find(filter).sort('-requestedAt');
+  const ivsAll = await TeacherInterview.find(filter).sort('-requestedAt');
+  const ivs = await keepIncluded(ivsAll);
   const userIds = [...new Set(ivs.flatMap((i) => [oid(i.student), i.teacher ? oid(i.teacher) : null]).filter(Boolean))];
   const users = userIds.length ? await User.find({ _id: { $in: userIds } }) : [];
   const userById = new Map(users.map((u) => [oid(u), u]));
@@ -1036,7 +1064,7 @@ const adminStats = async (event) => {
   const eventExams = await examIdsForEvent(event);
   const inEvent = (examRef) => !eventExams || eventExams.includes(oid(examRef));
   const [eligibleAll, allAll, teachers] = await Promise.all([
-    eligibleRows(), TeacherInterview.find(eventExams ? { exam: { $in: eventExams } } : {}), User.find({ role: 'teacher', isApproved: true }),
+    eligibleRows(), TeacherInterview.find(eventExams ? { exam: { $in: eventExams } } : {}).then(keepIncluded), User.find({ role: 'teacher', isApproved: true }),
   ]);
   const eligible = eligibleAll.filter((r) => inEvent(r.exam._id || r.exam));
   const all = allAll;
@@ -1076,6 +1104,7 @@ const adminTeachers = async () => {
 
 const adminDetail = async (id) => {
   const iv = await load(id);
+  await assertIncluded(iv.exam);
   const o = plain(iv);
   const ev = await InterviewEvaluation.findOne({ interview: iv._id });
   return { ...view(iv), evaluation: evaluationView(ev, { includeRevisions: true }), audit: (o.audit || []).map((a) => ({ at: a.at, role: a.role, action: a.action, note: a.note || null })), stale: ACTIVE.includes(iv.status) && !iv.teacherPresent && !iv.studentPresent };

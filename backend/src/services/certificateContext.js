@@ -66,7 +66,8 @@ const buildParticipationContext = async (cert) => {
   if (attempt && (!sameId(attempt.student, cert.student) || !sameId(attempt.exam, cert.exam))) {
     throw new CertificateDataError('This certificate does not match its examination record.', 'CERTIFICATE_DATA_MISMATCH');
   }
-  const iv = await participationInterview(cert.student, cert.exam);
+  // Exam Only event: there is no interview to report on
+  const iv = (await require('./interviewPolicy').enabledForExam(exam)) ? await participationInterview(cert.student, cert.exam) : { status: 'Not Applicable', completed: false };
   const issueDate = effectiveIssueDate(cert, exam);
   return {
     kind: 'PARTICIPATION',
@@ -86,7 +87,8 @@ const buildContext = async (cert) => {
     const exam = await OlympiadExam.findById(cert.exam);
     if (!exam) throw new CertificateDataError('The records behind this certificate could not be found.', 'CERTIFICATE_RECORDS_MISSING');
     // the certificate shows what was issued, whether or not the attempt still exists
-    return contextFrom(cert, exam, Number(frozen.score), Number(frozen.totalMarks), { completed: Boolean(frozen.interviewCompleted), completedAt: frozen.interviewCompletedAt || null });
+    const included = await require('./interviewPolicy').enabledForExam(exam);
+    return contextFrom(cert, exam, Number(frozen.score), Number(frozen.totalMarks), included ? { completed: Boolean(frozen.interviewCompleted), completedAt: frozen.interviewCompletedAt || null } : { completed: false, completedAt: null, applicable: false });
   }
   const [attempt, exam] = await Promise.all([OlympiadAttempt.findById(cert.attempt), OlympiadExam.findById(cert.exam)]);
   if (!attempt || !exam) throw new CertificateDataError('The records behind this certificate could not be found.', 'CERTIFICATE_RECORDS_MISSING');
@@ -107,7 +109,8 @@ const buildContext = async (cert) => {
   const grade0 = svc.gradeFor(cert.percentage); // null below the pass mark: the certificate then carries no grade either
   if (grade0 !== (cert.grade || null)) throw new CertificateDataError('This certificate does not match the grading rules.', 'CERTIFICATE_DATA_MISMATCH');
 
-  const interview = await interviewFor(cert.student, cert.exam);
+  const included = await require('./interviewPolicy').enabledForExam(exam);
+  const interview = included ? await interviewFor(cert.student, cert.exam) : { completed: false, completedAt: null, applicable: false };
   return contextFrom(cert, exam, score, totalMarks, interview, true);
 };
 
@@ -134,7 +137,7 @@ const contextFrom = (cert, exam, score, totalMarks, interview, checked = false) 
     result: grade ? 'PASS' : 'BELOW_PASS',
     resultLabel: grade ? 'Pass' : 'Below pass mark',
     interview,
-    interviewStatus: interview.completed ? 'Completed' : 'Not completed',
+    interviewStatus: interview.applicable === false ? 'Not applicable' : interview.completed ? 'Completed' : 'Not completed',
     issueDate,
     issueDateLabel: svc.formatIssueDate(issueDate),
     kind: 'RESULT',
