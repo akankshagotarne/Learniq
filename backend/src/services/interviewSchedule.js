@@ -18,6 +18,11 @@ class ScheduleError extends Error {
 }
 
 const eventSchedule = require('./eventSchedule');
+const interviewPolicy = require('./interviewPolicy');
+
+/** Exam Only events have no interview schedule, slots or reminders: HTTP 409 with the standard message. */
+const notIncluded = () => new ScheduleError(409, interviewPolicy.NOT_INCLUDED_MESSAGE, interviewPolicy.NOT_INCLUDED_CODE);
+const assertIncluded = async (exam) => { if (!(await interviewPolicy.enabledForExam(exam))) throw notIncluded(); };
 
 const IST_OFFSET = '+05:30';
 const DAY_MS = 86400000;
@@ -50,7 +55,12 @@ const normalizeScheduleInput = (input, now = new Date()) => {
 
 // ── general schedule ─────────────────────────────────────────────────────────────────────────
 // `eventId` (optional): only the exams of that Olympiad event - an interview schedule is never shared between events.
-const interviewExams = async (eventId) => (await OlympiadExam.find({ examType: 'olympiad', ...(eventId ? { event: eventId } : {}) })).filter((e) => e.standard >= 1 && e.standard <= 10).sort((a, b) => a.standard - b.standard);
+const interviewExams = async (eventId) => {
+  const all = (await OlympiadExam.find({ examType: 'olympiad', ...(eventId ? { event: eventId } : {}) })).filter((e) => e.standard >= 1 && e.standard <= 10).sort((a, b) => a.standard - b.standard);
+  const included = await interviewPolicy.filterInterviewExams(all);
+  if (eventId && all.length && !included.length) throw notIncluded(); // the whole event is Exam Only
+  return included;
+};
 
 /** An event that carries its own interview window (e.g. 25 Oct 9 AM - 5 PM IST) only accepts appointments inside it. Other events: unchanged. */
 const assertInsideEventWindow = async (exam, startAt, endAt) => {
@@ -65,6 +75,10 @@ const setSchedule = async ({ examIds, eventId, ...input }, admin, now = new Date
   const data = normalizeScheduleInput(input, now);
   const exams = await interviewExams(eventId);
   const wanted = examIds === 'all' ? exams : exams.filter((e) => (Array.isArray(examIds) ? examIds.map(String) : []).includes(oid(e)));
+  if (!wanted.length && Array.isArray(examIds) && examIds.length) { // asked for specific exams, none of which has an interview
+    const asked = await OlympiadExam.find({ _id: { $in: examIds.map(String).filter((x) => /^[a-f0-9]{24}$/i.test(x)) } });
+    if (asked.length && (await interviewPolicy.filterInterviewExams(asked)).length === 0) throw notIncluded();
+  }
   if (!wanted.length) throw new ScheduleError(400, 'Please choose at least one examination.', 'NO_EXAM');
   for (const e of wanted) { // the general schedule's day (and times, when given) must lie inside the event's own interview window
     const win = await eventSchedule.windowForExam(e);
@@ -87,6 +101,7 @@ const setSchedule = async ({ examIds, eventId, ...input }, admin, now = new Date
 };
 
 const clearSchedule = async (examId) => {
+  await assertIncluded(await OlympiadExam.findById(examId).select('event'));
   const r = await InterviewSchedule.deleteOne({ exam: examId });
   await InterviewReminder.updateMany({ exam: examId, kind: 'SCHEDULE', status: 'PENDING' }, { $set: { status: 'CANCELLED' } });
   return r.deletedCount > 0;
@@ -135,6 +150,7 @@ const upsertSlot = async ({ studentId, examId, startAt, durationMinutes, teacher
   const [student, exam] = await Promise.all([User.findById(studentId), OlympiadExam.findById(examId)]);
   if (!student || student.role !== 'student') throw new ScheduleError(404, 'Student not found.', 'STUDENT_NOT_FOUND');
   if (!exam || exam.examType !== 'olympiad') throw new ScheduleError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
+  await assertIncluded(exam);
   if (!(await hasSubmitted(student._id, exam._id))) throw new ScheduleError(409, 'This student has not submitted the exam yet, so no interview can be scheduled.', 'NOT_SUBMITTED');
   await assertInsideEventWindow(exam, start, end);
 
@@ -230,6 +246,7 @@ const messageFor = (summary, now = new Date()) => {
 };
 
 const studentSchedule = async (studentId, examId, now = new Date()) => {
+  await assertIncluded(await OlympiadExam.findById(examId).select('event'));
   const map = await summaries([{ student: studentId, exam: examId }], now);
   const s = map.get(`${oid(studentId)}:${oid(examId)}`) || null;
   return { summary: s, ...messageFor(s, now) };
@@ -246,7 +263,11 @@ const reminderText = (student, exam, startAt, endAt, scope) => {
 /** Reminders for the GENERAL schedule are created shortly before they are due, for students who submitted and have no personal slot. */
 const materialiseScheduleReminders = async (now = new Date(), env = process.env) => {
   const lead = leadMinutes(env);
-  const schedules = await InterviewSchedule.find({ startTime: { $exists: true, $ne: null } });
+  const schedulesAll = await InterviewSchedule.find({ startTime: { $exists: true, $ne: null } });
+  const schedExams = schedulesAll.length ? await OlympiadExam.find({ _id: { $in: schedulesAll.map((x) => oid(x.exam)) } }).select('event') : [];
+  const offEvents = await interviewPolicy.disabledEventIds(schedExams); // no reminders for Exam Only events
+  const offExam = new Set(schedExams.filter((e) => e.event && offEvents.has(oid(e.event))).map((e) => oid(e)));
+  const schedules = schedulesAll.filter((x) => !offExam.has(oid(x.exam)));
   let created = 0;
   for (const s of schedules) {
     const startAt = instant(s.interviewDate, s.startTime);

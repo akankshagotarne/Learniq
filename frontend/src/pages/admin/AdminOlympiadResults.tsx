@@ -137,6 +137,7 @@ const AdminOlympiadResults: React.FC = () => {
   }, [base]);
 
   const c = data?.cards;
+  const ivOn = data ? data.event.interviewIncluded !== false : true; // Exam Only event: no interview columns, filters or cards
   const scopeKind = data?.scope.rankScope ?? base.rankScope;
   const exportParams = useMemo(() => toResultParams(query, false), [query]); // every matching record, in the on-screen order - never just the page
   const pubText = { published: 'Results published to students', partial: 'Results partly published', unpublished: 'Results not published yet', none: 'No exams' } as const;
@@ -164,7 +165,7 @@ const AdminOlympiadResults: React.FC = () => {
             <EventSelector value={ev.eventId} options={ev.options} onChange={ev.setEvent} loading={ev.loading} error={ev.error} />
             {data && (
               <p className="text-xs text-text-secondary leading-relaxed" data-testid="event-info">
-                <span className="font-semibold text-text-primary">Exam:</span> {data.event.examDateIST || '—'} · <span className="font-semibold text-text-primary">Interview:</span> {data.event.interviewDate || 'not scheduled'} · {pubText[data.event.publication]}
+                <span className="font-semibold text-text-primary">Exam:</span> {data.event.examDateIST || '—'} · {ivOn && <><span className="font-semibold text-text-primary">Interview:</span> {data.event.interviewDate || 'not scheduled'} · </>}{pubText[data.event.publication]}
               </p>
             )}
           </div>
@@ -182,12 +183,12 @@ const AdminOlympiadResults: React.FC = () => {
                   <option value="event">Overall event rank</option><option value="standard">Rank within standard</option>
                 </select>
               </Field>
-              <Field label="Interview status">
+              {ivOn && <Field label="Interview status">
                 <select className={selectCls} value={base.interviewStatus} onChange={e => update({ interviewStatus: e.target.value })} aria-label="Interview status" data-testid="filter-interview">
                   <option value="all">All</option>
                   {Object.entries(INTERVIEW_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
-              </Field>
+              </Field>}
               <Field label="Result status">
                 <select className={selectCls} value={base.resultStatus} onChange={e => update({ resultStatus: e.target.value })} aria-label="Result status" data-testid="filter-result">
                   <option value="all">All</option>
@@ -230,9 +231,9 @@ const AdminOlympiadResults: React.FC = () => {
               <div className={`grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5 transition-opacity ${loading ? 'opacity-60' : ''}`} data-testid="cards">
                 <Card testId="card-registered" label="Total Registered Students" value={c.registered} icon={Users} tone="bg-[#EDE9FE] text-[#6C63F2]" hint="Confirmed registrations" />
                 <Card testId="card-submitted" label="Exams Submitted" value={c.examsSubmitted} icon={ClipboardCheck} tone="bg-[#DCFCE7] text-[#16A34A]" hint="Students who submitted" />
-                <Card testId="card-interviews" label="Interviews Completed" value={c.interviewsCompleted} icon={CheckCircle2} tone="bg-[#CCFBF1] text-[#0D9488]" hint="Evaluation submitted" />
-                <Card testId="card-finalized" label="Results Finalized" value={c.resultsFinalized} icon={Award} tone="bg-[#FEF3C7] text-[#D97706]" hint="Exam + interview complete" />
-                <Card testId="card-pending" label="Interviews Pending" value={c.interviewsPending} icon={Hourglass} tone="bg-[#FFE4EC] text-[#E1447A]" hint="Submitted, interview not done" />
+                {ivOn && <Card testId="card-interviews" label="Interviews Completed" value={c.interviewsCompleted} icon={CheckCircle2} tone="bg-[#CCFBF1] text-[#0D9488]" hint="Evaluation submitted" />}
+                <Card testId="card-finalized" label="Results Finalized" value={c.resultsFinalized} icon={Award} tone="bg-[#FEF3C7] text-[#D97706]" hint={ivOn ? 'Exam + interview complete' : 'Exam scored'} />
+                {ivOn && <Card testId="card-pending" label="Interviews Pending" value={c.interviewsPending} icon={Hourglass} tone="bg-[#FFE4EC] text-[#E1447A]" hint="Submitted, interview not done" />}
                 <Card testId="card-average" label="Average Overall Percentage" value={c.averageOverallPct === null ? '—' : `${c.averageOverallPct}%`} icon={Percent} tone="bg-[#E0F2FE] text-[#0284C7]" hint={c.highestOverallPct === null ? 'No finalized results yet' : `Highest ${c.highestOverallPct}%`} />
               </div>
 
@@ -249,7 +250,7 @@ const AdminOlympiadResults: React.FC = () => {
                             <div className="flex items-center justify-between gap-2"><span className="text-xs font-bold text-text-primary">Rank {rank}</span><span className="text-[11px] text-text-muted">{r.standardLabel}</span></div>
                             <p className="font-heading font-bold text-text-primary mt-1 break-words">{r.name}</p>
                             <p className="text-2xl font-heading font-bold text-brand-primary mt-1">{pct(r.overallPct)}</p>
-                            <p className="text-[11px] text-text-secondary mt-1">Exam {marks(r.examMarks, r.examMax)} · Interview {marks(r.interviewMarks, r.interviewMax)}</p>
+                            <p className="text-[11px] text-text-secondary mt-1">Exam {marks(r.examMarks, r.examMax)} {ivOn && <>· Interview {marks(r.interviewMarks, r.interviewMax)}</>}</p>
                           </button>
                         );
                       })}
@@ -279,7 +280,7 @@ const AdminOlympiadResults: React.FC = () => {
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mt-2">
                           <dt className="text-text-muted">Exam</dt><dd>{marks(r.examMarks, r.examMax) ? <>{marks(r.examMarks, r.examMax)} <span className="text-text-muted">({pct(r.examPct)})</span></> : <Pending text={r.examSubmitted ? 'Awaiting evaluation' : 'Not submitted'} />}</dd>
-                          <dt className="text-text-muted">Interview</dt><dd><InterviewCell row={r} /></dd>
+                          {ivOn && <><dt className="text-text-muted">Interview</dt><dd><InterviewCell row={r} /></dd></>}
                           <dt className="text-text-muted">Overall</dt><dd className="font-semibold">{marks(r.overallMarks, r.overallMax) ? <>{marks(r.overallMarks, r.overallMax)} ({pct(r.overallPct)})</> : <Pending />}</dd>
                           <dt className="text-text-muted">Result</dt><dd><StatusChip status={r.resultStatus} /></dd>
                         </dl>
@@ -296,11 +297,11 @@ const AdminOlympiadResults: React.FC = () => {
                           <SortHeader label="Std" field="standard" q={query} onSort={onSort} />
                           <SortHeader label="Exam marks" q={query} onSort={onSort} />
                           <SortHeader label="Exam %" field="exam" q={query} onSort={onSort} />
-                          <SortHeader label="Interview marks" q={query} onSort={onSort} />
-                          <SortHeader label="Interview %" field="interview" q={query} onSort={onSort} />
+                          {ivOn && <SortHeader label="Interview marks" q={query} onSort={onSort} />}
+                          {ivOn && <SortHeader label="Interview %" field="interview" q={query} onSort={onSort} />}
                           <SortHeader label="Overall marks" q={query} onSort={onSort} />
                           <SortHeader label="Overall %" field="overall" q={query} onSort={onSort} />
-                          <SortHeader label="Interview status" q={query} onSort={onSort} />
+                          {ivOn && <SortHeader label="Interview status" q={query} onSort={onSort} />}
                           <SortHeader label="Result" q={query} onSort={onSort} />
                           <SortHeader label="Actions" q={query} onSort={onSort} />
                         </tr>
@@ -313,11 +314,11 @@ const AdminOlympiadResults: React.FC = () => {
                             <td className="px-3 py-2.5 whitespace-nowrap">{r.standard}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{marks(r.examMarks, r.examMax) || <Pending text={r.examSubmitted ? 'Awaiting evaluation' : 'Not submitted'} />}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">{pct(r.examPct) || '—'}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{marks(r.interviewMarks, r.interviewMax) || <Pending />}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">{pct(r.interviewPct) || '—'}</td>
+                            {ivOn && <td className="px-3 py-2.5 whitespace-nowrap">{marks(r.interviewMarks, r.interviewMax) || <Pending />}</td>}
+                            {ivOn && <td className="px-3 py-2.5 whitespace-nowrap">{pct(r.interviewPct) || '—'}</td>}
                             <td className="px-3 py-2.5 whitespace-nowrap font-semibold">{marks(r.overallMarks, r.overallMax) || <Pending />}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap font-semibold">{pct(r.overallPct) || '—'}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap text-xs">{INTERVIEW_LABEL[r.interviewStatus]}</td>
+                            {ivOn && <td className="px-3 py-2.5 whitespace-nowrap text-xs">{INTERVIEW_LABEL[r.interviewStatus]}</td>}
                             <td className="px-3 py-2.5"><StatusChip status={r.resultStatus} /></td>
                             <td className="px-3 py-2.5"><button type="button" onClick={() => setOpen({ id: r.studentId, examId: r.examId })} className="text-xs font-semibold text-brand-primary hover:underline whitespace-nowrap">View details</button></td>
                           </tr>

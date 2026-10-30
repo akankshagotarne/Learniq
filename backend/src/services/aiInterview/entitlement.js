@@ -16,6 +16,9 @@ const resolveEntitlement = async (user, examId) => {
   const exam = await OlympiadExam.findOne({ _id: examId, isPublished: true }).lean();
   if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
 
+  if (!(await require('../interviewPolicy').enabledForExam(exam))) { // Exam Only event: no interview of any kind
+    throw new ApiError(409, require('../interviewPolicy').NOT_INCLUDED_MESSAGE, require('../interviewPolicy').NOT_INCLUDED_CODE);
+  }
   const payment = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS', component: { $ne: 'INTERVIEW' } }).lean();
   if (!payment) {
     throw new ApiError(403, 'AI Interview access requires a successful exam purchase.', 'PURCHASE_REQUIRED');

@@ -23,6 +23,9 @@ const olympiadEventSchema = new mongoose.Schema({
   // Event-level settings the existing global calendar (config/schedule.js, the 17/18 Oct values) cannot express per event.
   // All optional: an event without them keeps the global behaviour, so the 17 Oct event is unaffected.
   examFee: { type: Number, min: 1, default: null },             // whole rupees, applied to every exam of the event (exam.examFee)
+  // Does this event include an interview? true = Exam + Interview, false = Exam Only. NO default on purpose: an event saved before this field
+  // existed (undefined) keeps its old behaviour (interview offered); every new event stores an explicit value (services/interviewPolicy.js).
+  interviewEnabled: { type: Boolean },
   interviewFee: { type: Number, min: 1, default: null },        // whole rupees (exam.interviewFee)
   interviewOpensAt: { type: Date, default: null },              // new interview requests / appointments from this instant ...
   interviewClosesAt: { type: Date, default: null },             // ... until (exclusive) this instant

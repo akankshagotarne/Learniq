@@ -20,9 +20,9 @@ const overview = handler(async (req, res) => {
   const eventId = eventOf(req.query.event); // optional: the schedule of ONE Olympiad event
   const exams = await svc.interviewExams(eventId);
   const examIds = exams.map((e) => e._id);
-  const schedules = await InterviewSchedule.find(eventId ? { exam: { $in: examIds } } : {});
+  const schedules = await InterviewSchedule.find({ exam: { $in: examIds } }); // Exam Only events are never listed
   const by = new Map(schedules.map((s) => [String(s.exam), s]));
-  const slots = await InterviewSlot.find({ status: 'SCHEDULED', ...(eventId ? { exam: { $in: examIds } } : {}) }).sort('startAt');
+  const slots = await InterviewSlot.find({ status: 'SCHEDULED', exam: { $in: examIds } }).sort('startAt');
   const people = await User.find({ _id: { $in: [...new Set(slots.flatMap((s) => [String(s.student), s.teacher && String(s.teacher)].filter(Boolean)))] } });
   const name = new Map(people.map((u) => [String(u._id), u.name]));
   const teachers = (await User.find({ role: 'teacher', isApproved: true, isActive: true })).map((t) => ({ _id: String(t._id), name: t.name }));

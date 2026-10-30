@@ -99,24 +99,26 @@ const olympiadRankings = async (query) => {
     exam: marks(r.examMarks, r.examMax), examPct: pct(r.examPct), interview: r.interviewMarks === null ? (INTERVIEW[r.interviewStatus] || 'Pending') : marks(r.interviewMarks, r.interviewMax), interviewPct: pct(r.interviewPct),
     overall: marks(r.overallMarks, r.overallMax), overallPct: pct(r.overallPct), result: RESULT[r.resultStatus] || r.resultStatus,
   }));
+  const ivOn = d.event ? d.event.interviewIncluded !== false : true; // Exam Only: no interview columns in Excel / PDF
+  const dropIv = (cols) => (ivOn ? cols : cols.filter((c) => !/^interview/.test(c.key)));
   return {
     title: `LearnIQ Olympiad Results Report — ${d.eventName}`, sheetName: 'Olympiad results', fileBase: `learniq-olympiad-results-${String(d.eventName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'event'}${d.f.standard === 'all' ? '' : `-std-${d.f.standard}`}`,
     filters: d.filterList,
-    columns: [
+    columns: dropIv([
       col('eventRank', 'Overall Event Rank', 10, 'number', { align: 'right' }), col('standardRank', 'Standard Rank', 10, 'number', { align: 'right' }),
       col('name', 'Student Name', 24), col('standard', 'Standard', 11), col('event', 'Event Name', 26),
       col('examMarks', 'Exam Marks Obtained', 10, 'number'), col('examMax', 'Exam Maximum Marks', 10, 'number'), col('examPct', 'Exam Percentage', 10, 'number'),
       col('interviewMarks', 'Interview Marks Obtained', 11, 'number'), col('interviewMax', 'Interview Maximum Marks', 11, 'number'), col('interviewPct', 'Interview Percentage', 11, 'number'),
       col('overallMarks', 'Overall Marks Obtained', 10, 'number'), col('overallMax', 'Overall Maximum Marks', 10, 'number'), col('overallPct', 'Overall Percentage', 10, 'number'),
       col('interviewStatus', 'Interview Status', 18), col('resultStatus', 'Result Status', 12), col('finalizedAt', 'Result Finalized Date', 17, 'datetime'),
-    ],
+    ]),
     rows,
     pdf: {
-      columns: [
+      columns: dropIv([
         col('eventRank', 'Event Rank', 6, 'text', { align: 'right' }), col('standardRank', 'Std Rank', 6, 'text', { align: 'right' }),
         col('name', 'Student Name', 22), col('standard', 'Std', 4), col('exam', 'Exam Marks', 10), col('examPct', 'Exam %', 8),
         col('interview', 'Interview Marks', 12), col('interviewPct', 'Interview %', 9), col('overall', 'Overall Marks', 10), col('overallPct', 'Overall %', 8), col('result', 'Result Status', 10),
-      ],
+      ]),
       rows: pdfRows,
     },
   };

@@ -12,7 +12,7 @@ const fmt = (iso: string) => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/
 
 /** Admin: when the interviews happen (per exam, or per student with a teacher) and whether reminders really go out. All times are IST. */
 const AdminInterviewSchedule: React.FC = () => {
-  const ev = useOlympiadEvent();
+  const ev = useOlympiadEvent({ interviewOnly: true });
   const [data, setData] = useState<AdminScheduleData | null>(null);
   const [rem, setRem] = useState<ReminderOverview | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -44,8 +44,10 @@ export interface OlympiadResultHidden {
 export interface OlympiadCompletion {
   submitted: true;
   submittedAt: string;
-  interviewDate: string;
-  interviewOpensAt: string;
+  /** false = Exam Only event: the interview fields below are absent and nothing about an interview is shown */
+  interviewIncluded?: boolean;
+  interviewDate?: string;
+  interviewOpensAt?: string;
   interviewClosesAt?: string;
   resultsReleaseAt?: string | null;
   interviewSelected: boolean;
@@ -129,7 +131,7 @@ export interface CertificateVerification {
   grade?: CertificateGrade | null;
   result?: 'PASS' | 'BELOW_PASS';
   resultLabel?: string;
-  interviewStatus?: 'Completed' | 'Not completed' | 'Participated' | 'Not Participated' | 'Pending';
+  interviewStatus?: 'Completed' | 'Not completed' | 'Participated' | 'Not Participated' | 'Pending' | 'Not applicable' | 'Not Applicable';
   issueDateLabel?: string;
 }
 
@@ -206,9 +208,11 @@ export interface OlympiadExam {
   /** Separate, backend-decided entitlements: the exam and the interview are unlocked independently (Rs 10 or 1 credit each). */
   examUnlocked?: boolean;
   examVia?: UnlockVia | null;
+  /** Event-level setting: false = Exam Only (no interview anywhere); undefined/true = Exam + Interview */
+  interviewIncluded?: boolean;
   interviewUnlocked?: boolean;
   interviewVia?: UnlockVia | null;
-  prices?: { EXAM: number; INTERVIEW: number; currency: string };
+  prices?: { EXAM: number; INTERVIEW?: number; currency: string };
   attemptStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
   result: OlympiadResultView | null;
   completion?: OlympiadCompletion | null;

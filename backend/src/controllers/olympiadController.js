@@ -76,6 +76,7 @@ const windowState = (exam, now = new Date()) => {
  * CANCELLED event accepts no new registration or start, and the event's own registration window applies to registering.
  * The event comes from the exam record (never from an id supplied by the browser). Exams outside the event model are unaffected.
  */
+const interviewPolicy = require('../services/interviewPolicy');
 const publicLabel = (l) => { if (!l) return {}; const { eventState, ...rest } = l; return rest; }; // the event id / name / date a student or admin card shows
 
 const eventGuard = async (exam, purpose = 'view', now = new Date()) => {
@@ -90,6 +91,7 @@ const loadExam = async (id) => {
   const exam = await OlympiadExam.findOne({ _id: id, isPublished: true });
   if (!exam) throw new ApiError(404, 'Examination not found.', 'EXAM_NOT_FOUND');
   await eventGuard(exam, 'view');
+  exam._interviewIncluded = await interviewPolicy.enabledForExam(exam);   // non-persisted: examPublic() / completion read it
   return exam;
 };
 
@@ -326,11 +328,22 @@ const studentResult = (attempt, exam) => {
 };
 
 /** completionFor() with the interview day of the exam's own event (the original event keeps the global 17/18 Oct calendar). */
-const completionOf = async (attempt, exam) => completionFor(attempt, exam, await require('../services/eventSchedule').windowForExam(exam));
+const completionOf = async (attempt, exam) => {
+  if (exam._interviewIncluded === undefined) exam._interviewIncluded = await interviewPolicy.enabledForExam(exam);
+  return completionFor(attempt, exam, await require('../services/eventSchedule').windowForExam(exam));
+};
 
 /** The completion screen's payload: submission is persisted; eligibility for the interview comes from the backend rules. */
-const completionFor = (attempt, exam, win = require('../services/eventSchedule').GLOBAL) => ({
+const completionFor = (attempt, exam, win = require('../services/eventSchedule').GLOBAL) => (exam._interviewIncluded === false ? {
   submitted: true,
+  submittedAt: attempt.submittedAt,
+  interviewIncluded: false,   // Exam Only event: no interview date, window or eligibility is described
+  resultsReleased: resultsReleased(exam),
+  resultsReleaseAt: exam.resultsPublishedAt || exam.resultsPublishAt || null,
+  interviewSelected: false,
+} : {
+  submitted: true,
+  interviewIncluded: true,
   submittedAt: attempt.submittedAt,
   interviewDate: istDate(win.opensAt),
   interviewOpensAt: win.opensAt.toISOString(),
@@ -364,7 +377,8 @@ const examPublic = (exam) => ({
   negativeMarking: exam.negativeMarking,
   negativeMarkValue: exam.negativeMarkValue,
   fee: priceFor('EXAM', exam), // what the student pays to unlock the EXAM (Rs 10 default); exam.fee stays the legacy bundle price
-  prices: pricingFor(exam),
+  interviewIncluded: exam._interviewIncluded !== false,
+  prices: exam._interviewIncluded === false ? { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' } : pricingFor(exam),   // an Exam Only event has no interview price
   currency: exam.currency,
   sections: exam.sections,
   proctoring: publicPolicy(exam.proctoring),
@@ -410,6 +424,7 @@ const buildApprovalState = async (exam, userId, now) => {
 
 const buildState = async (exam, userId, now = new Date()) => {
   if (isApprovalExam(exam)) return buildApprovalState(exam, userId, now);
+  const interviewIncluded = exam._interviewIncluded !== undefined ? exam._interviewIncluded : await interviewPolicy.enabledForExam(exam);
   const [success, latest, foundAttempt, grant, ivEnt] = await Promise.all([
     OlympiadPayment.findOne({ student: userId, exam: exam._id, status: 'SUCCESS', component: examAccess.EXAM_PAY }),
     OlympiadPayment.findOne({ student: userId, exam: exam._id, component: examAccess.EXAM_PAY }).sort({ createdAt: -1 }),
@@ -455,9 +470,10 @@ const buildState = async (exam, userId, now = new Date()) => {
     // Separate, backend-decided component entitlements (the browser never infers one from the other)
     examUnlocked: paid,
     examVia: paid ? examAccess.examVia({ payment: success, grant }) : null,
-    interviewUnlocked: ivEnt.entitled,
-    interviewVia: ivEnt.via,
-    prices: pricingFor(exam),
+    interviewIncluded,
+    interviewUnlocked: interviewIncluded && ivEnt.entitled,
+    interviewVia: interviewIncluded ? ivEnt.via : null,
+    prices: interviewIncluded ? pricingFor(exam) : { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' },
     attemptStatus: attempt ? attempt.status : 'NOT_STARTED',
     result: attempt && attempt.status === 'COMPLETED' ? studentResult(attempt, exam) : null,
     completion: attempt && attempt.status === 'COMPLETED' ? await completionOf(attempt, exam) : null,
@@ -515,8 +531,8 @@ const getExam = handler(async (req, res) => {
   res.json({
     success: true,
     exam: {
-      ...examPublic(exam),
       ...publicLabel((await events.eventLabels([exam])).get(String(exam.event))),
+      ...examPublic(exam),
       instructions: exam.instructions,
       ...(await buildState(exam, req.user._id, now)),
     },
@@ -607,6 +623,8 @@ const componentOf = (req) => {
 
 /** Why (if at all) the student cannot unlock this COMPONENT right now (credit or payment). Backend truth. */
 const componentBlocker = async (user, exam, component) => {
+  // Exam Only event: no interview credit, payment order or entitlement can be created, whatever the client sends (HTTP 409)
+  if (component === 'INTERVIEW' && !(await interviewPolicy.enabledForExam(exam))) return { code: interviewPolicy.NOT_INCLUDED_CODE, message: interviewPolicy.NOT_INCLUDED_MESSAGE };
   if (isApprovalExam(exam) || !(exam.fee > 0)) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit or payment is needed.' };
   if (component === 'INTERVIEW') {
     const ent = await examAccess.interviewEntitlementFor(user._id, exam._id);
@@ -634,7 +652,7 @@ const getCreditInfo = handler(async (req, res) => {
   const e = view(eb);
   res.json({
     success: true, balance, ...e, creditsPerExam: 1, creditsPerComponent: 1, enabled: settings.enabled !== false,
-    components: { EXAM: e, INTERVIEW: view(ib) }, prices: pricingFor(exam),
+    components: { EXAM: e, INTERVIEW: view(ib) }, prices: exam._interviewIncluded === false ? { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' } : pricingFor(exam),
   });
 });
 

@@ -11,6 +11,8 @@ interface Props {
   /** rupees for THIS component (display only; the server decides the real amount) */
   price: number;
   credit: ExamCreditInfo;
+  /** false = Exam Only event: the dialog mentions no interview */
+  interviewIncluded?: boolean;
   /** which action is running: the dialog locks while a request is in flight (no double clicks) */
   busy: 'credit' | 'pay' | null;
   onPay: () => void;
@@ -22,7 +24,7 @@ interface Props {
  * Payment method choice, shown only when the student has a usable exam credit. 1 credit unlocks this one exam; it is NOT a payment and no
  * Razorpay order is created for it. The server re-checks everything (eligibility, window, balance) - this dialog only asks.
  */
-const ExamPaymentDialog: React.FC<Props> = ({ exam, component, price, credit, busy, onPay, onUseCredit, onClose }) => {
+const ExamPaymentDialog: React.FC<Props> = ({ exam, component, price, credit, busy, onPay, onUseCredit, onClose, interviewIncluded = true }) => {
   const what = component === 'INTERVIEW' ? 'interview' : 'exam';
   const uid = useId();
   const first = useRef<HTMLButtonElement>(null);
@@ -60,7 +62,7 @@ const ExamPaymentDialog: React.FC<Props> = ({ exam, component, price, credit, bu
             <span className="min-w-0"><span className="block text-sm font-bold text-text-primary">Unlock {what === 'interview' ? 'Interview' : 'Exam'} — {formatRupees(price)}</span><span className="block text-xs text-text-secondary">Secure payment through Razorpay. Your credits stay unused. Only this {what} is paid for.</span></span>
           </button>
         </div>
-        <p className="text-[11px] text-text-muted mt-3">One credit unlocks one part only (the exam or the interview), never both. <Link to="/student/refer" className="underline font-semibold text-brand-primary">Earn more credits</Link></p>
+        <p className="text-[11px] text-text-muted mt-3">{interviewIncluded ? 'One credit unlocks one part only (the exam or the interview), never both.' : 'One credit unlocks this examination.'} <Link to="/student/refer" className="underline font-semibold text-brand-primary">Earn more credits</Link></p>
       </div>
     </div>
   );

@@ -375,9 +375,9 @@ const StudentExamsPage: React.FC = () => {
                     onUseCredit={(e) => unlockWithCredit(e, 'EXAM')}
                     creditBalance={creditBalance}
                     creditBusy={payingId === `${o._id}:EXAM`}
-                    interview={interviews[o._id]}
+                    interview={o.interviewIncluded === false ? undefined : interviews[o._id]}
                   />
-                  {o.accessMode !== 'approval' && (
+                  {o.accessMode !== 'approval' && o.interviewIncluded !== false && ( // Exam Only event: no interview card, fee, payment or Start Interview
                     <OlympiadInterviewCard
                       exam={o}
                       interview={interviews[o._id]}

@@ -10,9 +10,9 @@ const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* 
  * The event every Olympiad admin page works inside. Priority: ?event= in the URL, then the last choice, then the server's default
  * (live > upcoming > most recent). There is deliberately no "all events" value: records of different events are never mixed.
  */
-export const useOlympiadEvent = () => {
+export const useOlympiadEvent = (opts: { interviewOnly?: boolean } = {}) => {
   const [params, setParams] = useSearchParams();
-  const [options, setOptions] = useState<EventOption[]>([]);
+  const [allOptions, setOptions] = useState<EventOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [defaultId, setDefaultId] = useState<string | null>(null);
@@ -23,9 +23,11 @@ export const useOlympiadEvent = () => {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // interview pages list only events that include an interview (Exam Only events have no interview management)
+  const options = opts.interviewOnly ? allOptions.filter(o => o.interviewEnabled !== false) : allOptions;
   const known = (id: string) => !!id && options.some(o => o._id === id);
   const fromUrl = params.get('event') || '';
-  const eventId = known(fromUrl) ? fromUrl : known(read()) ? read() : (defaultId || '');
+  const eventId = known(fromUrl) ? fromUrl : known(read()) ? read() : (known(defaultId || '') ? (defaultId || '') : (options[0]?._id || ''));
 
   const setEvent = useCallback((id: string) => {
     write(id);

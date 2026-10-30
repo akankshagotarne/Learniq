@@ -35,7 +35,7 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, c
   const badge = (() => {
     switch (state) {
       case 'completed':
-        if (interview && !approval && interview.stage !== 'LOCKED' && !interview.workflowComplete) {
+        if (interview && !approval && exam.interviewIncluded !== false && interview.stage !== 'LOCKED' && !interview.workflowComplete) {
           const label = interview.stage === 'IN_PROGRESS' ? 'Interview In Progress' : interview.stage === 'EVALUATION_PENDING' ? 'Evaluation Pending' : interview.stage === 'REQUESTED' ? 'Waiting for Teacher' : 'Interview Pending';
           return (
             <span className="badge-warning text-[10px] py-0.5 px-2 flex items-center gap-1" data-testid="interview-badge">
@@ -146,9 +146,9 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, c
             <span className="min-w-0">Exam: {exam.fee > 0 ? formatRupees(examPrice) : 'FREE'}</span>
           </div>
         </div>
-        {!approval && exam.prices && exam.fee > 0 && (
+        {!approval && exam.prices && exam.fee > 0 && exam.interviewIncluded !== false && exam.prices.INTERVIEW !== undefined && (
           <p className="text-[11px] text-text-muted mb-3" data-testid="price-breakdown">
-            Exam {formatRupees(exam.prices.EXAM)} · Interview {formatRupees(exam.prices.INTERVIEW)} · <b className="text-text-secondary">Total {formatRupees(exam.prices.EXAM + exam.prices.INTERVIEW)}</b>
+            <b className="text-text-secondary" data-testid="interview-included">Interview Included</b> · Exam {formatRupees(exam.prices.EXAM)} · Interview {formatRupees(exam.prices.INTERVIEW)} · <b className="text-text-secondary">Total {formatRupees(exam.prices.EXAM + exam.prices.INTERVIEW)}</b>
             <span className="block">Each is paid separately; 1 credit covers the exam only.</span>
           </p>
         )}

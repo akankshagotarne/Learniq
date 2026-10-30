@@ -55,7 +55,7 @@ const ResultDrawer: React.FC<{ studentId: string; eventId: string; examId?: stri
             <Section title="Event">
               <Line k="Event" v={data.event.name} />
               <Line k="Exam date" v={data.event.examDateIST || '—'} />
-              <Line k="Interview date" v={data.event.interviewDate || 'Not scheduled'} />
+              {data.event.interviewIncluded !== false && <Line k="Interview date" v={data.event.interviewDate || 'Not scheduled'} />}
             </Section>
 
             <Section title="Examination" testId="drawer-exam">
@@ -65,7 +65,7 @@ const ResultDrawer: React.FC<{ studentId: string; eventId: string; examId?: stri
               {data.exam.submittedAt && <Line k="Submitted at" v={formatISTDateTime(data.exam.submittedAt)} />}
             </Section>
 
-            <Section title="Interview" testId="drawer-interview">
+            {data.event.interviewIncluded !== false && <Section title="Interview" testId="drawer-interview">
               <Line k="Status" v={INTERVIEW_LABEL[data.interview.status]} />
               <Line k="Marks" v={marks(data.interview.marks, data.interview.max)} />
               <Line k="Percentage" v={fmt(data.interview.percentage, '%')} />
@@ -80,7 +80,7 @@ const ResultDrawer: React.FC<{ studentId: string; eventId: string; examId?: stri
               {data.interview.history.length > 1 && (
                 <p className="pt-2 mt-1 border-t border-border-subtle text-[11px] text-text-muted">Interview sessions: {data.interview.history.map(h => h.status.toLowerCase().replace(/_/g, ' ')).join(', ')}. Only the submitted evaluation counts; sessions are never added together.</p>
               )}
-            </Section>
+            </Section>}
 
             <Section title="Overall result" testId="drawer-overall">
               <Line k="Result status" v={<span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${RESULT_CLS[data.overall.status]}`}>{RESULT_LABEL[data.overall.status]}</span>} />
@@ -89,7 +89,7 @@ const ResultDrawer: React.FC<{ studentId: string; eventId: string; examId?: stri
               <Line k="Overall event rank" v={data.overall.eventRank === null ? 'Not ranked yet' : `${data.overall.tied ? '= ' : ''}${data.overall.eventRank} of ${data.overall.rankedInEvent}`} />
               <Line k={`${data.student.standardLabel} rank`} v={data.overall.standardRank === null ? 'Not ranked yet' : `${data.overall.standardRank} of ${data.overall.rankedInStandard}`} />
               {data.overall.finalizedAt && <Line k="Finalized" v={formatISTDateTime(data.overall.finalizedAt)} />}
-              {!data.overall.finalized && <p className="text-xs text-text-muted pt-1">A final rank needs a scored exam and a submitted interview evaluation. Missing marks are never counted as zero.</p>}
+              {!data.overall.finalized && <p className="text-xs text-text-muted pt-1">{data.event.interviewIncluded === false ? 'A final rank needs a scored exam.' : 'A final rank needs a scored exam and a submitted interview evaluation.'} Missing marks are never counted as zero.</p>}
               <p className="text-[11px] text-text-muted pt-1">{data.formula}</p>
             </Section>
           </>

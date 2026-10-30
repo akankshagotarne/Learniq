@@ -24,11 +24,12 @@ const tabFromState = (state: string): ExamTab | null => {
 };
 
 export const olympiadTab = (
-  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean },
+  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean; interviewIncluded?: boolean },
   interview?: InterviewInfo,
 ): ExamTab | null => {
   const tab = exam.tab || tabFromState(exam.state);
   if (tab !== 'completed') return tab;
+  if (exam.interviewIncluded === false) return 'completed'; // Exam Only event: a submitted exam is simply completed - there is no interview to wait for
   const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
   if (needsInterview && !interview!.workflowComplete) return 'available';
   // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
