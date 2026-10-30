@@ -29,6 +29,22 @@ const oid = (v) => String(v && v._id ? v._id : v);
 const sameInstant = (a, b) => (a ? new Date(a).getTime() : null) === (b ? new Date(b).getTime() : null);
 const PUBLIC_ROOT = path.join(__dirname, '..', '..', '..', 'frontend', 'public');
 
+const MAX_PAPER_BYTES = 40 * 1024 * 1024; // one standard's file (diagrams are embedded); far above the real ~0.1-0.4 MB
+
+/**
+ * Looks at the private paper folder WITHOUT reading any question: is it configured, does it exist, can the server read it.
+ * Returns { state, message, hint } where state is 'not-configured' | 'folder-missing' | 'unreadable' | 'ok'.
+ * The folder path itself is never returned (it is an environment value).
+ */
+const inspectFolder = (cfg = defaultCfg) => {
+  const dir = cfg.DATA_DIR;
+  if (!dir) return { state: 'not-configured', message: 'Question paper storage is not configured on the server.', hint: 'Set OLYMPIAD_PAPER_DIR to a private folder on the server that contains the paper files (see docs/EXAM_DATA_SECURITY.md), or run the import script from the administrator\'s computer.' };
+  let st = null; try { st = fs.statSync(dir); } catch (e) { st = null; }
+  if (!st || !st.isDirectory()) return { state: 'folder-missing', message: 'The configured question paper folder does not exist on the server.', hint: `OLYMPIAD_PAPER_DIR is set, but the folder (and its "${path.basename(dir)}" sub-folder, if used) was not found. Render's free plan has no persistent disk, so files placed on the server are lost at every restart.` };
+  try { fs.accessSync(dir, fs.constants.R_OK); } catch (e) { return { state: 'unreadable', message: 'The question paper folder exists but the server may not read it.', hint: 'Check the folder permissions for the user the backend runs as.' }; }
+  return { state: 'ok', message: '', hint: '' };
+};
+
 const locks = new Set(); // one import per event at a time inside this process; the unique indexes guard across processes
 
 /** Reads and validates one standard's paper file. Returns { paper, problems } - problems make the standard un-importable. */
@@ -105,7 +121,7 @@ const loadTarget = async (eventId) => {
 /** The Olympiad events that may receive this import (for the admin's selector). */
 const candidates = async () => {
   const all = await OlympiadEvent.find({});
-  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && paperSets.byDay(ymdIST(e.examDate))).map((e) => ({ _id: oid(e), name: e.name, state: e.state, paperSet: e.paperSet || null }));
+  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && paperSets.byDay(ymdIST(e.examDate))).map((e) => ({ _id: oid(e), name: e.name, state: e.state, day: ymdIST(e.examDate), paperSet: e.paperSet || null }));
 };
 
 const settingsDiff = (event, cfg) => {
@@ -172,13 +188,25 @@ const parseStandards = (raw) => {
 const plan = async (eventId, { standards } = {}) => {
   const { event, cfg } = await loadTarget(eventId);
   const list = parseStandards(standards);
+  const eventInfo = { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null };
+  const folder = inspectFolder(cfg);
+  if (folder.state !== 'ok') {
+    // ONE global message instead of the same problem repeated for every standard; nothing was read, nothing is ready.
+    return { dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET, settings: [], rows: [], summary: summarize([]), blocking: [{ standard: null, problems: [folder.message] }], canApply: false,
+      storage: { state: folder.state, message: folder.message, hint: folder.hint, standards: [] } };
+  }
   const exams = await events.examsOfEvent(event._id);
   const rows = [];
   for (const std of list) rows.push((await planStandard(event, std, exams.find((e) => e.standard === std), cfg)).out);
   const blocking = rows.filter((r) => r.problems.length).map((r) => ({ standard: r.standard, problems: r.problems }));
+  const fileStatus = (r) => (!r.problems.length ? 'ok' : r.problems.some((x) => /is missing\.$/.test(x) && /^Paper file/.test(x)) ? 'missing' : 'invalid');
+  const perStandard = rows.map((r) => ({ standard: r.standard, file: `std${r.standard}.json`, status: fileStatus(r), questions: r.found, expected: r.expected, problems: r.problems }));
+  const state = perStandard.every((x) => x.status === 'ok') ? (rows.some((r) => r.review.length) ? 'invalid' : 'valid') : perStandard.some((x) => x.status === 'invalid') ? 'invalid' : 'files-missing';
+  const messages = { valid: 'All papers were read and passed the checks.', 'files-missing': 'The folder is configured, but some paper files are missing.', invalid: 'Paper files were found, but some are invalid or incomplete.' };
   return {
-    dryRun: true, event: { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null }, paperSet: cfg.PAPER_SET,
+    dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET,
     settings: settingsDiff(event, cfg), rows, summary: summarize(rows), blocking, canApply: blocking.length === 0,
+    storage: { state, message: messages[state], hint: '', standards: perStandard },
   };
 };
 
@@ -217,6 +245,8 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
   locks.add(key);
   try {
     const { event, cfg } = await loadTarget(eventId);
+    const folder = inspectFolder(cfg);
+    if (folder.state !== 'ok') throw new EventError(422, folder.message, 'PAPER_STORAGE_UNAVAILABLE', { storage: { state: folder.state } });
     if (cfg.APPLY_EVENT_SETTINGS === false) applySettings = false;
     const list = parseStandards(standards);
     const exams = await events.examsOfEvent(event._id);
@@ -292,4 +322,4 @@ const unresolvedReview = async (eventId) => {
     .map((e) => ({ standard: e.standard, review: e.paperImport.review.map((r) => ({ question: r.question, issue: r.issue })) }));
 };
 
-module.exports = { loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, readinessOf, loadTarget };
+module.exports = { inspectFolder, loadPaper, reviewOf, plan, apply, candidates, unresolvedReview, readinessOf, loadTarget };

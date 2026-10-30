@@ -84,3 +84,10 @@ The 31 Oct papers use the same importer (`backend/src/config/oct31Event.js`). Th
 
 The import fills the questions only: event fees, registration, interview and results times are never changed by it. Add
 `--durations` to also take the exam durations printed on the papers. The event stays in its current state (draft) until published.
+
+### Where the 31 Oct papers can live (Render free plan)
+The admin button "Import question papers" reads `OLYMPIAD_PAPER_DIR` **on the server**. A Render *free* web service has no persistent disk
+and no file access, so a folder there would be lost at every restart; a persistent disk needs a paid plan (owner decision). Until then,
+run the script above from the administrator's computer (it writes to the same database). Without the variable the admin screen shows one
+"storage not configured" message, the import button stays disabled, and every other part of LearnIQ keeps working.
+Find the event by date instead of by id: `node src/scripts/importPapers.js --dir D:\LearnIQ-private --day 2026-10-31`.

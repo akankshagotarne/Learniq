@@ -100,3 +100,40 @@ test('a 31 Oct import is refused for an event on another day', async () => {
   const other = await fake.OlympiadEvent.create({ name: 'Other', slug: 'other', examDate: at('2026-11-14T00:00:00'), standards: [1], state: 'draft' });
   await assert.rejects(() => paperImport.plan(other._id), /no question paper set/);
 });
+
+// ---- storage diagnostics: ONE global message, never a per-standard repeat; the dry run stays read-only ----
+test('storage: not configured -> a single global state, no per-standard rows, apply refused', async () => {
+  const saved = process.env.OLYMPIAD_PAPER_DIR; delete process.env.OLYMPIAD_PAPER_DIR;
+  try {
+    const r = await paperImport.plan(event._id);
+    assert.equal(r.storage.state, 'not-configured');
+    assert.deepEqual(r.rows, []);
+    assert.equal(r.canApply, false);
+    assert.equal(r.blocking.length, 1);
+    assert.ok(!JSON.stringify(r).includes(base), 'no folder path leaks to the client');
+    await assert.rejects(() => paperImport.apply(event._id, admin), (e) => e.code === 'PAPER_STORAGE_UNAVAILABLE');
+  } finally { process.env.OLYMPIAD_PAPER_DIR = saved; }
+});
+
+test('storage: folder set but missing, and folder present with some files missing', async () => {
+  const saved = process.env.OLYMPIAD_PAPER_DIR;
+  try {
+    process.env.OLYMPIAD_PAPER_DIR = path.join(base, 'does-not-exist');
+    assert.equal((await paperImport.plan(event._id)).storage.state, 'folder-missing');
+    const partial = fs.mkdtempSync(path.join(os.tmpdir(), 'oct31p-')); fs.mkdirSync(path.join(partial, 'oct31'));
+    fs.copyFileSync(path.join(base, 'oct31', 'std1.json'), path.join(partial, 'oct31', 'std1.json'));
+    process.env.OLYMPIAD_PAPER_DIR = partial;
+    const r = await paperImport.plan(event._id);
+    assert.equal(r.storage.state, 'files-missing');
+    assert.equal(r.storage.standards.filter((x) => x.status === 'ok').length, 1);
+    assert.equal(r.storage.standards.filter((x) => x.status === 'missing').length, 9);
+    assert.equal(r.canApply, false);
+  } finally { process.env.OLYMPIAD_PAPER_DIR = saved; }
+});
+
+test('storage: complete folder -> valid and ready', async () => {
+  const r = await paperImport.plan(event._id);
+  assert.equal(r.storage.state, 'valid');
+  assert.equal(r.canApply, true);
+  assert.equal(r.storage.standards.length, 10);
+});

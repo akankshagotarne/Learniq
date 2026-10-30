@@ -5,6 +5,7 @@
  *   node src/scripts/importPapers.js --apply            # imports + applies the agreed event settings (fees, deadline, interview, results)
  *   node src/scripts/importPapers.js --dir <private folder>   # base folder; 24 Oct: std1.json.. directly in it, 31 Oct: in its oct31 sub-folder (or set OLYMPIAD_PAPER_DIR); never inside the repository
  *   node src/scripts/importPapers.js --event <id>       # pick the event when more than one qualifies
+ *   node src/scripts/importPapers.js --day 2026-10-31   # find the event by its exam date (exactly one must match; its name, id and state are printed)
  *   node src/scripts/importPapers.js --standards 1,2,3  # limit to some standards
  *   node src/scripts/importPapers.js --apply --durations  # also take the exam durations printed in the PDFs (Std 6/7 = 120, Std 8 = 60)
  *
@@ -26,7 +27,8 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? pr
   await connectDB();
   let eventId = arg('--event');
   if (!eventId) {
-    const c = await paper.candidates();
+    let c = await paper.candidates();
+    if (arg('--day')) c = c.filter((e) => e.day === arg('--day'));
     if (c.length !== 1) { console.log('Matching events:', JSON.stringify(c, null, 2)); throw new Error(c.length ? 'More than one event qualifies: pass --event <id>.' : 'No Olympiad event with a known paper set found.'); }
     eventId = c[0]._id;
   }
