@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { OlympiadQuestion } = require('../models/Olympiad');
-const cfg = require('../config/oct24Event');
+const paperSets = require('../config/paperSets');
 const { hasMarathi } = require('./optionLanguage');
 
 const PUBLIC_ROOT = path.join(__dirname, '..', '..', '..', 'frontend', 'public');
@@ -37,7 +37,7 @@ const validateExam = async (exam) => {
   }
   const set = exam.paperImport && exam.paperImport.set;
   if (set) {
-    const expected = cfg.expectedQuestions[exam.standard];
+    const expected = paperSets.bySet(set).expectedQuestions[exam.standard];
     // question numbers the importer itself flagged as unresolvable stay an acknowledgeable REVIEW item (publishEvent handles those);
     // anything else that is absent is a hard failure
     const flagged = new Set(((exam.paperImport && exam.paperImport.review) || []).map((r) => r.question));

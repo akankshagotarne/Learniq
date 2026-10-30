@@ -14,7 +14,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const cfg = require('../config/oct24Event');
+const paperSets = require('../config/paperSets');
+const defaultCfg = require('../config/oct24Event');
 const { OlympiadEvent } = require('../models/OlympiadEvent');
 const { OlympiadExam, OlympiadQuestion, OlympiadAttempt } = require('../models/Olympiad');
 const events = require('./olympiadEvents');
@@ -31,7 +32,8 @@ const PUBLIC_ROOT = path.join(__dirname, '..', '..', '..', 'frontend', 'public')
 const locks = new Set(); // one import per event at a time inside this process; the unique indexes guard across processes
 
 /** Reads and validates one standard's paper file. Returns { paper, problems } - problems make the standard un-importable. */
-const loadPaper = (standard, dir = cfg.DATA_DIR) => {
+const loadPaper = (standard, dir, cfg = defaultCfg) => {
+  if (!dir) dir = cfg.DATA_DIR;
   if (!dir) return { paper: null, problems: ['The paper source folder is not configured: set OLYMPIAD_PAPER_DIR (a private folder outside the repository, see docs/EXAM_DATA_SECURITY.md).'] };
   const file = path.join(dir, `std${standard}.json`);
   if (!fs.existsSync(file)) return { paper: null, problems: [`Paper file std${standard}.json is missing.`] };
@@ -61,7 +63,7 @@ const loadPaper = (standard, dir = cfg.DATA_DIR) => {
 };
 
 /** Question numbers the paper should contain but does not (e.g. a question cut off in the source PDF). */
-const reviewOf = (standard, paper) => {
+const reviewOf = (standard, paper, cfg = defaultCfg) => {
   const review = [...(paper.review || [])];
   const have = new Set((paper.questions || []).map((q) => q.n));
   const expected = cfg.expectedQuestions[standard];
@@ -71,7 +73,7 @@ const reviewOf = (standard, paper) => {
   return review.sort((a, b) => a.question - b.question);
 };
 
-const questionDoc = (examId, paper, q) => {
+const questionDoc = (examId, paper, q, cfg = defaultCfg) => {
   const sec = paper.sections[q.section];
   return {
     exam: examId, questionNumber: q.n, subject: sec.name, section: sec.name, sectionMr: sec.nameMr || undefined,
@@ -93,19 +95,21 @@ const onlyTranslation = (existing, doc) => !FIELDS.some((f) => (existing[f] ?? u
 /** The event must be the real 24 Oct 2026 event: never the original (17 Oct / legacy) one, never a cancelled one. */
 const loadTarget = async (eventId) => {
   const event = await events.loadEvent(eventId);
-  if (event.isLegacy) throw new EventError(422, 'This is the original event; the 24 October papers can only be imported into the 24 October 2026 event.', 'WRONG_EVENT');
+  if (event.isLegacy) throw new EventError(422, 'This is the original event; the question papers can only be imported into a dated 2026 event.', 'WRONG_EVENT');
   if (event.state === 'cancelled') throw new EventError(409, 'A cancelled event cannot receive a question paper.', 'EVENT_CANCELLED');
-  if (ymdIST(event.examDate) !== cfg.EVENT_DAY) throw new EventError(422, `This event is dated ${ymdIST(event.examDate)}; the papers belong to the 24 October 2026 event.`, 'WRONG_EVENT');
-  return event;
+  const cfg = paperSets.byDay(ymdIST(event.examDate));
+  if (!cfg) throw new EventError(422, `This event is dated ${ymdIST(event.examDate)}; there is no question paper set for that day (known: ${paperSets.SETS.map((x) => x.EVENT_DAY).join(', ')}).`, 'WRONG_EVENT');
+  return { event, cfg };
 };
 
 /** The Olympiad events that may receive this import (for the admin's selector). */
 const candidates = async () => {
   const all = await OlympiadEvent.find({});
-  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && ymdIST(e.examDate) === cfg.EVENT_DAY).map((e) => ({ _id: oid(e), name: e.name, state: e.state, paperSet: e.paperSet || null }));
+  return all.filter((e) => !e.isLegacy && e.state !== 'cancelled' && paperSets.byDay(ymdIST(e.examDate))).map((e) => ({ _id: oid(e), name: e.name, state: e.state, paperSet: e.paperSet || null }));
 };
 
-const settingsDiff = (event) => {
+const settingsDiff = (event, cfg) => {
+  if (cfg.APPLY_EVENT_SETTINGS === false) return [];
   const t = { examFee: cfg.FEES.exam, interviewFee: cfg.FEES.interview, registrationClosesAt: cfg.registrationClosesAt, interviewOpensAt: cfg.interview.opensAt, interviewClosesAt: cfg.interview.closesAt, resultsPublishAt: cfg.resultsPublishAt, paperSet: cfg.PAPER_SET };
   return Object.entries(t).map(([field, target]) => {
     const current = event[field] ?? null;
@@ -116,15 +120,16 @@ const settingsDiff = (event) => {
 
 const imageState = (image) => {
   if (!image) return null;
+  if (/^data:image\//.test(image)) return 'embedded';
   const local = path.join(PUBLIC_ROOT, image.replace(/^\/+/, ''));
   return fs.existsSync(local) ? 'found' : 'not-checkable-on-this-host';
 };
 
-const planStandard = async (event, standard, exam) => {
-  const { paper, problems, warnings } = loadPaper(standard);
+const planStandard = async (event, standard, exam, cfg) => {
+  const { paper, problems, warnings } = loadPaper(standard, undefined, cfg);
   const out = { completions: paper ? (paper.completions || []) : [], warnings: warnings || [], standard, source: paper && paper.source, found: paper ? (paper.questions || []).length : 0, expected: cfg.expectedQuestions[standard], examId: exam ? oid(exam) : null, examExists: !!exam, problems, review: [], inserted: 0, updated: 0, unchanged: 0, removed: 0, duplicatesAvoided: 0, imagesAssociated: 0, imageFiles: [], locked: false, lockedReason: null, durationInPdf: paper ? paper.durationMinutes : null, durationNow: exam ? exam.durationMinutes : null, sourceIssues: paper ? paper.sourceIssues || [] : [] };
   if (!paper || problems.length) return { out, paper: null };
-  out.review = reviewOf(standard, paper);
+  out.review = reviewOf(standard, paper, cfg);
   const attempts = exam ? await OlympiadAttempt.countDocuments({ exam: exam._id }) : 0;
   out.attempts = attempts;
   const existing = exam ? await OlympiadQuestion.find({ exam: exam._id }).select('+correctAnswer +explanation') : [];
@@ -132,7 +137,7 @@ const planStandard = async (event, standard, exam) => {
   const incoming = new Set(); let safe = 0;
   for (const q of paper.questions) {
     incoming.add(q.n);
-    const doc = questionDoc(exam ? exam._id : null, paper, q);
+    const doc = questionDoc(exam ? exam._id : null, paper, q, cfg);
     const cur = byNo.get(q.n);
     if (!cur) out.inserted += 1;
     else { out.duplicatesAvoided += 1; if (differs(cur, doc)) { out.updated += 1; if (onlyTranslation(cur, doc)) safe += 1; } else out.unchanged += 1; }
@@ -165,15 +170,15 @@ const parseStandards = (raw) => {
 
 /** Read-only. Never writes. */
 const plan = async (eventId, { standards } = {}) => {
-  const event = await loadTarget(eventId);
+  const { event, cfg } = await loadTarget(eventId);
   const list = parseStandards(standards);
   const exams = await events.examsOfEvent(event._id);
   const rows = [];
-  for (const std of list) rows.push((await planStandard(event, std, exams.find((e) => e.standard === std))).out);
+  for (const std of list) rows.push((await planStandard(event, std, exams.find((e) => e.standard === std), cfg)).out);
   const blocking = rows.filter((r) => r.problems.length).map((r) => ({ standard: r.standard, problems: r.problems }));
   return {
     dryRun: true, event: { _id: oid(event), name: event.name, state: event.state, paperSet: event.paperSet || null }, paperSet: cfg.PAPER_SET,
-    settings: settingsDiff(event), rows, summary: summarize(rows), blocking, canApply: blocking.length === 0,
+    settings: settingsDiff(event, cfg), rows, summary: summarize(rows), blocking, canApply: blocking.length === 0,
   };
 };
 
@@ -184,7 +189,7 @@ const audit = async (admin, exam, field, previous, next, note) => {
   } catch (err) { console.error('[paper-import] audit write failed:', err.message); }
 };
 
-const createExam = async (event, std, paper) => OlympiadExam.create({
+const createExam = async (event, std, paper, cfg) => OlympiadExam.create({
   event: event._id, title: `${event.name} – ${ordinal(std)} Standard`, slug: `${event.slug}-std-${std}`, examType: 'olympiad', standard: std,
   accessMode: 'payment', accessEnabled: true, hardClose: false, instructions: events.DEFAULT_INSTRUCTIONS,
   startDate: cfg.examWindow.start, endDate: cfg.examWindow.end, durationMinutes: paper.durationMinutes || 60,
@@ -211,11 +216,12 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
   if (locks.has(key)) throw new EventError(409, 'An import for this event is already running.', 'IMPORT_RUNNING');
   locks.add(key);
   try {
-    const event = await loadTarget(eventId);
+    const { event, cfg } = await loadTarget(eventId);
+    if (cfg.APPLY_EVENT_SETTINGS === false) applySettings = false;
     const list = parseStandards(standards);
     const exams = await events.examsOfEvent(event._id);
     const rows = []; const loaded = [];
-    for (const std of list) { const r = await planStandard(event, std, exams.find((e) => e.standard === std)); rows.push(r.out); loaded.push(r.paper); }
+    for (const std of list) { const r = await planStandard(event, std, exams.find((e) => e.standard === std), cfg); rows.push(r.out); loaded.push(r.paper); }
     const blocking = rows.filter((r) => r.problems.length);
     if (blocking.length) throw new EventError(422, `Some papers have problems; nothing was imported: ${blocking.map((b) => `Std ${b.standard}`).join(', ')}.`, 'PAPER_INVALID', { blocking: blocking.map((b) => ({ standard: b.standard, problems: b.problems })) });
 
@@ -223,22 +229,22 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
     for (let i = 0; i < list.length; i += 1) {
       const std = list[i]; const paper = loaded[i]; const row = rows[i];
       let exam = exams.find((e) => e.standard === std);
-      if (!exam) { exam = await createExam(event, std, paper); row.created = true; row.examId = oid(exam); }
+      if (!exam) { exam = await createExam(event, std, paper, cfg); row.created = true; row.examId = oid(exam); }
       const counts = { inserted: 0, updated: 0, unchanged: 0 };
       if (!row.locked) {
-        for (const q of paper.questions) counts[await upsertQuestion(exam._id, questionDoc(exam._id, paper, q))] += 1;
+        for (const q of paper.questions) counts[await upsertQuestion(exam._id, questionDoc(exam._id, paper, q, cfg))] += 1;
         const keep = paper.questions.map((q) => q.n);
         const removed = await OlympiadQuestion.deleteMany({ exam: exam._id, questionNumber: { $nin: keep } });
         row.removed = removed && (removed.deletedCount ?? removed.n ?? 0);
         row.inserted = counts.inserted; row.updated = counts.updated; row.unchanged = counts.unchanged;
       } else {
         let n = 0;
-        for (const q of paper.questions) { const doc = questionDoc(exam._id, paper, q); const cur = await OlympiadQuestion.findOne({ exam: exam._id, questionNumber: q.n }).select('+correctAnswer +explanation'); if (cur && differs(cur, doc) && onlyTranslation(cur, doc)) { await OlympiadQuestion.updateOne({ exam: exam._id, questionNumber: q.n }, { $set: { options: doc.options, ...(doc.provenance ? { provenance: doc.provenance } : {}) } }); n += 1; } }
+        for (const q of paper.questions) { const doc = questionDoc(exam._id, paper, q, cfg); const cur = await OlympiadQuestion.findOne({ exam: exam._id, questionNumber: q.n }).select('+correctAnswer +explanation'); if (cur && differs(cur, doc) && onlyTranslation(cur, doc)) { await OlympiadQuestion.updateOne({ exam: exam._id, questionNumber: q.n }, { $set: { options: doc.options, ...(doc.provenance ? { provenance: doc.provenance } : {}) } }); n += 1; } }
         row.inserted = 0; row.updated = n; row.unchanged = 0; row.removed = 0;
       }
 
       const sections = paper.sections.map((s) => ({ name: s.name, nameMr: s.nameMr, questionCount: paper.questions.filter((q) => paper.sections[q.section] === s).length, marks: paper.questions.filter((q) => paper.sections[q.section] === s).reduce((m, q) => m + (q.marks ?? 1), 0) }));
-      const set = { examFee: cfg.FEES.exam, interviewFee: cfg.FEES.interview };
+      const set = cfg.APPLY_EVENT_SETTINGS === false ? {} : { examFee: cfg.FEES.exam, interviewFee: cfg.FEES.interview };
       if (!row.locked) {
         Object.assign(set, {
           sections, totalQuestions: paper.questions.length, totalMarks: paper.questions.reduce((m, q) => m + (q.marks ?? 1), 0),
@@ -262,7 +268,7 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
     const readiness = await readinessOf(event._id);
     return {
       dryRun: false, event: { _id: oid(fresh), name: fresh.name, state: fresh.state, paperSet: fresh.paperSet }, paperSet: cfg.PAPER_SET,
-      settings: settingsDiff(fresh), rows, summary: summarize(rows), blocking: [], canApply: true,
+      settings: settingsDiff(fresh, cfg), rows, summary: summarize(rows), blocking: [], canApply: true,
       needsReview: rows.filter((r) => r.review.length).map((r) => ({ standard: r.standard, review: r.review })),
       readiness,
       note: 'The event stays in its current state; publishing is a separate step and is blocked while a paper has unresolved review items.',

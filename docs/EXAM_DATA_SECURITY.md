@@ -72,3 +72,15 @@ all sessions on a reset. The credential itself is only safe once rotated:
 2. Confirm the old password no longer works (the owner tries it once, deliberately).
 3. Review admin activity and login logs since 2026-09-10 for anything unexpected.
 4. Rotate any other secret that was ever stored near it (JWT secret, Razorpay keys, SMTP, database user) if logs show misuse.
+
+## 31 October 2026 event
+The 31 Oct papers use the same importer (`backend/src/config/oct31Event.js`). The private files go in the `oct31` sub-folder of the paper folder:
+
+    <OLYMPIAD_PAPER_DIR>/oct31/std1.json ... std10.json     (diagrams are embedded in the file as data:image/png URIs)
+
+    cd backend
+    node src/scripts/importPapers.js --dir D:\LearnIQ-private            # dry run
+    node src/scripts/importPapers.js --dir D:\LearnIQ-private --apply    # import (idempotent)
+
+The import fills the questions only: event fees, registration, interview and results times are never changed by it. Add
+`--durations` to also take the exam durations printed on the papers. The event stays in its current state (draft) until published.
