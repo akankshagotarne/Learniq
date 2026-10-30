@@ -33,7 +33,16 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? pr
     eventId = c[0]._id;
   }
   const standards = arg('--standards') ? arg('--standards').split(',').map(Number) : undefined;
-  if (!apply) { console.log(JSON.stringify(await paper.plan(eventId, { standards }), null, 2)); console.log('\nDRY RUN: nothing was written. Re-run with --apply.'); }
+  if (!apply) {
+    const plan = await paper.plan(eventId, { standards });
+    console.log(JSON.stringify(plan, null, 2));
+    if (plan.durations && plan.durations.some((d) => d.targetMinutes)) {
+      console.log('\nEXAM DURATIONS (minutes)   field: OlympiadExam.durationMinutes');
+      console.log('Std  Exam ID                   Current  Target  Update');
+      for (const d of plan.durations) console.log(`${String(d.standard).padEnd(4)} ${String(d.examId).padEnd(25)} ${String(d.currentMinutes).padEnd(8)} ${String(d.targetMinutes).padEnd(7)} ${d.updateRequired ? 'YES' : 'no'}`);
+    }
+    console.log('\nDRY RUN: nothing was written. Re-run with --apply.');
+  }
   else {
     const admin = (await User.findOne({ role: 'admin' })) || { _id: undefined, name: 'import-script' };
     console.log(JSON.stringify(await paper.apply(eventId, admin, { standards, applyDurations: process.argv.includes('--durations') }), null, 2));

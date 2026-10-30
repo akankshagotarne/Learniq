@@ -144,6 +144,10 @@ const imageState = (image) => {
 const planStandard = async (event, standard, exam, cfg) => {
   const { paper, problems, warnings } = loadPaper(standard, undefined, cfg);
   const out = { completions: paper ? (paper.completions || []) : [], warnings: warnings || [], standard, source: paper && paper.source, found: paper ? (paper.questions || []).length : 0, expected: cfg.expectedQuestions[standard], examId: exam ? oid(exam) : null, examExists: !!exam, problems, review: [], inserted: 0, updated: 0, unchanged: 0, removed: 0, duplicatesAvoided: 0, imagesAssociated: 0, imageFiles: [], locked: false, lockedReason: null, durationInPdf: paper ? paper.durationMinutes : null, durationNow: exam ? exam.durationMinutes : null, sourceIssues: paper ? paper.sourceIssues || [] : [] };
+  const target = cfg.durations ? cfg.durations[standard] : null;
+  out.durationTarget = target || null;
+  out.durationUpdate = !!(exam && target && exam.durationMinutes !== target);
+  if (paper && target && paper.durationMinutes && paper.durationMinutes !== target) out.warnings.push({ question: 0, issue: `The paper file says ${paper.durationMinutes} minutes; the configured duration is ${target}.` });
   if (!paper || problems.length) return { out, paper: null };
   out.review = reviewOf(standard, paper, cfg);
   const attempts = exam ? await OlympiadAttempt.countDocuments({ exam: exam._id }) : 0;
@@ -174,8 +178,11 @@ const summarize = (rows) => ({
   found: rows.reduce((s, r) => s + r.found, 0), inserted: rows.reduce((s, r) => s + r.inserted, 0), updated: rows.reduce((s, r) => s + r.updated, 0),
   unchanged: rows.reduce((s, r) => s + r.unchanged, 0), duplicatesAvoided: rows.reduce((s, r) => s + r.duplicatesAvoided, 0),
   manualReview: rows.reduce((s, r) => s + r.review.length, 0), sourceWarnings: rows.reduce((s, r) => s + (r.warnings || []).length, 0), completed: rows.reduce((s, r) => s + (r.completions || []).length, 0), imagesAssociated: rows.reduce((s, r) => s + r.imagesAssociated, 0),
-  examsToCreate: rows.filter((r) => !r.examExists).length, locked: rows.filter((r) => r.locked).length,
+  examsToCreate: rows.filter((r) => !r.examExists).length, durationUpdates: rows.filter((r) => r.durationUpdate).length, locked: rows.filter((r) => r.locked).length,
 });
+
+/** The duration plan shown by the dry run: one line per standard. */
+const durationPlan = (rows) => rows.map((r) => ({ standard: r.standard, examId: r.examId, currentMinutes: r.durationNow, targetMinutes: r.durationTarget, updateRequired: !!r.durationUpdate }));
 
 const parseStandards = (raw) => {
   if (raw === undefined || raw === null || raw === 'all') return events.STANDARDS;
@@ -205,7 +212,7 @@ const plan = async (eventId, { standards } = {}) => {
   const messages = { valid: 'All papers were read and passed the checks.', 'files-missing': 'The folder is configured, but some paper files are missing.', invalid: 'Paper files were found, but some are invalid or incomplete.' };
   return {
     dryRun: true, event: eventInfo, paperSet: cfg.PAPER_SET,
-    settings: settingsDiff(event, cfg), rows, summary: summarize(rows), blocking, canApply: blocking.length === 0,
+    settings: settingsDiff(event, cfg), rows, summary: summarize(rows), durations: durationPlan(rows), blocking, canApply: blocking.length === 0,
     storage: { state, message: messages[state], hint: '', standards: perStandard },
   };
 };
@@ -220,7 +227,7 @@ const audit = async (admin, exam, field, previous, next, note) => {
 const createExam = async (event, std, paper, cfg) => OlympiadExam.create({
   event: event._id, title: `${event.name} – ${ordinal(std)} Standard`, slug: `${event.slug}-std-${std}`, examType: 'olympiad', standard: std,
   accessMode: 'payment', accessEnabled: true, hardClose: false, instructions: events.DEFAULT_INSTRUCTIONS,
-  startDate: cfg.examWindow.start, endDate: cfg.examWindow.end, durationMinutes: paper.durationMinutes || 60,
+  startDate: cfg.examWindow.start, endDate: cfg.examWindow.end, durationMinutes: (cfg.durations && cfg.durations[std]) || paper.durationMinutes || 60,
   fee: cfg.FEES.exam + cfg.FEES.interview, currency: 'INR', isPublished: event.state === 'published',
 });
 
@@ -281,10 +288,12 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
           description: paper.title,
           paperImport: { set: cfg.PAPER_SET, source: paper.source, importedAt: now, questionCount: paper.questions.length, review: row.review, completions: paper.completions || [] },
         });
-        if (applyDurations && paper.durationMinutes && paper.durationMinutes !== exam.durationMinutes) set.durationMinutes = paper.durationMinutes;
+        if (cfg.durations && cfg.durations[std]) { if (cfg.durations[std] !== exam.durationMinutes) { set.durationMinutes = cfg.durations[std]; row.durationChanged = true; } }
+        else if (applyDurations && paper.durationMinutes && paper.durationMinutes !== exam.durationMinutes) set.durationMinutes = paper.durationMinutes;
       }
       if (applySettings && !exam.resultsPublishedAt) Object.assign(set, { resultsPublishAt: cfg.resultsPublishAt, resultsScheduleSeeded: true });
       await OlympiadExam.updateOne({ _id: exam._id }, { $set: set });
+      if (set.durationMinutes) { row.durationNow = set.durationMinutes; row.durationUpdate = false; }
       await audit(admin, exam, 'paperImport', null, { set: cfg.PAPER_SET, ...counts, review: row.review.length, locked: row.locked }, row.lockedReason);
     }
 
@@ -298,7 +307,7 @@ const apply = async (eventId, admin, { standards, applyDurations = false, applyS
     const readiness = await readinessOf(event._id);
     return {
       dryRun: false, event: { _id: oid(fresh), name: fresh.name, state: fresh.state, paperSet: fresh.paperSet }, paperSet: cfg.PAPER_SET,
-      settings: settingsDiff(fresh, cfg), rows, summary: summarize(rows), blocking: [], canApply: true,
+      settings: settingsDiff(fresh, cfg), rows, summary: summarize(rows), durations: durationPlan(rows), blocking: [], canApply: true,
       needsReview: rows.filter((r) => r.review.length).map((r) => ({ standard: r.standard, review: r.review })),
       readiness,
       note: 'The event stays in its current state; publishing is a separate step and is blocked while a paper has unresolved review items.',

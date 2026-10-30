@@ -50,6 +50,7 @@ const PaperImportDialog: React.FC<{ event: OlympiadEventRow; onClose: () => void
     catch (e) { setErr(olympiadErrorMessage(e, 'The import did not complete. Nothing was changed for a paper with problems.')); } finally { setBusy(false); }
   };
   const s = report?.summary;
+  const hasPlannedDurations = !!report?.durations?.some(d => d.targetMinutes);
   const durationDiffs = report?.rows.filter(r => r.durationInPdf && r.durationNow && r.durationInPdf !== r.durationNow) || [];
 
   return (
@@ -88,9 +89,11 @@ const PaperImportDialog: React.FC<{ event: OlympiadEventRow; onClose: () => void
           {report.rows.some(r => r.warnings.length) && <details className="text-xs text-text-secondary"><summary className="cursor-pointer">Source notes ({s.sourceWarnings})</summary><ul className="list-disc pl-5 mt-1">{report.rows.flatMap(r => r.warnings.map(x => <li key={`w${r.standard}-${x.question}`}>Standard {r.standard}, question {x.question}: {x.issue}</li>))}</ul></details>}
           {report.settings.length > 0 && <details className="text-xs text-text-secondary"><summary className="cursor-pointer">Event settings applied with the import</summary>
             <ul className="list-disc pl-5 mt-1">{report.settings.map(x => <li key={x.field}>{x.field}: {String(x.target)} {x.changed ? '' : '(already set)'}</li>)}</ul></details>}
-          {durationDiffs.length > 0 && !applied && (
+          {!hasPlannedDurations && durationDiffs.length > 0 && !applied && (
             <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={durations} onChange={e => setDurations(e.target.checked)} className="mt-0.5" />
               <span>Also use the exam duration printed in the PDFs ({durationDiffs.map(r => `Std ${r.standard}: ${r.durationNow} → ${r.durationInPdf} min`).join(', ')}). Left unchecked, each exam keeps its configured duration.</span></label>)}
+          {hasPlannedDurations && report?.durations && <details className="text-xs text-text-secondary" data-testid="paper-import-durations"><summary className="cursor-pointer">Exam durations set by the import ({report.durations.filter(d => d.updateRequired).length} to change)</summary>
+            <ul className="list-disc pl-5 mt-1">{report.durations.map(d => <li key={d.standard}>Std {d.standard}: {d.currentMinutes ?? '—'} → {d.targetMinutes} min {d.updateRequired ? '' : '(already set)'}</li>)}</ul></details>}
           {applied && <p className="flex items-center gap-1.5 text-emerald-700"><CheckCircle2 className="w-4 h-4" /> Done. Publishing the event is a separate step.</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary text-sm px-4 py-2 min-h-[44px]" onClick={onClose}>{applied ? 'Close' : 'Cancel'}</button>

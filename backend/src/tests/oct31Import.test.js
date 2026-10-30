@@ -41,12 +41,13 @@ test.after(() => { Module._load = originalLoad; });
 
 const at = (s) => new Date(`${s}+05:30`);
 const EXPECTED = { 1: 40, 2: 40, 3: 40, 4: 60, 5: 60, 6: 60, 7: 60, 8: 60, 9: 60, 10: 60 };
+const DUR = { 1: 60, 2: 60, 3: 60, 4: 90, 5: 90, 6: 120, 7: 120, 8: 120, 9: 120, 10: 120 };
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'oct31-'));
 process.env.OLYMPIAD_PAPER_DIR = base;
 fs.mkdirSync(path.join(base, 'oct31'));
 const makePaper = (std) => ({
-  standard: std, title: `Invented paper ${std}`, source: 'invented', bilingual: false, durationMinutes: 45,
+  standard: std, title: `Invented paper ${std}`, source: 'invented', bilingual: false, durationMinutes: DUR[std],
   sections: [{ name: 'Part A' }, { name: 'Part B' }],
   questions: Array.from({ length: EXPECTED[std] }, (_, i) => ({ n: i + 1, section: i < 10 ? 0 : 1, text: `Invented question ${i + 1}?`, options: ['w', 'x', 'y', 'z'].map((o) => `${o}${i}`), answer: i % 4, marks: 1, ...(i % 7 === 0 ? { image: PNG } : {}), explanation: 'Because.' })),
 });
@@ -54,14 +55,20 @@ for (let s = 1; s <= 10; s += 1) fs.writeFileSync(path.join(base, 'oct31', `std$
 
 const paperImport = require('../services/paperImport');
 const admin = { _id: undefined, name: 'test-admin' };
-let event;
+let event; let oct24; let oct24Exam; let snapshot24;
+const snap = () => JSON.stringify(fake.OlympiadExam.docs.map((d) => d)) + JSON.stringify(fake.OlympiadEvent.docs.map((d) => d)) + fake.OlympiadQuestion.docs.length;
 test.before(async () => {
   event = await fake.OlympiadEvent.create({ name: 'LearnIQ Test - 31 Oct 2026', slug: 'learniq-test-31-oct-2026', examDate: at('2026-10-31T00:00:00'), standards: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], state: 'draft', registrationClosesAt: at('2026-10-31T20:00:00'), examFee: 33, interviewFee: 44, interviewOpensAt: at('2026-11-01T09:00:00'), interviewClosesAt: at('2026-11-01T17:00:00') });
+  oct24 = await fake.OlympiadEvent.create({ name: 'LearnIQ Test - 24 Oct 2026', slug: 'learniq-test-24-oct-2026', examDate: at('2026-10-24T00:00:00'), standards: [1], state: 'published', examFee: 20 });
+  oct24Exam = await fake.OlympiadExam.create({ title: '24 Oct - 1', slug: 'x24-1', standard: 1, examType: 'olympiad', accessMode: 'payment', isPublished: true, event: oct24._id, startDate: at('2026-10-24T09:00:00'), endDate: at('2026-10-25T12:00:00'), durationMinutes: 45, totalQuestions: 0, totalMarks: 0, fee: 20, currency: 'INR', instructions: ['x'] });
+  snapshot24 = JSON.stringify({ e: oct24, x: oct24Exam });
   for (let std = 1; std <= 10; std += 1) await fake.OlympiadExam.create({ title: `31 Oct - ${std}`, slug: `x31-${std}`, standard: std, examType: 'olympiad', accessMode: 'payment', isPublished: false, event: event._id, startDate: at('2026-10-31T09:00:00'), endDate: at('2026-11-01T12:00:00'), durationMinutes: 45, totalQuestions: 0, totalMarks: 0, fee: 77, examFee: 33, interviewFee: 44, currency: 'INR', instructions: ['x'] });
 });
 
 test('dry run reads the oct31 set, writes nothing and reports no problems', async () => {
+  const before = snap();
   const r = await paperImport.plan(event._id);
+  assert.equal(snap(), before, 'a dry run changes nothing');
   assert.equal(r.paperSet, 'oct31-2026'); assert.equal(r.canApply, true, JSON.stringify(r.blocking));
   assert.equal(r.summary.found, 540); assert.equal(r.summary.inserted, 540); assert.equal(r.summary.manualReview, 0);
   assert.deepEqual(r.settings, [], 'the 31 Oct import never proposes event settings');
@@ -79,7 +86,7 @@ test('apply imports every question once, keeps event/exam fees and times, and is
   assert.equal(ev.examFee, 33); assert.equal(ev.interviewFee, 44); assert.equal(ev.paperSet, 'oct31-2026');
   assert.equal(+ev.registrationClosesAt, +at('2026-10-31T20:00:00'));
   for (const ex of fake.OlympiadExam.docs.filter((e) => String(e.event) === String(event._id))) {
-    assert.equal(ex.fee, 77); assert.equal(ex.examFee, 33); assert.equal(ex.durationMinutes, 45);
+    assert.equal(ex.fee, 77); assert.equal(ex.examFee, 33); assert.equal(ex.durationMinutes, DUR[ex.standard]);
     assert.equal(ex.totalQuestions, EXPECTED[ex.standard]); assert.equal(ex.totalMarks, EXPECTED[ex.standard]);
     assert.equal(ex.paperImport.set, 'oct31-2026');
   }
@@ -136,4 +143,43 @@ test('storage: complete folder -> valid and ready', async () => {
   assert.equal(r.storage.state, 'valid');
   assert.equal(r.canApply, true);
   assert.equal(r.storage.standards.length, 10);
+});
+
+// ---- exam durations printed on the papers: OlympiadExam.durationMinutes ----
+test('durations: the dry run plans 60/60/60, 90/90, 120 x5 for the ten exams and writes nothing', async () => {
+  // (runs after the apply test, so reset the ten exams to the old 60-minute value first)
+  for (const ex of fake.OlympiadExam.docs.filter((e) => String(e.event) === String(event._id))) ex.durationMinutes = 60;
+  const before = snap();
+  const r = await paperImport.plan(event._id);
+  assert.equal(snap(), before, 'zero writes');
+  assert.equal(r.durations.length, 10);
+  for (const d of r.durations) {
+    assert.equal(d.targetMinutes, DUR[d.standard]);
+    assert.equal(d.currentMinutes, 60);
+    assert.equal(d.updateRequired, DUR[d.standard] !== 60);
+    assert.ok(d.examId);
+  }
+  assert.deepEqual(r.durations.filter((d) => d.standard <= 3).map((d) => d.targetMinutes), [60, 60, 60]);
+  assert.deepEqual(r.durations.filter((d) => d.standard === 4 || d.standard === 5).map((d) => d.targetMinutes), [90, 90]);
+  assert.deepEqual(r.durations.filter((d) => d.standard >= 6).map((d) => d.targetMinutes), [120, 120, 120, 120, 120]);
+  assert.equal(r.summary.durationUpdates, 7);
+  assert.equal(r.summary.found, 540); assert.equal(r.summary.manualReview, 0); assert.equal(r.summary.sourceWarnings, 0); assert.equal(r.summary.imagesAssociated, Object.values(EXPECTED).reduce((n, c) => n + Math.ceil(c / 7), 0));
+  assert.equal(r.canApply, true);
+});
+
+test('durations: apply changes only the event\'s ten exams, leaves Draft and the 24 Oct event alone, and is idempotent', async () => {
+  const others = fake.OlympiadExam.docs.filter((e) => String(e.event) !== String(event._id)).map((e) => JSON.stringify(e));
+  const r = await paperImport.apply(event._id, admin);
+  assert.equal(r.event.state, 'draft');
+  for (const ex of fake.OlympiadExam.docs.filter((e) => String(e.event) === String(event._id))) assert.equal(ex.durationMinutes, DUR[ex.standard], `std ${ex.standard}`);
+  assert.equal(fake.OlympiadExam.docs.filter((e) => String(e.event) === String(event._id)).length, 10, 'no exam created or duplicated');
+  assert.deepEqual(fake.OlympiadExam.docs.filter((e) => String(e.event) !== String(event._id)).map((e) => JSON.stringify(e)), others);
+  assert.equal(JSON.stringify({ e: fake.OlympiadEvent.docs.find((e) => String(e._id) === String(oct24._id)), x: fake.OlympiadExam.docs.find((e) => String(e._id) === String(oct24Exam._id)) }), snapshot24, '24 Oct untouched');
+  assert.equal(oct24Exam.durationMinutes, 45);
+  const ev = fake.OlympiadEvent.docs.find((e) => String(e._id) === String(event._id));
+  assert.equal(ev.state, 'draft'); assert.equal(ev.examFee, 33);
+  assert.ok(!fake.OlympiadExam.docs.some((e) => String(e.event) === String(event._id) && e.isPublished), 'no exam published');
+  const again = await paperImport.plan(event._id);
+  assert.equal(again.summary.durationUpdates, 0); assert.ok(again.durations.every((d) => !d.updateRequired));
+  assert.equal(again.summary.inserted, 0); assert.equal(fake.OlympiadQuestion.docs.length, 540);
 });

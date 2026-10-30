@@ -19,5 +19,7 @@ module.exports = {
   examWindow: { start: at('2026-10-31T09:00:00'), end: at('2026-11-01T12:00:00') },   // only used for an exam that has to be created
   interview: { opensAt: at('2026-11-01T09:00:00'), closesAt: at('2026-11-01T17:00:00') },
   resultsPublishAt: at('2026-11-01T18:00:00'),
+  // Exam length in minutes as printed on the papers (OlympiadExam.durationMinutes). The import sets it on the event's ten existing exams.
+  durations: { 1: 60, 2: 60, 3: 60, 4: 90, 5: 90, 6: 120, 7: 120, 8: 120, 9: 120, 10: 120 },
   expectedQuestions: { 1: 40, 2: 40, 3: 40, 4: 60, 5: 60, 6: 60, 7: 60, 8: 60, 9: 60, 10: 60 },
 };
