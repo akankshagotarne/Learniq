@@ -28,6 +28,7 @@ const openTime = (iso?: string): string => {
 const VIA_TEXT: Record<UnlockVia, string> = {
   PAYMENT: 'Unlocked with an online payment',
   CREDIT: 'Unlocked with 1 credit',
+  SUBSCRIPTION: 'Included in your plan',
   LEGACY_PACKAGE: 'Included in your earlier ₹20 package',
   OTHER: 'Unlocked by LearnIQ',
 };
@@ -53,7 +54,7 @@ const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance
         )}
       </div>
       <p className="text-xs text-text-muted mt-1">Standard {exam.standard} · {exam.title}</p>
-      <p className="text-[11px] text-text-secondary mt-1" data-testid="interview-included-line"><b>Interview Included</b> · Interview fee {formatRupees(price)} · <span data-testid="interview-payment-status">{unlocked ? 'Interview Payment Successful' : 'Interview Payment Pending'}</span></p>
+      <p className="text-[11px] text-text-secondary mt-1" data-testid="interview-included-line"><b>Interview Included</b> · {exam.interviewVia === 'SUBSCRIPTION' ? <span data-testid="included-in-plan">Included in your plan</span> : <>Interview fee {formatRupees(price)}</>} · <span data-testid="interview-payment-status">{unlocked ? 'Interview Payment Successful' : 'Interview Payment Pending'}</span></p>
 
       {!unlocked && (
         <div className="mt-3 space-y-2" data-testid="interview-unlock-options">

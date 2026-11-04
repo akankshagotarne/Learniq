@@ -5,7 +5,7 @@ import {
   Users, BarChart2, Bell, User, LogOut, ChevronLeft, ChevronRight,
   Layers, CreditCard, Settings, Building2, Radio, MessageCircle, GraduationCap,
   Menu, X, Trophy, Award, Video, CalendarClock, Gift, ListOrdered, Receipt,
-  Share2,
+  Share2, Crown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LogoLink } from '../ui/Logo';
@@ -38,6 +38,7 @@ const studentNav: NavItem[] = [
   { label: 'Exams', href: '/student/exams', icon: ClipboardList },
   { label: 'Leaderboard 🏆', href: '/student/leaderboard', icon: Trophy },
   { label: 'Results & Certificates', href: '/student/certificates', icon: Award },
+  { label: 'Subscription', href: '/student/subscription', icon: Crown, badge: 'New' },
   { label: 'Payments & Transactions', href: '/student/payments', icon: Receipt },
   { label: 'Refer & Earn', href: '/student/refer', icon: Gift },
   { label: 'Interview Results', href: '/student/interview-results', icon: Video },
@@ -217,6 +218,7 @@ const Sidebar: React.FC = () => {
               >
                 <item.icon className={`${item.sub ? 'w-4 h-4' : 'w-5 h-5'} flex-shrink-0`} />
                 <span className={collapsed ? 'lg:hidden' : ''}>{item.label}</span>
+                {item.badge && <span className={`ml-auto rounded-full bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 leading-none ${collapsed ? 'lg:hidden' : ''}`} data-testid="nav-badge">{item.badge}</span>}
               </Link>
             );
           })}
