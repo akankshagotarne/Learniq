@@ -432,6 +432,8 @@ const buildState = async (exam, userId, now = new Date()) => {
     examAccess.activeGrant(userId, exam._id), // an administrator / credit exam grant: shown to the student as an ordinary available exam
     examAccess.interviewEntitlementFor(userId, exam._id), // the interview is a separate component with its own entitlement
   ]);
+  // Monthly Subscription for this exam's standard (derived from dates: ends by itself). Only looked up when nothing else already unlocks it.
+  const subscription = success || grant ? null : await examAccess.subscriptionFor(userId, exam._id);
   const payment = success || latest; // a SUCCESS payment always wins
   const attempt = await expireIfNeeded(foundAttempt, now);
 
@@ -441,7 +443,7 @@ const buildState = async (exam, userId, now = new Date()) => {
   const regBlock = evt && evt.state === 'published'
     ? (evt.registrationOpensAt && now < new Date(evt.registrationOpensAt) ? 'not_open' : (evt.registrationClosesAt && now >= new Date(evt.registrationClosesAt) ? 'closed' : null))
     : (evt && evt.state === 'cancelled' ? 'cancelled' : null);
-  const paid = !!success || !!grant; // entitled to start (payment OR administrator exception); paymentStatus below stays the truth about payments
+  const paid = !!success || !!grant || !!subscription; // entitled to start (payment, administrator exception OR an active subscription); paymentStatus below stays the truth about payments
   let state; let message = null;
 
   if (attempt && attempt.status === 'COMPLETED') state = 'completed';
@@ -469,7 +471,7 @@ const buildState = async (exam, userId, now = new Date()) => {
     paymentStatus: payment ? payment.status : 'NONE',
     // Separate, backend-decided component entitlements (the browser never infers one from the other)
     examUnlocked: paid,
-    examVia: paid ? examAccess.examVia({ payment: success, grant }) : null,
+    examVia: paid ? examAccess.examVia({ payment: success, grant, subscription }) : null,
     interviewIncluded,
     interviewUnlocked: interviewIncluded && ivEnt.entitled,
     interviewVia: interviewIncluded ? ivEnt.via : null,
@@ -652,7 +654,9 @@ const getCreditInfo = handler(async (req, res) => {
   const e = view(eb);
   res.json({
     success: true, balance, ...e, creditsPerExam: 1, creditsPerComponent: 1, enabled: settings.enabled !== false,
-    components: { EXAM: e, INTERVIEW: view(ib) }, prices: exam._interviewIncluded === false ? { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' } : pricingFor(exam),
+    components: { EXAM: e, INTERVIEW: view(ib) },
+    subscriptionCovered: !!(await examAccess.subscriptionFor(req.user._id, exam._id)), // an active plan for this standard: unlock is free, no credit used
+    prices: exam._interviewIncluded === false ? { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' } : pricingFor(exam),
   });
 });
 
@@ -864,6 +868,13 @@ const razorpayWebhook = handler(async (req, res) => {
   if (!safeEqual(expected, signature)) return res.status(400).json({ success: false, message: 'Invalid signature.' });
 
   const { event } = req.body || {};
+  // Monthly Subscription (one-time orders and auto-renew charges) share this webhook URL: handled first, idempotently
+  try {
+    if (await require('../services/subscriptionService').handleWebhook(event, req.body && req.body.payload, req.headers['x-razorpay-event-id'])) return res.json({ success: true });
+  } catch (err) {
+    console.error('[subscription] webhook processing failed:', err && err.message);
+    return res.status(500).json({ success: false, message: 'Temporary error.' }); // Razorpay retries; processing is idempotent
+  }
   const entity = req.body && req.body.payload && req.body.payload.payment && req.body.payload.payment.entity;
   if (!entity || !entity.order_id) return res.json({ success: true, ignored: true });
 
@@ -961,7 +972,10 @@ const startExam = handler(async (req, res) => {
     if (!ent.entitled) {
       throw new ApiError(402, `Please unlock the examination (₹${priceFor('EXAM', exam)} or 1 credit) before starting.`, 'PAYMENT_REQUIRED');
     }
-    unlock = ent.payment ? { payment: ent.payment._id } : { accessGrant: ent.grant._id };
+    // how it was unlocked is recorded on the attempt (accessType) - a subscription start charges nothing and deducts no credit
+    unlock = ent.payment ? { payment: ent.payment._id, accessType: 'payment' }
+      : ent.grant ? { accessGrant: ent.grant._id, accessType: ent.grant.source === 'CREDIT' ? 'credit' : 'grant' }
+        : { subscription: ent.subscription._id, accessType: 'subscription' };
   }
 
   const naturalDeadline = new Date(now.getTime() + exam.durationMinutes * 60 * 1000);
