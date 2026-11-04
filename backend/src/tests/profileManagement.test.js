@@ -45,6 +45,7 @@ const overrides = {
   [path.join(SRC, 'models', 'Lecture.js')]: fake.Lecture,
   [path.join(SRC, 'models', 'Note.js')]: fake.Note,
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
+  [path.join(SRC, 'models', 'Subscription.js')]: fake.subscriptionModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: { OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion, OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt },
   [path.join(SRC, 'models', 'Certificate.js')]: { Certificate: fake.Certificate, Counter: fake.Counter },
   [path.join(SRC, 'models', 'LiveSession.js')]: { LiveSession: fake.LiveSession },

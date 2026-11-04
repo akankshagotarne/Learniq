@@ -111,6 +111,10 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/olympiad', olympiadRoutes);
+app.use('/api/subscriptions', require('./routes/subscriptions')); // Monthly Subscription (+ auto-renew)
+// Razorpay webhook: the same handler as /api/olympiad/payments/webhook (one signed endpoint for exams, interviews and subscriptions).
+// The raw body is captured by express.json(verify) above, which is what the signature is computed over.
+app.post('/api/payments/razorpay/webhook', require('./controllers/olympiadController').razorpayWebhook);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/referral-codes', require('./routes/referralCodes'));   // one validator for the optional Referral Code field (mentor or student)
 app.use('/api/mentor-referrals', mentorReferralRoutes);   // mentor referral TRACKING (never any credits)

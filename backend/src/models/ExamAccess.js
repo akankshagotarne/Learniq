@@ -25,9 +25,11 @@ const grantSchema = new mongoose.Schema({
   includesInterview: { type: Boolean, default: true },     // the exam + teacher-interview package, exactly like the paid one
   // CREDIT_REDEMPTION: the entitlement was unlocked by the STUDENT redeeming one exam credit (services/credits.js). It is not a payment
   // and not an administrator exception; admin-only reason codes (REASON_CODES.grant) are unchanged.
-  reasonCode: { type: String, enum: [...REASON_CODES.grant, 'CREDIT_REDEMPTION'], required: true },
+  reasonCode: { type: String, enum: [...REASON_CODES.grant, 'CREDIT_REDEMPTION', 'SUBSCRIPTION_ACCESS'], required: true },
   reasonNote: { type: String, trim: true, maxlength: 500 },
-  source: { type: String, enum: ['ADMIN', 'CREDIT'], default: 'ADMIN' },
+  // SUBSCRIPTION: unlocked because the student held an active Monthly Subscription for this standard (no credit, no payment)
+  source: { type: String, enum: ['ADMIN', 'CREDIT', 'SUBSCRIPTION'], default: 'ADMIN' },
+  subscription: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' },
   creditTransaction: { type: mongoose.Schema.Types.ObjectId, ref: 'CreditTransaction' },
   grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   grantedByName: { type: String },

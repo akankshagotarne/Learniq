@@ -110,7 +110,7 @@ const checkEligibility = async (studentId, examId) => {
   // The interview is its own component: unlocked by a Rs 10 interview payment, one credit, a legacy Rs 20 bundle, or an administrator
   // exception that includes it. Exam access alone never unlocks it (and the reverse).
   const ent = await examAccess.interviewEntitlementFor(studentId, exam._id);
-  const payment = ent.payment || (ent.grant ? { _id: undefined, grant: ent.grant } : null);
+  const payment = ent.payment || (ent.grant ? { _id: undefined, grant: ent.grant } : (ent.subscription ? { _id: undefined, subscription: ent.subscription } : null)); // payment / credit / admin grant / active Monthly Subscription
   if (!payment) return { eligible: false, code: 'NOT_PAID', message: `Unlock the interview (₹${require('../config/olympiadPricing').priceFor('INTERVIEW', exam)} or 1 credit) to attend it.`, exam };
   const attempt = await OlympiadAttempt.findOne({ student: studentId, exam: exam._id });
   if (!attempt || attempt.status !== 'COMPLETED' || !attempt.submittedAt) {
@@ -143,6 +143,9 @@ const isGenuineRequest = (iv) => !!iv && iv.requestedBy !== 'teacher';
 const isBogus = (iv) => !!iv && iv.requestedBy === 'teacher' && PRE_ROOM.includes(iv.status);
 const NOT_REQUESTED_ERROR = () => new InterviewError(403, 'The student has not requested this interview yet. Only the student can send the request.', 'NO_STUDENT_REQUEST');
 
+/** How the interview was unlocked, for the record: payment | credit | subscription | grant. */
+const accessTypeOf = (p) => (!p ? undefined : p.subscription ? 'subscription' : p.grant ? (p.grant.source === 'CREDIT' ? 'credit' : 'grant') : 'payment');
+
 /** Returns the open interview for this student+exam, creating a REQUESTED one when there is none. */
 const findOrCreateOpen = async ({ studentId, examId, eligibility, requestedBy, actor }) => {
   if (requestedBy !== 'student' || !actor || !same(actor._id, studentId)) throw NOT_REQUESTED_ERROR(); // structural guard: nobody creates a request for a student
@@ -165,7 +168,7 @@ const findOrCreateOpen = async ({ studentId, examId, eligibility, requestedBy, a
   }
   try {
     const iv = await TeacherInterview.create({
-      student: studentId, exam: examId, attempt: eligibility.attempt._id, payment: eligibility.payment && eligibility.payment._id ? eligibility.payment._id : undefined,
+      student: studentId, exam: examId, attempt: eligibility.attempt._id, payment: eligibility.payment && eligibility.payment._id ? eligibility.payment._id : undefined, accessType: accessTypeOf(eligibility.payment),
       roomId: newRoomId(), status: 'REQUESTED', ...flagsFor('REQUESTED'), requestedBy,
       requestedAt: new Date(), lastActivityAt: new Date(),
       audit: [note(actor._id, requestedBy, 'REQUESTED')],
@@ -772,7 +775,8 @@ const eligibleRows = async () => {
   const payments = await OlympiadPayment.find({ exam: { $in: [...examById.keys()] }, status: 'SUCCESS', component: examAccess.INTERVIEW_PAY });
   const grants = await OlympiadAccessGrant.find({ exam: { $in: [...examById.keys()] }, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { includesInterview: true }] });
   const paid = new Set([...payments, ...grants].map((p) => `${oid(p.student)}:${oid(p.exam)}`));
-  const eligible = attempts.filter((a) => paid.has(`${oid(a.student)}:${oid(a.exam)}`));
+  // an attempt unlocked by a Monthly Subscription belongs here too (the interview of a submitted exam is part of the plan)
+  const eligible = attempts.filter((a) => a.accessType === 'subscription' || paid.has(`${oid(a.student)}:${oid(a.exam)}`));
   const studentIds = [...new Set(eligible.map((a) => oid(a.student)))];
   const students = studentIds.length ? await User.find({ _id: { $in: studentIds } }) : [];
   const studentById = new Map(students.map((s) => [oid(s._id), s]));
@@ -933,8 +937,12 @@ const studentOverview = async (student) => {
     OlympiadAccessGrant.find({ student: student._id, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { includesInterview: true }] }),
     TeacherInterview.find({ student: student._id }),
   ]);
+  // Monthly Subscription: every paid Std exam of a standard the student holds an ACTIVE plan for is entitled too (derived from dates)
+  const subStandards = await require('./subscriptionService').activeStandards(student._id);
+  const subExams = subStandards.length ? await OlympiadExam.find({ examType: 'olympiad', standard: { $in: subStandards }, fee: { $gt: 0 } }) : [];
+  const viaPlan = subExams.map((e) => ({ exam: e._id, viaSubscription: true }));
   // one entry per exam the student is entitled to (verified payment, or an administrator exception that includes the interview)
-  const entitled = [...new Map([...paid, ...grants].map((p) => [oid(p.exam), p])).values()];
+  const entitled = [...new Map([...viaPlan, ...paid, ...grants].map((p) => [oid(p.exam), p])).values()]; // a payment / grant wins over the plan
   const entitledExams = entitled.length ? await OlympiadExam.find({ _id: { $in: entitled.map((p) => oid(p.exam)) } }).select('event') : [];
   const offEvents = await interviewPolicy.disabledEventIds(entitledExams); // Exam Only events contribute nothing to the interview overview
   const offExamIds = new Set(entitledExams.filter((e) => e.event && offEvents.has(String(e.event._id || e.event))).map((e) => oid(e._id)));

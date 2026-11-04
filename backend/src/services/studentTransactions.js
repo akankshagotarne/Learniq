@@ -3,6 +3,7 @@ const { OlympiadPayment, OlympiadExam } = require('../models/Olympiad');
 const { Counter } = require('../models/Certificate');
 const User = require('../models/User');
 const { CreditTransaction } = require('../models/Referral');
+const { SubscriptionPayment } = require('../models/Subscription');
 const credits = require('./credits');
 const { KNOWN, methodLabel, methodShort, captureMethod } = require('./paymentMethod');
 
@@ -62,6 +63,26 @@ const paymentComponent = (p) => (p.component === 'EXAM' || p.component === 'INTE
 
 const paymentTxnId = (p) => `TXN${ymd(p.verifiedAt || p.createdAt)}${tail(p._id)}`;
 const creditTxnId = (t) => `CRD${ymd(t.createdAt)}${tail(t._id)}`;
+const subTxnId = (p) => `TXN${ymd(p.paidAt || p.createdAt)}${tail(p._id)}`;
+
+// Monthly Subscription payments (models/Subscription.js SubscriptionPayment): money, shown beside the exam / interview payments.
+// Only rows that reached a result are history: an order the student never paid (closed the checkout) is not a transaction.
+const SUB_STATUS = { paid: 'SUCCESS', failed: 'FAILED', cancelled: 'FAILED' };
+const subscriptionRow = (p) => {
+  const status = SUB_STATUS[p.status] || 'PENDING';
+  const when = status === 'SUCCESS' ? (p.paidAt || p.createdAt) : p.createdAt;
+  return {
+    id: `sub_${p._id}`, kind: 'PAYMENT', type: 'SUBSCRIPTION_PAYMENT', description: `Monthly Subscription · Std ${p.standard}`,
+    detail: p.periodEnd ? `Valid till ${require('./subscriptionDates').validTill(p.periodEnd)}` : '',
+    component: 'SUBSCRIPTION', componentLabel: 'Subscription',
+    amount: p.amountPaise / 100, currency: p.currency || 'INR', creditChange: null,
+    method: p.method || null, methodLabel: p.method ? methodShort(p.method) : 'Razorpay',
+    status, statusLabel: STATUS_LABEL[status] || status,
+    date: when, transactionId: subTxnId(p), receiptNumber: p.invoiceNumber || null,
+    receiptAvailable: status === 'SUCCESS' && !!p.invoiceNumber && p.applied === true, standard: p.standard,
+    _sort: new Date(when).getTime(), _src: { razorpayOrderId: p.razorpayOrderId, razorpayPaymentId: p.razorpayPaymentId },
+  };
+};
 
 const paymentRow = (p, titles) => {
   const component = paymentComponent(p);
@@ -96,16 +117,17 @@ const publicRow = ({ _sort, _src, ...r }) => r;
 
 // ── loading (always scoped to the signed-in student) ────────────────────────────────────────────────
 const loadAll = async (studentId) => {
-  const [payments, ledger] = await Promise.all([
+  const [payments, ledger, subs] = await Promise.all([
     OlympiadPayment.find({ student: studentId, ...PAYMENT_VISIBLE }).sort({ createdAt: -1 }).limit(HISTORY_CAP),
     CreditTransaction.find({ student: studentId }).sort({ createdAt: -1 }).limit(HISTORY_CAP),
+    SubscriptionPayment.find({ student: studentId, kind: { $ne: 'AUTOPAY_SETUP' }, status: { $in: ['paid', 'failed'] } }).sort({ createdAt: -1 }).limit(HISTORY_CAP),
   ]);
   const hidden = (p) => p.archivedAt && p.status !== 'SUCCESS'; // archived non-success records stay out of the student's view
   const visible = payments.filter((p) => !hidden(p));
   const examIds = [...new Set(visible.map((p) => String(p.exam)))];
   const exams = examIds.length ? await OlympiadExam.find({ _id: { $in: examIds } }) : [];
   const titles = new Map(exams.map((e) => [String(e._id), e.title]));
-  return { rows: [...visible.map((p) => paymentRow(p, titles)), ...ledger.map(creditRow)], payments: visible, ledger, titles, exams };
+  return { rows: [...visible.map((p) => paymentRow(p, titles)), ...subs.map(subscriptionRow), ...ledger.map(creditRow)], payments: visible, subs, ledger, titles, exams };
 };
 
 // ── query parsing ────────────────────────────────────────────────────────────────────────────────
@@ -126,9 +148,9 @@ const monthRange = (offset, now = new Date()) => {
 const parseQuery = (q = {}, now = new Date()) => {
   const f = {
     tab: oneOf(q.tab, TABS, 'all'),
-    type: oneOf(q.type, ['EXAM_PAYMENT', 'INTERVIEW_PAYMENT', 'PACKAGE_PAYMENT', 'REFERRAL_CREDIT', 'EXAM_CREDIT_USED', 'INTERVIEW_CREDIT_USED', 'ADMIN_CREDIT_GRANT', 'CREDIT_ADJUSTMENT', 'CREDIT_REVERSAL'], ''),
+    type: oneOf(q.type, ['EXAM_PAYMENT', 'INTERVIEW_PAYMENT', 'PACKAGE_PAYMENT', 'SUBSCRIPTION_PAYMENT', 'REFERRAL_CREDIT', 'EXAM_CREDIT_USED', 'INTERVIEW_CREDIT_USED', 'ADMIN_CREDIT_GRANT', 'CREDIT_ADJUSTMENT', 'CREDIT_REVERSAL'], ''),
     status: oneOf(q.status, ['SUCCESS', 'PENDING', 'FAILED', 'REFUNDED'], ''),
-    component: oneOf(q.component, ['EXAM', 'INTERVIEW', 'PACKAGE', 'CREDIT', 'REFERRAL'], ''),
+    component: oneOf(q.component, ['EXAM', 'INTERVIEW', 'PACKAGE', 'SUBSCRIPTION', 'CREDIT', 'REFERRAL'], ''),
     method: oneOf(q.method, [...Object.keys(KNOWN), 'other'], ''),
     search: typeof q.search === 'string' ? q.search.trim().slice(0, 80).toLowerCase() : '',
     limit: PAGE_SIZES.includes(Number(q.limit)) ? Number(q.limit) : 10,
@@ -166,8 +188,10 @@ const matches = (r, f) => {
 };
 
 // ── summary (money and credits are kept apart) ──────────────────────────────────────────────────────
-const summarize = async (studentId, { payments, ledger }) => {
+const summarize = async (studentId, { payments: examPayments, subs = [], ledger }) => {
   const sum = (list) => list.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  // subscription payments are money too: normalise them to the same shape (rupees + the SUCCESS / FAILED vocabulary)
+  const payments = [...examPayments, ...subs.map((p) => ({ amount: p.amountPaise / 100, status: SUB_STATUS[p.status] || 'PENDING' }))];
   const ok = payments.filter((p) => p.status === 'SUCCESS');
   const earned = ledger.filter((t) => t.type === 'REFERRAL_REWARD').reduce((s, t) => s + t.delta, 0);
   const granted = ledger.filter((t) => t.type === 'ADMIN_GRANT' || (t.type === 'ADMIN_ADJUSTMENT' && t.delta > 0)).reduce((s, t) => s + t.delta, 0);
@@ -199,7 +223,7 @@ const list = async (user, query) => {
 
 // ── detail ──────────────────────────────────────────────────────────────────────────────────────────
 const parseId = (raw) => {
-  const m = /^(pay|crd)_([a-f0-9]{24})$/i.exec(typeof raw === 'string' ? raw : '');
+  const m = /^(pay|crd|sub)_([a-f0-9]{24})$/i.exec(typeof raw === 'string' ? raw : '');
   if (!m) throw new TxError(400, 'That transaction id is not valid.', 'INVALID_TRANSACTION');
   return { kind: m[1].toLowerCase(), oid: m[2] };
 };
@@ -209,6 +233,11 @@ const NOT_FOUND = () => new TxError(404, 'Transaction not found.', 'TRANSACTION_
 const loadPaymentFor = async (user, oid) => {
   const p = await OlympiadPayment.findOne({ _id: oid, student: user._id, ...PAYMENT_VISIBLE });
   if (!p || (p.archivedAt && p.status !== 'SUCCESS')) throw NOT_FOUND();
+  return p;
+};
+const loadSubscriptionFor = async (user, oid) => {
+  const p = await SubscriptionPayment.findOne({ _id: oid, student: user._id, kind: { $ne: 'AUTOPAY_SETUP' }, status: { $in: ['paid', 'failed'] } });
+  if (!p) throw NOT_FOUND();
   return p;
 };
 const loadCreditFor = async (user, oid) => {
@@ -238,6 +267,20 @@ const purposeOf = (p, title) => {
 
 const detail = async (user, rawId) => {
   const { kind, oid } = parseId(rawId);
+  if (kind === 'sub') {
+    const p = await loadSubscriptionFor(user, oid);
+    const row = subscriptionRow(p);
+    const d = require('./subscriptionDates');
+    return {
+      ...publicRow(row), purpose: `Monthly Subscription — unlimited exams & interviews, Standard ${p.standard}`,
+      subscription: { standard: p.standard, validFrom: p.periodStart || null, validTill: p.periodEnd ? d.validTill(p.periodEnd) : null, autopay: p.kind === 'AUTOPAY_CHARGE', mrp: p.mrpPaise / 100, discount: (p.mrpPaise - p.amountPaise) / 100 },
+      payment: {
+        razorpayOrderId: p.razorpayOrderId || p.razorpaySubscriptionId || null, razorpayPaymentId: p.status === 'paid' ? p.razorpayPaymentId || null : null,
+        verifiedAt: p.paidAt || null, paymentMethod: row.method ? methodLabel(row.method) : 'Razorpay',
+        failureNote: p.status === 'failed' ? 'The payment was not completed.' : null,
+      },
+    };
+  }
   if (kind === 'pay') {
     const p = await loadPaymentFor(user, oid);
     const exam = await OlympiadExam.findById(p.exam);
@@ -308,6 +351,11 @@ const receiptData = async (user, p, exam) => {
 
 const receiptFile = async (user, rawId) => {
   const { kind, oid } = parseId(rawId);
+  if (kind === 'sub') { // a subscription payment's receipt is its invoice (own numbering, owner only)
+    const p = await loadSubscriptionFor(user, oid);
+    const data = await require('./subscriptionService').invoiceData(user, String(p._id));
+    return { data, filename: `LearnIQ_Invoice_${data.invoiceNumber}.pdf`, invoice: true };
+  }
   if (kind !== 'pay') throw new TxError(400, 'A credit transaction has no payment receipt. Download its credit statement instead.', 'NOT_A_PAYMENT');
   const p = await loadPaymentFor(user, oid);
   const exam = await OlympiadExam.findById(p.exam);
@@ -341,7 +389,7 @@ const bulkReceipts = async (user, ids) => {
   for (const raw of unique) {
     try {
       const { kind, oid } = parseId(raw);
-      if (kind !== 'pay') { excluded += 1; continue; }
+      if (kind !== 'pay') { excluded += 1; continue; } // credit rows and subscription invoices are separate documents
       const p = await loadPaymentFor(user, oid);
       if (p.status !== 'SUCCESS') { excluded += 1; continue; }
       receipts.push(await receiptData(user, p, await OlympiadExam.findById(p.exam)));

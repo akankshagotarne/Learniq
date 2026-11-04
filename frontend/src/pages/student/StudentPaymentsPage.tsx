@@ -24,8 +24,8 @@ const StatusPill: React.FC<{ r: Pick<TxRow, 'status' | 'statusLabel'> }> = ({ r 
 );
 
 const TYPE_OPTIONS: Record<string, [string, string][]> = {
-  all: [['EXAM_PAYMENT', 'Exam Payment'], ['INTERVIEW_PAYMENT', 'Interview Payment'], ['PACKAGE_PAYMENT', 'Package Payment'], ['REFERRAL_CREDIT', 'Referral Credit'], ['EXAM_CREDIT_USED', 'Exam Credit Used'], ['INTERVIEW_CREDIT_USED', 'Interview Credit Used'], ['ADMIN_CREDIT_GRANT', 'Admin Credit Grant'], ['CREDIT_ADJUSTMENT', 'Credit Adjustment'], ['CREDIT_REVERSAL', 'Credit Reversal']],
-  payments: [['EXAM_PAYMENT', 'Exam Payment'], ['INTERVIEW_PAYMENT', 'Interview Payment'], ['PACKAGE_PAYMENT', 'Package Payment']],
+  all: [['EXAM_PAYMENT', 'Exam Payment'], ['INTERVIEW_PAYMENT', 'Interview Payment'], ['PACKAGE_PAYMENT', 'Package Payment'], ['SUBSCRIPTION_PAYMENT', 'Subscription'], ['REFERRAL_CREDIT', 'Referral Credit'], ['EXAM_CREDIT_USED', 'Exam Credit Used'], ['INTERVIEW_CREDIT_USED', 'Interview Credit Used'], ['ADMIN_CREDIT_GRANT', 'Admin Credit Grant'], ['CREDIT_ADJUSTMENT', 'Credit Adjustment'], ['CREDIT_REVERSAL', 'Credit Reversal']],
+  payments: [['EXAM_PAYMENT', 'Exam Payment'], ['INTERVIEW_PAYMENT', 'Interview Payment'], ['PACKAGE_PAYMENT', 'Package Payment'], ['SUBSCRIPTION_PAYMENT', 'Subscription']],
   credits: [['REFERRAL_CREDIT', 'Referral Credit'], ['EXAM_CREDIT_USED', 'Exam Credit Used'], ['INTERVIEW_CREDIT_USED', 'Interview Credit Used'], ['ADMIN_CREDIT_GRANT', 'Admin Credit Grant'], ['CREDIT_ADJUSTMENT', 'Credit Adjustment'], ['CREDIT_REVERSAL', 'Credit Reversal']],
 };
 const COMPONENT_OPTIONS: Record<string, [string, string][]> = {

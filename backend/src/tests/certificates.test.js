@@ -25,6 +25,7 @@ const overrides = {
   [path.join(SRC, 'models', 'AuthSession.js')]: fake.authSessionModels, // sign-in sessions (one active per account)
   [path.join(SRC, 'services', 'razorpayClient.js')]: { getRazorpayInstance: () => null },
   [path.join(SRC, 'models', 'Proctoring.js')]: fake.proctoringModels,
+  [path.join(SRC, 'models', 'Subscription.js')]: fake.subscriptionModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: {
     OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion,
     OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt,

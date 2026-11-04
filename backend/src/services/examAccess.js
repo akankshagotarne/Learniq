@@ -52,10 +52,21 @@ const interviewGrant = (studentId, examId) => OlympiadAccessGrant.findOne({
   student: studentId, exam: examId, status: 'ACTIVE', $or: [{ component: 'INTERVIEW' }, { component: EXAM_PAY, includesInterview: true }],
 });
 
-/** The one place that answers "may this student take this exam without paying now?" (payment first, then an administrator / credit grant). */
+/**
+ * Monthly Subscription: a paid Std 1-10 Olympiad exam is covered while the student holds an ACTIVE subscription for THAT exam's standard.
+ * Derived from dates on every call (nothing is stored per exam), so it ends by itself at endsAt. Never consulted when a payment / grant exists.
+ */
+const subscriptionFor = async (studentId, examId) => {
+  const exam = await OlympiadExam.findById(examId);
+  if (!exam || exam.examType !== 'olympiad' || exam.accessMode === 'approval' || !(exam.fee > 0)) return null;
+  return require('./subscriptionService').getActiveSubscription(studentId, exam.standard);
+};
+
+/** The one place that answers "may this student take this exam without paying now?" (payment, then an administrator / credit grant, then a subscription). */
 const entitlementFor = async (studentId, examId) => {
   const [payment, grant] = await Promise.all([successPayment(studentId, examId), activeGrant(studentId, examId)]);
-  return { payment: payment || null, grant: grant || null, entitled: !!(payment || grant) };
+  const subscription = payment || grant ? null : await subscriptionFor(studentId, examId);
+  return { payment: payment || null, grant: grant || null, subscription: subscription || null, entitled: !!(payment || grant || subscription) };
 };
 
 /**
@@ -64,16 +75,19 @@ const entitlementFor = async (studentId, examId) => {
  */
 const interviewEntitlementFor = async (studentId, examId) => {
   const [payment, grant] = await Promise.all([interviewPayment(studentId, examId), interviewGrant(studentId, examId)]);
+  const subscription = payment || grant ? null : await subscriptionFor(studentId, examId);
   let via = null;
   if (payment) via = payment.component === 'INTERVIEW' ? 'PAYMENT' : 'LEGACY_PACKAGE';
   else if (grant) via = grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
-  return { payment: payment || null, grant: grant || null, entitled: !!(payment || grant), via };
+  else if (subscription) via = 'SUBSCRIPTION';
+  return { payment: payment || null, grant: grant || null, subscription: subscription || null, entitled: !!(payment || grant || subscription), via };
 };
 
 /** How the EXAM component was unlocked (PAYMENT / CREDIT / LEGACY_PACKAGE / ADMIN_GRANT) - display and reporting only. */
-const examVia = ({ payment, grant }) => {
+const examVia = ({ payment, grant, subscription }) => {
   if (payment) return payment.component === 'EXAM' ? 'PAYMENT' : 'LEGACY_PACKAGE';
   if (grant) return grant.source === 'CREDIT' ? 'CREDIT' : 'OTHER';
+  if (subscription) return 'SUBSCRIPTION';
   return null;
 };
 
@@ -270,4 +284,4 @@ const overviewForStudent = async (studentId) => {
   };
 };
 
-module.exports = { ExamAccessError, entitlementFor, interviewEntitlementFor, examVia, interviewGrant, interviewPayment, EXAM_PAY, INTERVIEW_PAY, activeGrant, activeGrantExamIds, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };
+module.exports = { ExamAccessError, subscriptionFor, entitlementFor, interviewEntitlementFor, examVia, interviewGrant, interviewPayment, EXAM_PAY, INTERVIEW_PAY, activeGrant, activeGrantExamIds, grantAccess, resetAttempt, linkRetake, overviewForStudent, parseReason };

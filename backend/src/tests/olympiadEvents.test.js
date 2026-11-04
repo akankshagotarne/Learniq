@@ -24,6 +24,7 @@ const overrides = {
   [path.join(SRC, 'models', 'Engineering.js')]: fake.engineeringModels,
   [path.join(SRC, 'models', 'OlympiadExamAudit.js')]: { OlympiadExamAudit: fake.OlympiadExamAudit },
   [path.join(SRC, 'models', 'OlympiadEvent.js')]: { OlympiadEvent: fake.OlympiadEvent },
+  [path.join(SRC, 'models', 'Subscription.js')]: fake.subscriptionModels,
   [path.join(SRC, 'models', 'Olympiad.js')]: { OlympiadExam: fake.OlympiadExam, OlympiadQuestion: fake.OlympiadQuestion, OlympiadPayment: fake.OlympiadPayment, OlympiadAttempt: fake.OlympiadAttempt },
   [path.join(SRC, 'models', 'Certificate.js')]: { Certificate: fake.Certificate, Counter: fake.Counter },
   [path.join(SRC, 'models', 'TeacherInterview.js')]: fake.interviewModels,

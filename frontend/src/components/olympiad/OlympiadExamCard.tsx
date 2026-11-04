@@ -143,10 +143,12 @@ const OlympiadExamCard: React.FC<Props> = ({ exam, paying, onPay, onUseCredit, c
           </div>
           <div className="flex items-center gap-1.5 min-w-0 text-text-secondary">
             <IndianRupee className="w-3.5 h-3.5 text-[#4ADE9A] flex-shrink-0" />
-            <span className="min-w-0">Exam: {exam.fee > 0 ? formatRupees(examPrice) : 'FREE'}</span>
+            {exam.examVia === 'SUBSCRIPTION'
+              ? <span className="min-w-0 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold px-2 py-0.5" data-testid="included-in-plan">Included in your plan</span>
+              : <span className="min-w-0">Exam: {exam.fee > 0 ? formatRupees(examPrice) : 'FREE'}</span>}
           </div>
         </div>
-        {!approval && exam.prices && exam.fee > 0 && exam.interviewIncluded !== false && exam.prices.INTERVIEW !== undefined && (
+        {!approval && exam.examVia !== 'SUBSCRIPTION' && exam.prices && exam.fee > 0 && exam.interviewIncluded !== false && exam.prices.INTERVIEW !== undefined && (
           <p className="text-[11px] text-text-muted mb-3" data-testid="price-breakdown">
             <b className="text-text-secondary" data-testid="interview-included">Interview Included</b> · Exam {formatRupees(exam.prices.EXAM)} · Interview {formatRupees(exam.prices.INTERVIEW)} · <b className="text-text-secondary">Total {formatRupees(exam.prices.EXAM + exam.prices.INTERVIEW)}</b>
             <span className="block">Each is paid separately; 1 credit covers the exam only.</span>

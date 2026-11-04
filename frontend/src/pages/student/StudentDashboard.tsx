@@ -8,6 +8,7 @@ import { Course, Notification, LiveSession } from '../../types';
 import { getCourseThumbnail } from '../../utils/courseImage';
 import { COURSES_ENABLED } from '../../constants/features';
 import { isOthersStandard, standardLabel } from '../../constants/standards';
+import SubscriptionBanner from '../../components/subscription/SubscriptionBanner';
 
 const getSubjectBadgeClass = (subject: string) => {
   const s = subject.toLowerCase();
@@ -115,6 +116,8 @@ const StudentDashboard: React.FC = () => {
               <span>Change Standard</span>
             </Link>
           </div>
+
+          <SubscriptionBanner standard={user?.currentStandard} />
 
           {/* Section 6.2 Top Stat Cards */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-8">

@@ -230,10 +230,15 @@ const olympiadAttemptSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   // Paid Olympiad: the verified payment that unlocked this attempt. Free engineering test: the approved access request instead.
-  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest && !this.accessGrant; } },
+  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest && !this.accessGrant && this.accessType !== 'subscription'; } },
+  // Monthly Subscription: the subscription that covered this attempt (no payment row, no credit)
+  subscription: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' },
   // Administrator exception (models/ExamAccess.js): lets ONE student start ONE exam without a payment record
   accessGrant: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadAccessGrant' },
   accessRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'EngineeringRequest' },
+
+  // How the attempt was unlocked: 'payment' | 'credit' | 'subscription' | 'grant'. Absent on records created before subscriptions.
+  accessType: { type: String, enum: ['payment', 'credit', 'subscription', 'grant'] },
 
   status: { type: String, enum: ['IN_PROGRESS', 'COMPLETED'], default: 'IN_PROGRESS' },
   submissionType: { type: String, enum: ['MANUAL', 'TIMER', 'SYSTEM', 'PROCTORING'] },

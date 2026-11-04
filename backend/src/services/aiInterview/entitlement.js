@@ -21,6 +21,9 @@ const resolveEntitlement = async (user, examId) => {
   }
   const payment = await OlympiadPayment.findOne({ student: user._id, exam: exam._id, status: 'SUCCESS', component: { $ne: 'INTERVIEW' } }).lean();
   if (!payment) {
+    // an active Monthly Subscription for this exam's standard unlocks the AI interview too (no payment row exists for it)
+    const sub = await require('../subscriptionService').getActiveSubscription(user._id, exam.standard);
+    if (sub) return { exam, payment: null, subscription: sub };
     throw new ApiError(403, 'AI Interview access requires a successful exam purchase.', 'PURCHASE_REQUIRED');
   }
   return { exam, payment };

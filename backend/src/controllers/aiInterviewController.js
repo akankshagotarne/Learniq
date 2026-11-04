@@ -307,7 +307,7 @@ const start = handler(async (req, res) => {
   const cfg = getConfig();
   assertEnabled(cfg);
   const examId = req.body && req.body.examId;
-  const { exam, payment } = await resolveEntitlement(req.user, examId); // 403 without a verified purchase
+  const { exam, payment, subscription } = await resolveEntitlement(req.user, examId); // 403 without a verified purchase or an active subscription
   assertConfigured(cfg);
 
   let s = await AIInterview.findOne({ student: req.user._id, exam: exam._id }).lean();
@@ -350,7 +350,7 @@ const start = handler(async (req, res) => {
     s = await AIInterview.create({
       student: req.user._id,
       exam: exam._id,
-      payment: payment._id,
+      ...(payment ? { payment: payment._id } : { accessType: 'subscription', subscription: subscription._id }),
       studentName: req.user.name,
       standard: exam.standard,                               // trusted: from the exam record, never from the request
       subjects: subjectsFor(exam.standard, exam.sections),   // trusted: the exam's own section names

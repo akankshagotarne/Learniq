@@ -46,6 +46,7 @@ const teacherInterviewSchema = new mongoose.Schema({
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   attempt: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadAttempt', required: true }, // the SUBMITTED attempt that unlocked it
   payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment' },                 // reference only - no payment data is copied
+  accessType: { type: String, enum: ['payment', 'credit', 'subscription', 'grant'] },        // how the interview was unlocked (absent on older records)
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   status: { type: String, enum: STATUSES, default: 'REQUESTED' },
