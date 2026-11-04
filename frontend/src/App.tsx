@@ -49,6 +49,9 @@ const StudentInterviewPage = lazy(() => import('./pages/student/StudentInterview
 const StudentInterviewResultsPage = lazy(() => import('./pages/student/StudentInterviewResultsPage'));
 const StudentCertificatesPage = lazy(() => import('./pages/student/StudentCertificatesPage'));
 const ReferAndEarnPage = lazy(() => import('./pages/student/ReferAndEarnPage'));
+const SubscriptionPage = lazy(() => import('./pages/student/SubscriptionPage'));
+const SubscriptionSuccessPage = lazy(() => import('./pages/student/SubscriptionResultPage').then(m => ({ default: m.SubscriptionSuccessPage })));
+const SubscriptionFailedPage = lazy(() => import('./pages/student/SubscriptionResultPage').then(m => ({ default: m.SubscriptionFailedPage })));
 
 // Teacher pages
 const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'));
@@ -283,6 +286,21 @@ const AppRoutes: React.FC = () => (
       <Route path="/student/refer" element={
         <ProtectedRoute roles={['student']}>
           <ReferAndEarnPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/subscription" element={
+        <ProtectedRoute roles={['student']}>
+          <SubscriptionPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/subscription/success" element={
+        <ProtectedRoute roles={['student']}>
+          <SubscriptionSuccessPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/student/subscription/failed" element={
+        <ProtectedRoute roles={['student']}>
+          <SubscriptionFailedPage />
         </ProtectedRoute>
       } />
       <Route path="/student/quizzes" element={<Navigate to="/student/exams" replace />} />
