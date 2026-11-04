@@ -282,10 +282,11 @@ const redeemComponent = async ({ student, exam, component }) => {
   const label = isInterview ? 'Interview' : 'Exam';
   const findExisting = async () => {
     const ent = isInterview ? await ea.interviewEntitlementFor(student._id, exam._id) : await ea.entitlementFor(student._id, exam._id);
-    return ent.grant || (ent.payment ? { payment: ent.payment } : null);
+    // a Monthly Subscription covers the exam / interview: nothing is charged and no credit is taken
+    return ent.grant || (ent.payment ? { payment: ent.payment } : (ent.subscription ? { subscription: ent.subscription } : null));
   };
   const existing = await findExisting();
-  if (existing) return { grant: existing.payment ? null : existing, payment: existing.payment || null, charged: false, alreadyUnlocked: true, component };
+  if (existing) return { grant: existing.payment || existing.subscription ? null : existing, payment: existing.payment || null, subscription: existing.subscription || null, charged: false, alreadyUnlocked: true, component };
 
   // a credit that was handed back after a failed unlock (see below) must be chargeable again on the next attempt: each undo moves the key on
   const reversals = await CreditTransaction.find({ student: student._id, exam: exam._id, type: 'REVERSAL', source: 'SYSTEM' });
