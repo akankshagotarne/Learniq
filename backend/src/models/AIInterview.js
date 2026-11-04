@@ -58,7 +58,9 @@ const usageSchema = new mongoose.Schema({
 const aiInterviewSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
-  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required: true }, // the verified purchase it belongs to
+  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return this.accessType !== 'subscription'; } },
+  accessType: { type: String, enum: ['payment', 'subscription'] },                                  // Monthly Subscription: no payment row exists
+  subscription: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' }, // the verified purchase it belongs to
   attempt: { type: Number, default: 1 },
 
   // Trusted context copied from the database at start time (never from the browser)
