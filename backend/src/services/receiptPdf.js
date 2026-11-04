@@ -156,6 +156,26 @@ const renderCreditStatement = (doc, d) => {
   footer(doc, 'One exam credit unlocks one eligible component. Credits cannot be exchanged for money.');
 };
 
+/** Tax-free payment invoice for ONE Monthly Subscription charge (data: services/subscriptionService.js invoiceData). */
+const renderInvoice = (doc, d) => {
+  const paise = (n) => inr((Number(n) || 0) / 100);
+  const methodText = { upi: 'UPI', card: 'Card', netbanking: 'Net Banking', wallet: 'Wallet', emi: 'EMI', paylater: 'Pay Later' }[d.method] || 'Razorpay';
+  header(doc, 'INVOICE', 'LearnIQ | Monthly Subscription Invoice');
+  banner(doc, 126, { ok: true, label: 'PAYMENT SUCCESSFUL', sub: d.autopay ? 'Auto-renew charge confirmed by LearnIQ' : 'Verified payment confirmed by LearnIQ', rightLabel: 'INVOICE NO.', rightValue: d.invoiceNumber });
+  let y = 186;
+  y = card(doc, y, 'BILLED TO', (yy) => grid2(doc, yy, [['Student Name', d.studentName], ['Email', d.studentEmail], ['Standard', `Standard ${d.standard}`]]));
+  y = card(doc, y + 6, 'SUBSCRIPTION DETAILS', (yy) => rows(doc, yy, [
+    ['Plan', `${d.planName} (30 days)`], ['Standard', `Standard ${d.standard}`], ['Valid from', istDateTime(d.validFrom).replace(/, .*$/, '')], ['Valid till', d.validTill],
+    ['Invoice date', istDateTime(d.issuedAt)], ['Payment method', methodText], ['Razorpay payment ID', d.paymentId || '—'], ['Razorpay reference', d.orderId || '—'],
+  ]));
+  y = card(doc, y + 6, 'AMOUNT', (yy) => rows(doc, yy, [
+    ['Plan price (MRP)', paise(d.mrpPaise)], ['Discount', `− ${paise(d.discountPaise)}`, { color: C.green }], ['Amount paid', paise(d.amountPaise)],
+  ]));
+  y = totalBox(doc, y + 6, { label: 'TOTAL AMOUNT PAID', amountText: paise(d.amountPaise), right: { top: 'Currency: INR', bottom: 'Payment confirmed' } });
+  acknowledgement(doc, y + 2, { lines: ['Thank you for choosing LearnIQ. Please keep this invoice for your records.', 'Payments are non-refundable once the plan is active, except failed or duplicate transactions. Contact learniq.admin@gmail.com.'], signature: true });
+  footer(doc, 'This invoice was generated from LearnIQ\'s verified payment records.');
+};
+
 const build = (draw) => new Promise((resolve, reject) => {
   const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: 'LearnIQ', Author: 'LearnIQ', Creator: 'LearnIQ' } });
   useFonts(doc);
@@ -170,4 +190,6 @@ const receiptsPdf = (list) => build((doc) => {
 });
 const statementPdf = (d) => build((doc) => { doc.info.Title = `Credit Statement ${d.transactionId}`; renderCreditStatement(doc, d); });
 
-module.exports = { receiptsPdf, statementPdf };
+const invoicePdf = (d) => build((doc) => { doc.info.Title = `Invoice ${d.invoiceNumber}`; renderInvoice(doc, d); });
+
+module.exports = { receiptsPdf, statementPdf, invoicePdf };

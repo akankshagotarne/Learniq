@@ -23,7 +23,7 @@ const sendPdf = (res, buf, filename, extra = {}) => {
 const list = async (req, res) => { try { noStore(res); res.json({ success: true, ...(await svc.list(req.user, req.query)) }); } catch (e) { fail(res, e, 'list'); } };
 const detail = async (req, res) => { try { noStore(res); res.json({ success: true, transaction: await svc.detail(req.user, req.params.id) }); } catch (e) { fail(res, e, 'detail'); } };
 const receipt = async (req, res) => {
-  try { const { data, filename } = await svc.receiptFile(req.user, req.params.id); sendPdf(res, await pdf.receiptsPdf([data]), filename); } catch (e) { fail(res, e, 'receipt'); }
+  try { const { data, filename, invoice } = await svc.receiptFile(req.user, req.params.id); sendPdf(res, invoice ? await pdf.invoicePdf(data) : await pdf.receiptsPdf([data]), filename); } catch (e) { fail(res, e, 'receipt'); }
 };
 const statement = async (req, res) => {
   try { const { data, filename } = await svc.statementFile(req.user, req.params.id); sendPdf(res, await pdf.statementPdf(data), filename); } catch (e) { fail(res, e, 'receipt'); }
