@@ -17,6 +17,19 @@ const { PLAN } = require('../config/subscriptionPlan');
   }
   const rzp = getRazorpayInstance();
   if (!rzp) { console.error('Razorpay is not configured: set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'); process.exit(1); }
+  const mode = String(process.env.RAZORPAY_KEY_ID || '').startsWith('rzp_live_') ? 'LIVE' : 'TEST';
+  console.log(`Razorpay mode for these keys: ${mode}`);
+  // never create a duplicate: reuse an existing plan of the agreed shape (daily x 30, Rs 99, INR) in THIS account
+  try {
+    const existing = await rzp.plans.all({ count: 100 });
+    const same = ((existing && existing.items) || []).find((p) => p.period === 'daily' && Number(p.interval) === 30 && p.item && p.item.amount === PLAN.amountPaise && p.item.currency === PLAN.currency && p.item.name === 'LearnIQ Monthly Subscription');
+    if (same) { console.log(`A matching ${mode} plan already exists: ${same.id}\nAdd this to the backend environment:  RAZORPAY_MONTHLY_PLAN_ID=${same.id}\nNothing created.`); return; }
+  } catch (err) {
+    const d = err && err.error && err.error.description;
+    console.error(`Could not list existing plans: ${d || err.message || err}`);
+    if (/not.*(enabled|activated)|access denied/i.test(String(d || ''))) console.error('The Subscriptions feature looks disabled on this Razorpay account: enable it in the Razorpay Dashboard (Subscriptions), then run this again.');
+    process.exit(1);
+  }
   try {
     const plan = await rzp.plans.create({
       period: 'daily', interval: 30,

@@ -36,26 +36,38 @@ const rupees = (paise) => `₹${(paise / 100).toLocaleString('en-IN', { maximumF
 const getActiveSubscription = async (studentId, standard, now = new Date()) => {
   const std = validStandard(standard);
   if (!studentId || std === null) return null;
-  return (await Subscription.findOne({ student: studentId, standard: std, endsAt: { $gt: now } })) || null;
+  const sub = await Subscription.findOne({ student: studentId, standard: std });
+  return sub && dates.hasAccessNow(sub, now) ? sub : null;   // paid period running, or an authorised renewal inside its short collection window
 };
 /** May this student take exams / interviews of `standard` without paying? Only the standard the plan was bought for, only before endsAt. */
 const hasAccess = async (studentId, standard, now = new Date()) => !!(await getActiveSubscription(studentId, standard, now));
 
 /** Standards the student currently holds an ACTIVE plan for. */
-const activeStandards = async (studentId, now = new Date()) => (await Subscription.find({ student: studentId, endsAt: { $gt: now } })).map((s) => s.standard);
+const activeStandards = async (studentId, now = new Date()) => (await Subscription.find({ student: studentId })).filter((s) => dates.hasAccessNow(s, now)).map((s) => s.standard);
 
 // ── views ────────────────────────────────────────────────────────────────────────────────────
+/** What the student should be told about renewal. Only ever derived from verified, stored state. */
+const renewalStateOf = (sub, active) => {
+  if (!active) return 'expired';
+  if (sub.autoRenew === true) return sub.autoRenewStatus === 'pending' ? 'pending' : 'on';
+  if (sub.autoRenewStatus === 'halted') return 'halted';
+  if (sub.autoRenewStatus === 'cancelled') return 'cancelled';
+  return 'off';
+};
+
 const subView = (sub, now = new Date(), latestPaid = null) => {
-  const active = dates.isActive(sub.endsAt, now);
+  const paidActive = dates.isActive(sub.endsAt, now);
+  const grace = dates.inRenewalGrace(sub, now);
+  const active = paidActive || grace;
   const left = dates.daysRemaining(sub.endsAt, now);
   const autoRenew = active && sub.autoRenew === true;
-  const nextCharge = autoRenew ? (sub.nextChargeAt || sub.endsAt) : null;
+  const nextCharge = autoRenew && sub.nextChargeAt ? sub.nextChargeAt : null;   // only the date Razorpay reported; never invented
   return {
     id: idStr(sub), standard: sub.standard, plan: sub.plan || 'monthly', planName: PLAN.name,
-    status: active ? 'active' : 'expired', phase: dates.phase(sub.endsAt, now),
-    startsAt: sub.startsAt || null, endsAt: sub.endsAt || null,
+    status: active ? 'active' : 'expired', phase: paidActive ? dates.phase(sub.endsAt, now) : (grace ? 'renewing' : 'expired'),
+    purchasedAt: sub.createdAt || null, startsAt: sub.startsAt || null, endsAt: sub.endsAt || null,
     validTill: sub.endsAt ? dates.validTill(sub.endsAt) : null, daysRemaining: left, totalDays: dates.VALIDITY_DAYS,
-    autoRenew, autoRenewStatus: sub.autoRenewStatus || null, cancelAtCycleEnd: sub.cancelAtCycleEnd === true,
+    autoRenew, autoRenewStatus: sub.autoRenewStatus || null, cancelAtCycleEnd: sub.cancelAtCycleEnd === true, renewalState: renewalStateOf(sub, active),
     nextChargeAt: nextCharge, nextChargeOn: nextCharge ? dates.formatIst(nextCharge) : null, nextChargeAmount: PLAN.amountPaise / 100,
     // the manual Renew button is hidden while auto-renew is on (prevents a double payment)
     canRenew: !autoRenew, canToggleAutoRenew: active,
@@ -69,7 +81,14 @@ const notify = async (studentId, title, message, type = 'info') => {
 
 /** Reminders are created lazily when the student loads the dashboard / My Subscription (a sleeping Render instance cannot run a cron). */
 const maybeRemind = async (sub, now) => {
-  if (!dates.isActive(sub.endsAt, now)) return;
+  if (!dates.isActive(sub.endsAt, now)) {
+    // the paid period is over: tell the student once (not while an authorised renewal is still being collected)
+    if (sub.endsAt && !dates.hasAccessNow(sub, now) && !(sub.expiryNotifiedFor && new Date(sub.expiryNotifiedFor).getTime() === new Date(sub.endsAt).getTime())) {
+      const won = await Subscription.findOneAndUpdate({ _id: sub._id, expiryNotifiedFor: { $ne: sub.endsAt } }, { $set: { expiryNotifiedFor: sub.endsAt } }, { new: true });
+      if (won) await notify(sub.student, 'Subscription expired', `Your Std ${sub.standard} plan ended on ${dates.validTill(sub.endsAt)}. Renew to keep unlimited exams and interviews.`, 'warning');
+    }
+    return;
+  }
   const left = dates.daysRemaining(sub.endsAt, now);
   if (left <= 3) {
     const won = await Subscription.findOneAndUpdate({ _id: sub._id, reminderForEndsAt: { $ne: sub.endsAt } }, { $set: { reminderSentAt: now, reminderForEndsAt: sub.endsAt } }, { new: true });
@@ -149,7 +168,7 @@ const recordCharge = async (o) => {
   if (row.applied) return { row, duplicate: true, period: { startsAt: row.periodStart, endsAt: row.periodEnd } };
 
   // add the 30 days: compare-and-set on endsAt; lastPaymentId makes a repeat (crash recovery) a no-op
-  let period; let sub; let firstApply = false;
+  let period; let sub; let firstApply = false; let wasRenewal = false;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     sub = await Subscription.findOne({ student: row.student, standard: row.standard });
     if (!sub) {
@@ -160,7 +179,7 @@ const recordCharge = async (o) => {
     const set = { endsAt: p.endsAt, lastPaymentId: row.razorpayPaymentId, plan: 'monthly' };
     if (!sub.startsAt) set.startsAt = p.startsAt;
     const won = await Subscription.findOneAndUpdate({ _id: sub._id, endsAt: sub.endsAt || null }, { $set: set }, { new: true });
-    if (won) { period = { startsAt: p.startsAt, endsAt: p.endsAt }; sub = won; firstApply = true; break; }
+    if (won) { wasRenewal = !!sub.endsAt; period = { startsAt: p.startsAt, endsAt: p.endsAt }; sub = won; firstApply = true; break; }
   }
   if (!period) throw new SubscriptionError(409, 'ACTIVATION_CONFLICT', 'Your subscription is being updated. Please refresh in a moment.');
 
@@ -172,7 +191,8 @@ const recordCharge = async (o) => {
   );
   row = done || (await SubscriptionPayment.findById(row._id));
   if (firstApply) {
-    await notify(row.student, 'Monthly Subscription activated 👑', `Your Std ${row.standard} plan is active — valid till ${dates.validTill(period.endsAt)}.`, 'payment');
+    if (wasRenewal) await notify(row.student, row.kind === 'AUTOPAY_CHARGE' ? 'Subscription renewed 👑' : 'Subscription extended 👑', `${rupees(row.amountPaise)} received. Your Std ${row.standard} plan is now valid till ${dates.validTill(period.endsAt)}.`, 'payment');
+    else await notify(row.student, 'Monthly Subscription activated 👑', `Your Std ${row.standard} plan is active — valid till ${dates.validTill(period.endsAt)}.`, 'payment');
   }
   return { row, duplicate: duplicate && !firstApply, period, subscription: sub };
 };
@@ -238,6 +258,23 @@ const confirmWithGateway = async (rzp, paymentId, { orderId, amountPaise }) => {
   return { method: typeof p.method === 'string' ? p.method.toLowerCase().slice(0, 20) : null };
 };
 
+/**
+ * Asks Razorpay for the subscription itself. Auto-renew is only switched on when Razorpay says the mandate is authenticated or active,
+ * for OUR plan and THIS student; the next charge date is the one Razorpay reports (charge_at), never one we calculate.
+ */
+const confirmGatewaySubscription = async (rzp, subscriptionId, studentId, standard) => {
+  let rs;
+  try { rs = await rzp.subscriptions.fetch(subscriptionId); } catch (err) { throw gatewayFail('subscription fetch', err); }
+  if (!rs || rs.id !== subscriptionId) throw new SubscriptionError(400, 'VERIFICATION_FAILED', 'Payment verification failed.');
+  const planId = process.env.RAZORPAY_MONTHLY_PLAN_ID;
+  const notes = rs.notes || {};
+  if ((planId && rs.plan_id && rs.plan_id !== planId) || (notes.studentId && String(notes.studentId) !== idStr(studentId)) || (notes.standard && String(notes.standard) !== String(standard))) {
+    throw new SubscriptionError(400, 'VERIFICATION_FAILED', 'Payment verification failed.');
+  }
+  const authorised = ['authenticated', 'active'].includes(rs.status);
+  return { authorised, status: rs.status, chargeAt: rs.charge_at ? new Date(rs.charge_at * 1000) : null };
+};
+
 const sigOk = (secret, payload, given) => {
   if (!secret || typeof given !== 'string') return false;
   const expected = Buffer.from(crypto.createHmac('sha256', secret).update(payload).digest('hex'));
@@ -250,6 +287,17 @@ const isValidSignature = ({ orderId, subscriptionId, paymentId, signature }) => 
   if (typeof paymentId !== 'string' || !paymentId) return false;
   if (subscriptionId) return typeof subscriptionId === 'string' && sigOk(secret, `${paymentId}|${subscriptionId}`, signature);
   return typeof orderId === 'string' && !!orderId && sigOk(secret, `${orderId}|${paymentId}`, signature);
+};
+
+/** Switch auto-renew ON (verified with Razorpay) and tell the student once, when it was off before. */
+const markAutoRenewOn = async (studentId, standard, rzpSubscriptionId, status, chargeAt) => {
+  const before = await Subscription.findOne({ student: studentId, standard });
+  const after = await setAutoRenewState(studentId, standard, { autoRenew: true, razorpaySubscriptionId: rzpSubscriptionId, autoRenewStatus: status === 'active' ? 'active' : 'authenticated', cancelAtCycleEnd: false, ...(chargeAt ? { nextChargeAt: chargeAt } : {}) });
+  if (!(before && before.autoRenew === true && before.razorpaySubscriptionId === rzpSubscriptionId) && after) {
+    const when = after.nextChargeAt ? ` Next payment: ${dates.formatIst(after.nextChargeAt)}.` : '';
+    await notify(studentId, 'Auto-renew is on', `Auto-renew is on for your Std ${standard} plan (${rupees(PLAN.amountPaise)} every 30 days).${when} You can turn it off any time in My Subscription.`, 'payment');
+  }
+  return after;
 };
 
 const setAutoRenewState = (studentId, standard, fields) => Subscription.findOneAndUpdate({ student: studentId, standard }, { $set: { ...fields, autoRenewChangedAt: new Date() } }, { new: true });
@@ -269,14 +317,19 @@ const verify = async (user, body = {}) => {
     if (!isValidSignature({ subscriptionId, paymentId, signature })) throw new SubscriptionError(400, 'VERIFICATION_FAILED', 'Payment verification failed. If money was deducted, it will be reconciled automatically or contact support.');
     if (setup.intent === 'new') {
       const { method } = await confirmWithGateway(rzp, paymentId, { amountPaise: setup.amountPaise });
+      const gw = await confirmGatewaySubscription(rzp, subscriptionId, user._id, setup.standard);
       const r = await recordCharge({ student: user._id, standard: setup.standard, kind: 'AUTOPAY_CHARGE', paymentId, signature, method, razorpaySubscriptionId: subscriptionId, via: 'checkout' });
       await SubscriptionPayment.updateOne({ _id: setup._id }, { $set: { status: 'paid', paidAt: new Date() } });
-      await setAutoRenewState(user._id, setup.standard, { autoRenew: true, razorpaySubscriptionId: subscriptionId, autoRenewStatus: 'active', cancelAtCycleEnd: false, nextChargeAt: r.period.endsAt });
+      // the money is in and the plan is active either way; auto-renew is switched on only once Razorpay confirms the authorisation (otherwise the webhook does it)
+      if (gw.authorised) await markAutoRenewOn(user._id, setup.standard, subscriptionId, gw.status, gw.chargeAt);
       return { standard: setup.standard, paymentRowId: idStr(r.row), duplicate: r.duplicate, ...(await summary(user._id)) };
     }
     // 'enable': the checkout was only the mandate approval (the first auto-charge is at the current endsAt) - no validity is added
-    await setAutoRenewState(user._id, setup.standard, { autoRenew: true, razorpaySubscriptionId: subscriptionId, autoRenewStatus: 'authenticated', cancelAtCycleEnd: false, nextChargeAt: setup.periodEnd || undefined });
-    await SubscriptionPayment.updateOne({ _id: setup._id }, { $set: { status: 'paid', paidAt: new Date() } });
+    const gw = await confirmGatewaySubscription(rzp, subscriptionId, user._id, setup.standard);
+    if (gw.authorised) {
+      await markAutoRenewOn(user._id, setup.standard, subscriptionId, gw.status, gw.chargeAt || setup.periodEnd || null);
+      await SubscriptionPayment.updateOne({ _id: setup._id }, { $set: { status: 'paid', paidAt: new Date() } });
+    }
     return { standard: setup.standard, ...(await summary(user._id)) };
   }
 
@@ -313,6 +366,7 @@ const setAutoRenew = async (user, id, enabled) => {
     }
     // access is never touched: endsAt stays exactly as it is
     const upd = await setAutoRenewState(user._id, sub.standard, { autoRenew: false, cancelAtCycleEnd: true, autoRenewStatus: 'cancelled', nextChargeAt: undefined });
+    await notify(user._id, 'Auto-renew turned off', `Auto-renew is off. Your Std ${sub.standard} plan stays active till ${dates.validTill(sub.endsAt)}. You won't be charged again.`, 'info');
     return { changed: true, subscription: subView(upd, now) };
   }
 
@@ -364,8 +418,8 @@ const handlePaymentEvent = async (event, entity) => {
   return true;
 };
 
-/** subscription.* events (auto-renew). Idempotent: charges by payment id, status events by value, notifications once per event id. */
-const handleSubscriptionEvent = async (event, payload, eventId) => {
+/** subscription.* events (auto-renew). Idempotent: charges by payment id, status events by value + event time, notifications once per event id. */
+const handleSubscriptionEvent = async (event, payload, eventId, createdAt) => {
   const rs = payload && payload.subscription && payload.subscription.entity;
   if (!rs || !rs.id) return false;
   const ctx = await findByGatewaySubscription(rs.id, rs.notes);
@@ -373,34 +427,65 @@ const handleSubscriptionEvent = async (event, payload, eventId) => {
   const first = await claimEvent(eventId, event);
 
   const chargeAt = rs.charge_at ? new Date(rs.charge_at * 1000) : undefined;
+  const eventAt = Number.isFinite(Number(createdAt)) && Number(createdAt) > 0 ? new Date(Number(createdAt) * 1000) : null;
+  const sub = ctx.sub;
+  // Is this the gateway subscription the student's plan CURRENTLY uses? An older, cancelled one (student turned auto-renew off and on again)
+  // must never switch the new one off, and a delayed event must never undo a newer state.
+  let isCurrent = false;
+  if (sub) {
+    if (!sub.razorpaySubscriptionId || sub.razorpaySubscriptionId === rs.id) isCurrent = true;
+    else {
+      // a different gateway id is only legitimate while it is the student's NEWEST set-up (a new mandate not yet attached to the plan)
+      const newest = await SubscriptionPayment.findOne({ student: ctx.student, standard: ctx.standard, kind: 'AUTOPAY_SETUP' }).sort({ createdAt: -1 });
+      isCurrent = !!(ctx.setup && newest && idStr(newest) === idStr(ctx.setup));
+    }
+  }
+  const isStale = !!(sub && eventAt && sub.gatewayEventAt && eventAt.getTime() < new Date(sub.gatewayEventAt).getTime());
+  const apply = (fields) => setAutoRenewState(ctx.student, ctx.standard, { ...fields, ...(eventAt ? { gatewayEventAt: eventAt } : {}) });
+
   if (event === 'subscription.authenticated' || event === 'subscription.activated') {
-    if (ctx.sub) {
-      const patch = { razorpaySubscriptionId: rs.id, autoRenewStatus: event === 'subscription.activated' ? 'active' : 'authenticated', autoRenew: true, cancelAtCycleEnd: false };
-      if (chargeAt) patch.nextChargeAt = chargeAt;
-      await setAutoRenewState(ctx.student, ctx.standard, patch);
+    const terminalForThis = !!sub && sub.razorpaySubscriptionId === rs.id && ['halted', 'cancelled', 'completed'].includes(sub.autoRenewStatus); // final: a late event cannot revive it
+    if (isCurrent && !isStale && !terminalForThis) {
+      await markAutoRenewOn(ctx.student, ctx.standard, rs.id, event === 'subscription.activated' ? 'active' : 'authenticated', chargeAt || null);
+      if (eventAt) await Subscription.updateOne({ student: ctx.student, standard: ctx.standard }, { $set: { gatewayEventAt: eventAt } });
     }
   } else if (event === 'subscription.charged') {
     const pay = payload.payment && payload.payment.entity;
     if (!pay || !pay.id) return true;
-    if (pay.amount !== PLAN.amountPaise) { console.warn('[subscription] charge with unexpected amount ignored:', pay.id); return true; }
-    const r = await recordCharge({ student: ctx.student, standard: ctx.standard, kind: 'AUTOPAY_CHARGE', paymentId: pay.id, method: typeof pay.method === 'string' ? pay.method.toLowerCase().slice(0, 20) : null, razorpaySubscriptionId: rs.id, via: 'webhook' });
-    await setAutoRenewState(ctx.student, ctx.standard, { autoRenew: true, razorpaySubscriptionId: rs.id, autoRenewStatus: 'active', cancelAtCycleEnd: false, nextChargeAt: chargeAt || r.period.endsAt });
+    if (pay.amount !== PLAN.amountPaise || (pay.currency || 'INR') !== PLAN.currency) { console.warn('[subscription] charge with unexpected amount/currency ignored:', pay.id); return true; }
+    // real money was taken: the 30 days are always recorded (once per payment id), whichever gateway subscription made the charge
+    const r = await recordCharge({ student: ctx.student, standard: ctx.standard, kind: 'AUTOPAY_CHARGE', paymentId: pay.id, method: typeof pay.method === 'string' ? pay.method.toLowerCase().slice(0, 20) : null, razorpayPaymentId: pay.id, razorpaySubscriptionId: rs.id, via: 'webhook' });
+    // never undo the student's own choice: a charge already in flight when auto-renew was turned off adds its days but does not switch auto-renew back on
+    const cancelledByStudent = !!sub && sub.autoRenewStatus === 'cancelled' && sub.razorpaySubscriptionId === rs.id;
+    if (isCurrent && !isStale && !cancelledByStudent) await apply({ autoRenew: true, razorpaySubscriptionId: rs.id, autoRenewStatus: 'active', cancelAtCycleEnd: false, nextChargeAt: chargeAt || undefined });
+    else console.warn('[subscription] charge recorded but the auto-renew state was not changed (stale, old or cancelled gateway subscription):', rs.id);
     if (ctx.setup && ctx.setup.status === 'created') await SubscriptionPayment.updateOne({ _id: ctx.setup._id, status: 'created' }, { $set: { status: 'paid', paidAt: new Date() } });
+    void r;
   } else if (event === 'subscription.pending') {
-    await setAutoRenewState(ctx.student, ctx.standard, { autoRenewStatus: 'pending' });
-    if (first) await notify(ctx.student, 'Auto-renew payment failed', `Auto-renew payment failed, retrying. Your Std ${ctx.standard} plan stays active till ${ctx.sub && ctx.sub.endsAt ? dates.validTill(ctx.sub.endsAt) : 'its end date'}.`, 'warning');
+    if (!isCurrent || isStale) return true;
+    await apply({ autoRenewStatus: 'pending' });
+    if (first) {
+      // payment history shows the failed renewal (once per event); the plan keeps the access it already paid for
+      const eventKey = eventId || `${rs.id}:pending:${rs.paid_count || 0}:${rs.charge_at || ''}`;
+      try { await SubscriptionPayment.create({ student: ctx.student, standard: ctx.standard, kind: 'AUTOPAY_CHARGE', mrpPaise: PLAN.mrpPaise, amountPaise: PLAN.amountPaise, status: 'failed', razorpaySubscriptionId: rs.id, failureReason: 'RENEWAL_PAYMENT_FAILED', eventKey, verifiedVia: 'webhook' }); } catch (e) { if (!isDup(e)) throw e; }
+      await notify(ctx.student, 'Auto-renew payment failed', `Your subscription renewal payment could not be completed. Razorpay will retry. Your Std ${ctx.standard} plan stays active till ${sub && sub.endsAt ? dates.validTill(sub.endsAt) : 'its end date'}.`, 'warning');
+    }
   } else if (event === 'subscription.halted') {
-    await setAutoRenewState(ctx.student, ctx.standard, { autoRenew: false, autoRenewStatus: 'halted', nextChargeAt: undefined });
+    if (!isCurrent || isStale) return true;
+    await apply({ autoRenew: false, autoRenewStatus: 'halted', nextChargeAt: undefined });
     if (first) await notify(ctx.student, 'Auto-renew stopped', `Auto-renew stopped — renew manually to keep your Std ${ctx.standard} plan.`, 'warning');
   } else if (event === 'subscription.cancelled' || event === 'subscription.completed') {
-    await setAutoRenewState(ctx.student, ctx.standard, { autoRenew: false, autoRenewStatus: event === 'subscription.cancelled' ? 'cancelled' : 'completed', nextChargeAt: undefined });
+    if (!isCurrent || isStale) return true;
+    const wasOn = !!(sub && sub.autoRenew === true);
+    await apply({ autoRenew: false, autoRenewStatus: event === 'subscription.cancelled' ? 'cancelled' : 'completed', nextChargeAt: undefined });
+    if (first && wasOn) await notify(ctx.student, 'Auto-renew ended', `Auto-renew has ended for your Std ${ctx.standard} plan${sub && sub.endsAt ? ` — it stays active till ${dates.validTill(sub.endsAt)}` : ''}.`, 'info');
   } else return false;
   return true;
 };
 
 /** Called by the shared Razorpay webhook after the signature check. Returns true when the event was a subscription one. */
-const handleWebhook = async (event, payload, eventId) => {
-  if (typeof event === 'string' && event.startsWith('subscription.')) return handleSubscriptionEvent(event, payload, eventId);
+const handleWebhook = async (event, payload, eventId, createdAt) => {
+  if (typeof event === 'string' && event.startsWith('subscription.')) return handleSubscriptionEvent(event, payload, eventId, createdAt);
   const entity = payload && payload.payment && payload.payment.entity;
   return handlePaymentEvent(event, entity);
 };
