@@ -62,7 +62,7 @@ export const useSubscriptionCheckout = () => {
         }
         setSubscriptionsFromServer(result);
         const sub = result.subscriptions.find((s) => s.standard === c.standard);
-        navigate(SUCCESS_PATH, { state: { standard: c.standard, autoRenew: !!sub?.autoRenew, mandateOnly: !!opts.mandateOnly, subscription: sub || null, paymentRowId: result.paymentRowId || null }, replace: true });
+        navigate(SUCCESS_PATH, { state: { standard: c.standard, autoRenew: !!sub?.autoRenew, requestedAutoRenew: opts.autoRenew, mandateOnly: !!opts.mandateOnly, subscription: sub || null, paymentRowId: result.paymentRowId || null }, replace: true });
       },
       modal: { ondismiss: () => {
         if (failedReason.current) { const why = failedReason.current; failedReason.current = null; done(); toFailed(c.standard, why, opts.autoRenew); return; }

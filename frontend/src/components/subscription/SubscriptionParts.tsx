@@ -2,7 +2,7 @@ import React, { useEffect, useId } from 'react';
 import { Check, Crown, Loader2, ShieldCheck, X } from 'lucide-react';
 import { NUMBERED_STANDARDS } from '../../constants/standards';
 import type { PlanInfo, SubscriptionView } from '../../services/subscriptions';
-import { istDate, rupees, daysLabel } from '../../utils/subscriptionFormat';
+import { istDate, rupees, daysLabel, badgeOf, renewalMessage } from '../../utils/subscriptionFormat';
 
 /** Bottom sheet on phones, centred dialog on larger screens. Esc / backdrop close it unless `locked`. */
 export const Sheet: React.FC<{ title: string; onClose: () => void; locked?: boolean; testId?: string; children: React.ReactNode }> = ({ title, onClose, locked, testId, children }) => {
@@ -127,18 +127,11 @@ export const ConfirmOffDialog: React.FC<{ sub: SubscriptionView; busy: boolean; 
   </Sheet>
 );
 
-const PHASE_BADGE: Record<string, { text: string; cls: string }> = {
-  active: { text: 'Active', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
-  expiring: { text: 'Expiring soon', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-300' },
-  expires_today: { text: 'Expires today', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-300' },
-  expired: { text: 'Expired', cls: 'bg-gray-500/15 text-gray-600 dark:text-gray-300' },
-};
-
 export const MySubscriptionCard: React.FC<{
   sub: SubscriptionView; plan: PlanInfo; autopayAvailable: boolean; busy: boolean;
   onRenew: (std: number) => void; onToggle: (sub: SubscriptionView, on: boolean) => void; onDetails: (sub: SubscriptionView) => void;
 }> = ({ sub, plan, autopayAvailable, busy, onRenew, onToggle, onDetails }) => {
-  const badge = PHASE_BADGE[sub.phase] || PHASE_BADGE.active;
+  const badge = badgeOf(sub);
   const expired = sub.status === 'expired';
   const pct = expired ? 0 : Math.max(0, Math.min(100, Math.round((sub.daysRemaining / sub.totalDays) * 100)));
   const warn = sub.phase === 'expiring' || sub.phase === 'expires_today';
@@ -148,7 +141,15 @@ export const MySubscriptionCard: React.FC<{
         <div className="flex items-center gap-2 min-w-0"><Crown className="w-5 h-5 text-primary shrink-0" aria-hidden /><h3 className="font-heading font-bold text-text-primary truncate">{plan.name} · Std {sub.standard}</h3></div>
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`} data-testid="sub-badge">{badge.text}</span>
       </div>
-      <p className="text-sm text-text-secondary mt-2">{expired ? 'Ended on' : 'Valid till'} <span className="font-semibold text-text-primary">{istDate(sub.validTill)}</span></p>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-text-secondary">
+        <dt>Purchased</dt><dd className="text-right font-semibold text-text-primary">{istDate(sub.purchasedAt)}</dd>
+        <dt>Started</dt><dd className="text-right font-semibold text-text-primary">{istDate(sub.startsAt)}</dd>
+        <dt>{expired ? 'Ended on' : 'Valid till'}</dt><dd className="text-right font-semibold text-text-primary" data-testid="sub-valid-till">{istDate(sub.validTill)}</dd>
+        <dt>Renewal amount</dt><dd className="text-right font-semibold text-text-primary">{rupees(sub.nextChargeAmount)}</dd>
+        <dt>Auto-renew</dt><dd className="text-right font-semibold text-text-primary">{sub.autoRenew ? (sub.renewalState === 'pending' ? 'ON · payment pending' : 'ON') : 'OFF'}</dd>
+        {sub.nextChargeAt && <><dt>Next payment</dt><dd className="text-right font-semibold text-text-primary" data-testid="sub-next-charge">{istDate(sub.nextChargeAt)}</dd></>}
+      </dl>
+      <p className={`text-xs mt-2 ${sub.renewalState === 'pending' || sub.renewalState === 'halted' ? 'text-red-600 font-semibold' : 'text-text-secondary'}`} data-testid="sub-autorenew-status">{renewalMessage(sub)}</p>
       {!expired && (
         <div className="mt-2">
           <p className={`text-sm font-semibold ${warn ? 'text-orange-600' : 'text-text-primary'}`}>{daysLabel(sub.daysRemaining)}</p>
@@ -165,9 +166,7 @@ export const MySubscriptionCard: React.FC<{
             <span className="text-sm font-semibold text-text-primary">Auto-renew</span>
             <input type="checkbox" role="switch" checked={sub.autoRenew} disabled={busy} data-testid={`sub-toggle-${sub.standard}`} onChange={(e) => onToggle(sub, e.target.checked)} className="w-5 h-5 accent-primary" />
           </label>
-          <p className="text-xs text-text-secondary mt-1" data-testid="sub-autorenew-status">
-            {sub.autoRenew ? `Auto-renew ON · Next charge ${rupees(sub.nextChargeAmount)} on ${istDate(sub.nextChargeAt)}` : `Auto-renew OFF · Plan ends on ${istDate(sub.validTill)}`}
-          </p>
+          {sub.autoRenew && sub.nextChargeAt && <p className="text-[11px] text-text-muted mt-1">Your plan covers every day up to {istDate(sub.validTill)}. The next payment is collected separately on the date above, so access continues without a break.</p>}
         </div>
       )}
 
@@ -176,7 +175,7 @@ export const MySubscriptionCard: React.FC<{
         {expired
           ? <button type="button" onClick={() => onRenew(sub.standard)} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">Buy again</button>
           : sub.autoRenew
-            ? <span className="px-3 py-2 text-sm font-semibold text-primary" data-testid="sub-auto-renews-on">Auto-renews on {istDate(sub.nextChargeAt, false)}</span>
+            ? <span className="px-3 py-2 text-sm font-semibold text-primary" data-testid="sub-auto-renews-on">{sub.nextChargeAt ? `Auto-renews on ${istDate(sub.nextChargeAt, false)}` : 'Auto-renew is on'}</span>
             : <button type="button" onClick={() => onRenew(sub.standard)} data-testid={`sub-renew-${sub.standard}`} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">Renew Now</button>}
       </div>
     </div>

@@ -8,6 +8,7 @@ import { isNumberedStandard } from '../../constants/standards';
 import { useSubscriptions, refreshSubscriptions } from '../../hooks/useSubscriptions';
 import { subscriptionsApi, SubscriptionView } from '../../services/subscriptions';
 import { transactionsApi } from '../../services/studentTransactions';
+import { istDate } from '../../utils/subscriptionFormat';
 import { useSubscriptionCheckout } from '../../components/subscription/useSubscriptionCheckout';
 import { ChooseStandardSheet, ReviewPaySheet, ConfirmOffDialog, MySubscriptionCard, PriceLine, Tick } from '../../components/subscription/SubscriptionParts';
 
@@ -41,7 +42,7 @@ const SubscriptionPage: React.FC = () => {
     try {
       const r = await subscriptionsApi.setAutoRenew(offFor.id, false);
       await refreshSubscriptions(true);
-      toast.success(`Auto-renew is off. Your plan stays active till ${r.subscription.validTill ? new Date(r.subscription.validTill).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'its end date'}.`);
+      toast.success(`Auto-renew is OFF. Your subscription remains active until ${istDate(r.subscription.validTill)}.`);
       setOffFor(null);
     } catch (e: any) { toast.error(e?.message || 'Could not turn off auto-renew. Please try again.'); }
     finally { setOffBusy(false); }

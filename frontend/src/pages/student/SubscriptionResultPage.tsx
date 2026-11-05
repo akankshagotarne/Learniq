@@ -6,7 +6,7 @@ import { useSubscriptions } from '../../hooks/useSubscriptions';
 import { istDate, rupees } from '../../utils/subscriptionFormat';
 import type { SubscriptionView } from '../../services/subscriptions';
 
-interface SuccessState { standard: number; autoRenew?: boolean; mandateOnly?: boolean; subscription?: SubscriptionView | null }
+interface SuccessState { standard: number; autoRenew?: boolean; requestedAutoRenew?: boolean; mandateOnly?: boolean; subscription?: SubscriptionView | null }
 interface FailedState { standard?: number; reason?: string; autoRenew?: boolean }
 
 const Shell: React.FC<{ children: React.ReactNode; testId: string }> = ({ children, testId }) => (
@@ -43,8 +43,11 @@ export const SubscriptionSuccessPage: React.FC = () => {
         <div className="flex justify-between"><span className="text-text-secondary">Plan</span><span className="font-semibold text-text-primary">Monthly Subscription · Std {st.standard}</span></div>
         {!st.mandateOnly && <div className="flex justify-between"><span className="text-text-secondary">Amount paid</span><span className="font-semibold text-text-primary">{rupees(sub?.nextChargeAmount ?? 99)}</span></div>}
         {sub && <div className="flex justify-between"><span className="text-text-secondary">Valid till</span><span className="font-semibold text-text-primary" data-testid="success-valid-till">{istDate(sub.validTill)}</span></div>}
-        {sub && <div className="flex justify-between"><span className="text-text-secondary">Auto-renew</span><span className="font-semibold text-text-primary">{sub.autoRenew ? `ON · next charge ${istDate(sub.nextChargeAt)}` : 'OFF'}</span></div>}
+        {sub && <div className="flex justify-between"><span className="text-text-secondary">Auto-renew</span><span className="font-semibold text-text-primary">{sub.autoRenew ? (sub.nextChargeAt ? `ON · next payment ${istDate(sub.nextChargeAt)}` : 'ON') : 'OFF'}</span></div>}
       </div>
+      {st.requestedAutoRenew && sub && !sub.autoRenew && (
+        <p className="mt-3 text-xs text-orange-700 dark:text-orange-300 rounded-xl bg-orange-500/10 border border-orange-400/30 p-3" data-testid="autopay-confirming">Your plan is active. Your autopay is still being confirmed with Razorpay and your bank, so auto-renew is not on yet. We will tell you as soon as it is.</p>
+      )}
       <div className="grid gap-2 mt-5">
         <Link to="/student" className="btn-primary py-3 rounded-xl text-sm font-semibold">Go to Dashboard</Link>
         <Link to="/student/exams" className="py-3 rounded-xl text-sm font-semibold border border-border-subtle text-text-primary hover:bg-surface-alt">Start an Exam</Link>
