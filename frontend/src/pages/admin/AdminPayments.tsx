@@ -208,7 +208,7 @@ const AdminPayments: React.FC = () => {
                     <button type="button" onClick={() => setDetails(payment)} aria-label={`View details of ${(payment.student as any)?.name || 'payment'}`} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-alt"><Eye className="w-3.5 h-3.5" aria-hidden="true" /> View</button>
                     {view === 'removed' ? (
                       <button type="button" disabled={busy} onClick={() => doRestore(payment)} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-primary hover:bg-surface-alt disabled:opacity-60"><Undo2 className="w-3.5 h-3.5" aria-hidden="true" /> Restore</button>
-                    ) : (
+                    ) : (payment as any).source === 'subscription' ? null : ( // subscription payments are financial records: never removable from here
                       <button type="button" onClick={() => { setReason(''); setRemoving(payment); }} className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-[#E1447A] hover:bg-surface-alt"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Remove from History</button>
                     )}
                   </div>

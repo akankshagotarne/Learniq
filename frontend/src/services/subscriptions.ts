@@ -4,12 +4,13 @@ export interface PlanInfo {
   code: string; name: string; mrp: number; price: number; discount: number; discountPercent: number; currency: string; validityDays: number; features: string[];
   [k: string]: unknown;
 }
-export type SubPhase = 'active' | 'expiring' | 'expires_today' | 'expired';
+export type SubPhase = 'active' | 'expiring' | 'expires_today' | 'renewing' | 'expired';
+export type RenewalState = 'on' | 'pending' | 'halted' | 'cancelled' | 'off' | 'expired';
 export interface SubscriptionView {
   id: string; standard: number; plan: string; planName: string;
   status: 'active' | 'expired'; phase: SubPhase;
-  startsAt: string | null; endsAt: string | null; validTill: string | null; daysRemaining: number; totalDays: number;
-  autoRenew: boolean; autoRenewStatus: string | null; cancelAtCycleEnd: boolean;
+  purchasedAt: string | null; startsAt: string | null; endsAt: string | null; validTill: string | null; daysRemaining: number; totalDays: number;
+  autoRenew: boolean; autoRenewStatus: string | null; cancelAtCycleEnd: boolean; renewalState: RenewalState;
   nextChargeAt: string | null; nextChargeOn: string | null; nextChargeAmount: number;
   canRenew: boolean; canToggleAutoRenew: boolean;
   latestPayment: { id: string; paymentId: string | null; paidAt: string | null } | null;

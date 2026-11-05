@@ -190,3 +190,26 @@ test('admin revenue endpoints are admin-only', async () => {
     assert.equal((await api(url, teacher.token)).status, 403);
   }
 });
+
+test('Monthly Subscription: paid charges are revenue (rupees from paise); failed, created and set-up rows never are; no double counting', async () => {
+  fake.Payment.reset(); fake.OlympiadPayment.reset(); fake.SubscriptionPayment.reset();
+  const admin = await mkUser('admin');
+  const s = (await mkUser('student')).user;
+  const row = (over) => fake.SubscriptionPayment.create({ student: s._id, standard: 10, mrpPaise: 12000, amountPaise: 9900, currency: 'INR', ...over });
+  await row({ kind: 'ORDER', status: 'paid', paidAt: new Date(), razorpayPaymentId: 'pay_1', razorpayOrderId: 'order_1', invoiceNumber: 'LIQ-2026-000001', applied: true });
+  await row({ kind: 'AUTOPAY_CHARGE', status: 'paid', paidAt: new Date(), razorpayPaymentId: 'pay_2', razorpaySubscriptionId: 'sub_1', applied: true });
+  await row({ kind: 'AUTOPAY_SETUP', status: 'paid', paidAt: new Date(), razorpaySubscriptionId: 'sub_1' });   // bookkeeping for the mandate: not money
+  await row({ kind: 'AUTOPAY_CHARGE', status: 'failed', razorpaySubscriptionId: 'sub_1', eventKey: 'e1' });      // a failed renewal
+  await row({ kind: 'ORDER', status: 'created', razorpayOrderId: 'order_2' });                                    // an abandoned checkout
+  const { pays } = await bothScreens(admin.token);
+  assert.equal(pays.stats.totalRevenue, 198, '2 x ₹99 only');
+  assert.equal(pays.stats.completedCount, 2); assert.equal(pays.stats.failedCount, 1); assert.equal(pays.stats.pendingCount, 1);
+  const sub = pays.stats.bySource.subscription;
+  assert.equal(sub.oneTime.revenue, 99); assert.equal(sub.recurring.revenue, 99); assert.equal(sub.recurring.successfulCount, 1); assert.equal(sub.recurring.failedRenewalCount, 1);
+  const rows = pays.payments.filter((p) => p.source === 'subscription');
+  assert.equal(rows.length, 4, 'set-up rows are not listed');
+  assert.ok(rows.every((r) => r.itemTitle === 'Monthly Subscription · Std 10'));
+  assert.equal(rows.find((r) => r.paymentKind === 'recurring' && r.status === 'completed').amount, 99);
+  const trend = await getRevenueTrend({ months: 1 });
+  assert.equal(trend[0].revenue, 198);
+});

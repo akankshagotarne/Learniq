@@ -23,10 +23,12 @@ const subscriptionSchema = new mongoose.Schema({
   nextChargeAt: { type: Date },
   cancelAtCycleEnd: { type: Boolean, default: false },
   autoRenewChangedAt: { type: Date },
+  gatewayEventAt: { type: Date },           // created_at of the newest Razorpay subscription.* event applied: an older (delayed) event is ignored
   // ── reminders (created lazily when the student loads the dashboard / My Subscription) ──
   reminderSentAt: { type: Date },
   reminderForEndsAt: { type: Date },        // the endsAt the reminder was sent for: a renewal re-arms it
   preDebitNotifiedFor: { type: Date },      // the nextChargeAt the 24 h pre-debit notice was sent for
+  expiryNotifiedFor: { type: Date },        // the endsAt the 'plan expired' notice was sent for
 }, { timestamps: true });
 subscriptionSchema.index({ student: 1, standard: 1 }, { unique: true });
 subscriptionSchema.index({ student: 1, standard: 1, endsAt: -1 });
@@ -57,7 +59,9 @@ const subscriptionPaymentSchema = new mongoose.Schema({
   verifiedVia: { type: String, enum: ['checkout', 'webhook', 'reconcile'] },
   applied: { type: Boolean, default: false },          // the period was added to the Subscription
   failureReason: { type: String },
+  eventKey: { type: String },                          // failed renewal rows: one row per Razorpay event (a re-delivered webhook adds nothing)
 }, { timestamps: true });
+subscriptionPaymentSchema.index({ eventKey: 1 }, { unique: true, sparse: true });
 subscriptionPaymentSchema.index({ razorpayOrderId: 1 }, { unique: true, sparse: true });
 subscriptionPaymentSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 subscriptionPaymentSchema.index({ invoiceNumber: 1 }, { unique: true, sparse: true });

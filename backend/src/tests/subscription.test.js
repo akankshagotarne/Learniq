@@ -85,13 +85,19 @@ test('V6: an auto-renew charge that lands just after endsAt still continues from
 });
 
 // ── integration ───────────────────────────────────────────────────────────────────────────────
-const rz = { orders: [], subs: [], cancels: [], payments: {}, failCreate: false };
+const rz = { orders: [], subs: [], cancels: [], payments: {}, failCreate: false, subStatus: {} };
 let rzSeq = 0;
 const razorpayClient = {
   orders: { create: async (o) => { rz.orders.push(o); return { id: `order_s_${rz.orders.length}`, amount: o.amount, currency: o.currency, receipt: o.receipt }; }, fetchPayments: async () => ({ items: [] }) },
   subscriptions: {
     create: async (o) => { if (rz.failCreate) throw Object.assign(new Error('x'), { error: { description: 'The api key/secret provided is invalid' } }); rz.subs.push(o); return { id: `sub_s_${rz.subs.length}`, status: 'created', ...o }; },
     cancel: async (id, atEnd) => { rz.cancels.push({ id, atEnd }); return { id, status: 'cancelled' }; },
+    // what Razorpay would report: a future-dated mandate is 'authenticated' and charges at start_at; an immediate one is 'active' and charges again in 30 days
+    fetch: async (id) => {
+      const i = Number(String(id).replace('sub_s_', '')) - 1; const made = rz.subs[i];
+      if (!made) throw Object.assign(new Error('nf'), { error: { description: 'not found' } });
+      return { id, status: (rz.subStatus && rz.subStatus[id]) || (made.start_at ? 'authenticated' : 'active'), plan_id: made.plan_id, notes: made.notes, charge_at: made.start_at || Math.floor(Date.now() / 1000) + 30 * 86400 };
+    },
   },
   payments: {
     fetch: async (id) => { if (!rz.payments[id]) throw Object.assign(new Error('nf'), { error: { description: 'not found' } }); return rz.payments[id]; },
@@ -174,8 +180,8 @@ const me = async (stu) => (await call('GET', '/api/subscriptions/me', { token: s
 const subOf = (stu, standard = 10) => fake.Subscription.docs.find((s) => String(s.student) === stu.id && s.standard === standard);
 const rowsOf = (stu) => fake.SubscriptionPayment.docs.filter((p) => String(p.student) === stu.id);
 const chargesOf = (stu) => rowsOf(stu).filter((p) => p.status === 'paid' && p.kind !== 'AUTOPAY_SETUP'); // set-up rows are mandate bookkeeping, not charges
-const webhook = (event, payload, { secret = 'test_webhook_secret', eventId } = {}) => {
-  const raw = JSON.stringify({ event, payload });
+const webhook = (event, payload, { secret = 'test_webhook_secret', eventId, createdAt } = {}) => {
+  const raw = JSON.stringify({ event, payload, ...(createdAt ? { created_at: createdAt } : {}) });
   return call('POST', '/api/payments/razorpay/webhook', { raw, headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': hmac(secret, raw), ...(eventId ? { 'x-razorpay-event-id': eventId } : {}) } });
 };
 const balanceOf = (id) => { const a = fake.CreditAccount.docs.find((x) => String(x.student) === String(id)); return a ? a.balance : 0; };
@@ -563,7 +569,7 @@ test('AR5: halted / cancelled / completed turn autoRenew OFF but leave access un
   const ev = (type, id, extra) => webhook(type, { subscription: { entity: { id: o.body.subscriptionId, ...extra } } }, { eventId: id });
   assert.equal((await ev('subscription.pending', 'e_pending')).status, 200);
   assert.equal(subOf(stu).autoRenew, true, 'a retry is pending: still on'); assert.equal(subOf(stu).autoRenewStatus, 'pending');
-  assert.match(fake.Notification.docs.find((n) => String(n.recipient) === stu.id && /failed/i.test(n.title)).message, /Auto-renew payment failed, retrying/);
+  assert.match(fake.Notification.docs.find((n) => String(n.recipient) === stu.id && /failed/i.test(n.title)).message, /renewal payment could not be completed/);
   await ev('subscription.pending', 'e_pending'); // retried delivery: no second notification
   assert.equal(fake.Notification.docs.filter((n) => String(n.recipient) === stu.id && /failed/i.test(n.title)).length, 1);
   assert.equal((await ev('subscription.halted', 'e_halted')).status, 200);
@@ -660,4 +666,148 @@ test('R2: the 24 h pre-debit notice is created once for the next auto-charge', a
   await me(stu); await me(stu);
   const n = fake.Notification.docs.filter((x) => String(x.recipient) === stu.id && /charge tomorrow/i.test(x.title));
   assert.equal(n.length, 1); assert.match(n[0].message, /₹99 will be charged/);
+});
+
+
+// ══ production-readiness audit: ordering, verified authorisation, grace window, failed renewals, notifications ═══════════════════
+const ev2 = (o, type, eventId, createdAt, extra = {}, payment) => webhook(type, { subscription: { entity: { id: o.body.subscriptionId, ...extra } }, ...(payment ? { payment: { entity: payment } } : {}) }, { eventId, createdAt });
+const noteTitles = (stu) => fake.Notification.docs.filter((n) => String(n.recipient) === stu.id).map((n) => n.title);
+
+test('P3: auto-renew is switched on ONLY when Razorpay confirms the authorisation; the plan itself is active either way', async () => {
+  const stu = await mkUser(10);
+  const o = await order(stu, { standard: 10, autoRenew: true });
+  rz.subStatus[o.body.subscriptionId] = 'created';           // Razorpay has not authenticated the mandate (yet)
+  const pid = gatewayPayment({});
+  const v = await call('POST', '/api/subscriptions/verify', { token: stu.token, body: { razorpay_subscription_id: o.body.subscriptionId, razorpay_payment_id: pid, razorpay_signature: hmac('test_key_secret', `${pid}|${o.body.subscriptionId}`) } });
+  assert.equal(v.status, 200, v.text);
+  assert.equal(subOf(stu).autoRenew, false, 'the checkbox / callback alone never turns auto-renew on');
+  assert.equal(chargesOf(stu).length, 1, 'the payment was real, so the 30 days are granted');
+  assert.equal(v.body.subscriptions[0].autoRenew, false); assert.equal(v.body.subscriptions[0].nextChargeOn, null, 'no invented next-charge date');
+  assert.ok(!noteTitles(stu).includes('Auto-renew is on'));
+  // Razorpay then authenticates it: the webhook turns it on, once
+  rz.subStatus[o.body.subscriptionId] = 'active';
+  await ev2(o, 'subscription.activated', 'e_act1', 1000);
+  await ev2(o, 'subscription.activated', 'e_act1', 1000);
+  assert.equal(subOf(stu).autoRenew, true);
+  assert.equal(noteTitles(stu).filter((t) => t === 'Auto-renew is on').length, 1);
+});
+
+test('P4: next charge date is the one Razorpay reports (charge_at), not a date we calculate', async () => {
+  const stu = await mkUser(10);
+  const { v } = await autopay(stu);
+  const sub = subOf(stu);
+  assert.notEqual(sub.nextChargeAt.getTime(), sub.endsAt.getTime(), 'valid-till and next charge are different things');
+  const reported = Math.floor(Date.now() / 1000) + 30 * 86400;
+  assert.ok(Math.abs(sub.nextChargeAt.getTime() / 1000 - reported) < 5, 'taken from Razorpay');
+  assert.ok(v.body.subscriptions[0].nextChargeOn);
+});
+
+test('P5: a delayed OLD event never undoes a newer state (out-of-order delivery)', async () => {
+  const stu = await mkUser(10);
+  const { o } = await autopay(stu);
+  await ev2(o, 'subscription.activated', 'e_a', 1000);
+  await ev2(o, 'subscription.halted', 'e_h', 3000);
+  assert.equal(subOf(stu).autoRenew, false);
+  await ev2(o, 'subscription.activated', 'e_late', 2000);       // older than the halt: ignored
+  assert.equal(subOf(stu).autoRenew, false); assert.equal(subOf(stu).autoRenewStatus, 'halted');
+  await ev2(o, 'subscription.authenticated', 'e_late2', 4000);  // even a NEWER authenticated cannot revive a halted gateway subscription
+  assert.equal(subOf(stu).autoRenewStatus, 'halted');
+});
+
+test('P6: events of an OLD cancelled Razorpay subscription cannot switch off the NEW one (off, then on again)', async () => {
+  const stu = await mkUser(10);
+  const first = await autopay(stu);
+  const sub = subOf(stu);
+  assert.equal((await call('PATCH', `/api/subscriptions/${sub._id}/auto-renew`, { token: stu.token, body: { enabled: false } })).status, 200);
+  const on = await call('PATCH', `/api/subscriptions/${sub._id}/auto-renew`, { token: stu.token, body: { enabled: true } });
+  assert.equal(on.status, 200, on.text); assert.ok(on.body.needsCheckout);
+  const pid = gatewayPayment({});
+  const v = await call('POST', '/api/subscriptions/verify', { token: stu.token, body: { razorpay_subscription_id: on.body.subscriptionId, razorpay_payment_id: pid, razorpay_signature: hmac('test_key_secret', `${pid}|${on.body.subscriptionId}`) } });
+  assert.equal(v.status, 200, v.text);
+  assert.equal(subOf(stu).autoRenew, true); assert.equal(subOf(stu).razorpaySubscriptionId, on.body.subscriptionId);
+  await ev2(first.o, 'subscription.cancelled', 'e_oldcancel', 9000);   // the OLD subscription's cancellation arrives late
+  assert.equal(subOf(stu).autoRenew, true, 'the new mandate is untouched'); assert.equal(subOf(stu).razorpaySubscriptionId, on.body.subscriptionId);
+});
+
+test('P7: a failed renewal is shown in payment history once, grants nothing, and is not revenue', async () => {
+  const stu = await mkUser(10);
+  const { o } = await autopay(stu);
+  const ends = subOf(stu).endsAt.getTime();
+  await ev2(o, 'subscription.pending', 'e_p1', 1000);
+  await ev2(o, 'subscription.pending', 'e_p1', 1000);                   // re-delivered
+  const failed = rowsOf(stu).filter((r) => r.status === 'failed');
+  assert.equal(failed.length, 1); assert.equal(subOf(stu).endsAt.getTime(), ends, 'no extra access');
+  assert.equal(chargesOf(stu).length, 1);
+  const mine = (await me(stu)).subscriptions[0];
+  assert.equal(mine.renewalState, 'pending');
+  assert.equal(noteTitles(stu).filter((t) => t === 'Auto-renew payment failed').length, 1);
+  // recovery: Razorpay finally charges; exactly +30 days, once; state returns to active
+  const pid = gatewayPayment({});
+  await ev2(o, 'subscription.charged', 'e_c1', 2000, { status: 'active' }, { id: pid, amount: 9900, currency: 'INR', method: 'card' });
+  await ev2(o, 'subscription.charged', 'e_c1', 2000, { status: 'active' }, { id: pid, amount: 9900, currency: 'INR', method: 'card' });
+  assert.equal(subOf(stu).endsAt.getTime(), ends + 30 * DAY); assert.equal(subOf(stu).autoRenewStatus, 'active');
+  assert.equal(chargesOf(stu).length, 2);
+  assert.equal(noteTitles(stu).filter((t) => t === 'Subscription renewed 👑').length, 1);
+});
+
+test('P8: access has no gap while an authorised renewal is being collected, and none after halt / cancel / manual plans', async () => {
+  const stu = await mkUser(10);
+  await autopay(stu);
+  const ends = subOf(stu).endsAt.getTime();
+  const at = (ms) => new Date(ends + ms);
+  assert.equal(await svc.hasAccess(stu.user._id, 10, at(-1)), true);
+  assert.equal(await svc.hasAccess(stu.user._id, 10, at(10 * 3600e3)), true, 'charge due, not yet received: still covered');
+  assert.equal(await svc.hasAccess(stu.user._id, 10, at(31 * 3600e3)), false, 'the window is short');
+  const view = svc.subView(subOf(stu), at(2 * 3600e3));
+  assert.equal(view.status, 'active'); assert.equal(view.phase, 'renewing'); assert.equal(view.daysRemaining, 0);
+  subOf(stu).autoRenewStatus = 'halted'; subOf(stu).autoRenew = false;
+  assert.equal(await svc.hasAccess(stu.user._id, 10, at(1000)), false, 'halted: access ends exactly at endsAt');
+  const manual = await mkUser(10); await buy(manual, 10);
+  assert.equal(await svc.hasAccess(manual.user._id, 10, new Date(subOf(manual).endsAt.getTime() + 1000)), false, 'a one-time plan ends exactly at endsAt');
+});
+
+test('P9: a charge already in flight after the student turned auto-renew off adds its days but does not switch it back on', async () => {
+  const stu = await mkUser(10);
+  const { o } = await autopay(stu);
+  const sub = subOf(stu); const ends = sub.endsAt.getTime();
+  await call('PATCH', `/api/subscriptions/${sub._id}/auto-renew`, { token: stu.token, body: { enabled: false } });
+  const pid = gatewayPayment({});
+  await ev2(o, 'subscription.charged', 'e_late_c', 5000, {}, { id: pid, amount: 9900, currency: 'INR' });
+  assert.equal(subOf(stu).endsAt.getTime(), ends + 30 * DAY, 'the student paid, so they get the days');
+  assert.equal(subOf(stu).autoRenew, false, "the student's choice stands");
+});
+
+test('P10: wrong-currency charges are ignored; missing / wrong webhook signatures are rejected', async () => {
+  const stu = await mkUser(10);
+  const { o } = await autopay(stu);
+  const ends = subOf(stu).endsAt.getTime();
+  await ev2(o, 'subscription.charged', 'e_usd', 100, {}, { id: gatewayPayment({}), amount: 9900, currency: 'USD' });
+  assert.equal(subOf(stu).endsAt.getTime(), ends);
+  const raw = JSON.stringify({ event: 'subscription.charged', payload: {} });
+  assert.equal((await call('POST', '/api/payments/razorpay/webhook', { raw, headers: { 'Content-Type': 'application/json' } })).status, 400, 'no signature');
+  assert.equal((await webhook('subscription.charged', {}, { secret: 'wrong_secret' })).status, 400, 'wrong secret');
+});
+
+test('N1: notifications: purchase, extension, auto-renew off and expiry are each sent once', async () => {
+  const stu = await mkUser(10);
+  await buy(stu, 10);
+  await buy(stu, 10);                                                     // renew before expiry
+  assert.equal(noteTitles(stu).filter((t) => /activated/.test(t)).length, 1);
+  assert.equal(noteTitles(stu).filter((t) => /extended/.test(t)).length, 1);
+  setEnds(stu, 10, new Date(Date.now() - 1000));                          // the paid period is over (manual plan)
+  await me(stu); await me(stu);
+  assert.equal(noteTitles(stu).filter((t) => t === 'Subscription expired').length, 1);
+});
+
+test('N2: a student cannot verify another student\'s order, change their auto-renew, or download their invoice', async () => {
+  const a = await mkUser(10); const b = await mkUser(10);
+  const { o } = await buy(a, 10);
+  const pid = gatewayPayment({ order_id: o.body.orderId });
+  const steal = await call('POST', '/api/subscriptions/verify', { token: b.token, body: { razorpay_order_id: o.body.orderId, razorpay_payment_id: pid, razorpay_signature: hmac('test_key_secret', `${o.body.orderId}|${pid}`) } });
+  assert.equal(steal.status, 404);
+  assert.equal((await call('PATCH', `/api/subscriptions/${subOf(a)._id}/auto-renew`, { token: b.token, body: { enabled: false } })).status, 404);
+  const paid = chargesOf(a)[0];
+  assert.equal((await call('GET', `/api/subscriptions/${paid._id}/invoice`, { token: b.token })).status, 404);
+  assert.equal((await call('GET', `/api/subscriptions/${paid._id}/invoice`)).status, 401, 'unauthenticated');
+  assert.equal((await call('GET', `/api/subscriptions/${paid._id}/invoice`, { token: a.token })).status, 200);
 });

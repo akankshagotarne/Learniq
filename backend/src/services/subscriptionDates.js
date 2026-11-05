@@ -9,6 +9,13 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const VALIDITY_DAYS = 30;
+/**
+ * Razorpay charges an auto-renewing plan exactly 30 x 24 h after the previous charge, at the time of day of the first payment, while the entitlement
+ * ends at an IST midnight. So the charge can land up to ~24 h AFTER endsAt. While auto-renew is genuinely on (authenticated / active / pending) the student keeps
+ * access for this short window so there is no gap; it is never granted after a halt, a cancellation or a manual-only plan.
+ */
+const RENEWAL_GRACE_MS = 30 * 60 * 60 * 1000;
+const GRACE_STATUSES = ['authenticated', 'active', 'pending'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** 00:00:00.000 IST of the day that contains `date`, as a UTC Date. */
@@ -32,6 +39,12 @@ const nextPeriod = (now, currentEndsAt, { days = VALIDITY_DAYS, anchorToEnd = fa
 const isActive = (endsAt, now = new Date()) => !!endsAt && new Date(now).getTime() < new Date(endsAt).getTime();
 const daysRemaining = (endsAt, now = new Date()) => (isActive(endsAt, now) ? Math.ceil((new Date(endsAt).getTime() - new Date(now).getTime()) / DAY_MS) : 0);
 
+/** Is the renewal charge of an auto-renewing plan due but not yet received (inside the grace window)? */
+const inRenewalGrace = (sub, now = new Date()) => !!sub && !!sub.endsAt && sub.autoRenew === true && GRACE_STATUSES.includes(sub.autoRenewStatus)
+  && !isActive(sub.endsAt, now) && new Date(now).getTime() < new Date(sub.endsAt).getTime() + RENEWAL_GRACE_MS;
+/** The single access rule: paid period still running, or an authorised renewal is being collected. */
+const hasAccessNow = (sub, now = new Date()) => !!sub && (isActive(sub.endsAt, now) || inRenewalGrace(sub, now));
+
 /** 'DD Mon YYYY' of an instant, in IST. */
 const formatIst = (date) => {
   const d = new Date(new Date(date).getTime() + IST_OFFSET_MS);
@@ -49,4 +62,4 @@ const phase = (endsAt, now = new Date()) => {
   return 'active';
 };
 
-module.exports = { DAY_MS, IST_OFFSET_MS, VALIDITY_DAYS, istStartOfDay, addDays, nextPeriod, isActive, daysRemaining, formatIst, validTill, phase };
+module.exports = { RENEWAL_GRACE_MS, inRenewalGrace, hasAccessNow, DAY_MS, IST_OFFSET_MS, VALIDITY_DAYS, istStartOfDay, addDays, nextPeriod, isActive, daysRemaining, formatIst, validTill, phase };

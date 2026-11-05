@@ -870,7 +870,7 @@ const razorpayWebhook = handler(async (req, res) => {
   const { event } = req.body || {};
   // Monthly Subscription (one-time orders and auto-renew charges) share this webhook URL: handled first, idempotently
   try {
-    if (await require('../services/subscriptionService').handleWebhook(event, req.body && req.body.payload, req.headers['x-razorpay-event-id'])) return res.json({ success: true });
+    if (await require('../services/subscriptionService').handleWebhook(event, req.body && req.body.payload, req.headers['x-razorpay-event-id'], req.body && req.body.created_at)) return res.json({ success: true });
   } catch (err) {
     console.error('[subscription] webhook processing failed:', err && err.message);
     return res.status(500).json({ success: false, message: 'Temporary error.' }); // Razorpay retries; processing is idempotent

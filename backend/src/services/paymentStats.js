@@ -1,13 +1,15 @@
 /**
  * Single source of truth for LearnIQ payment figures (admin dashboard + admin payments page).
  *
- * LearnIQ stores paid transactions in two collections:
+ * LearnIQ stores paid transactions in three collections:
  *   - Payment          (courses / lectures / notes)   status: pending | completed | failed | refunded
  *   - OlympiadPayment  (₹20 Olympiad exam fee)         status: PENDING | SUCCESS  | FAILED | REFUNDED
+ *   - SubscriptionPayment (Monthly Subscription)       status: created | paid | failed | cancelled   (amount in PAISE: converted to rupees here;
+ *       AUTOPAY_SETUP rows are mandate bookkeeping, not money, and are never counted)
  *
- * AMOUNTS ARE STORED IN RUPEES in both collections (Razorpay's paise value is only used when the
- * order is created and is never saved). So no currency conversion happens anywhere in here —
- * every figure returned by this module is in rupees.
+ * AMOUNTS ARE STORED IN RUPEES in the course and Olympiad collections (Razorpay's paise value is only used when the
+ * order is created and is never saved); SubscriptionPayment stores paise and is divided by 100 below.
+ * Every figure returned by this module is in rupees.
  *
  * Revenue = sum of the amounts of VERIFIED payments only (completed / SUCCESS).
  * Pending, failed, refunded and unconfirmed records are counted separately and never add to revenue.
@@ -15,6 +17,7 @@
  */
 const { Payment } = require('../models/index');
 const { OlympiadPayment } = require('../models/Olympiad');
+const { SubscriptionPayment } = require('../models/Subscription');
 
 const REPORT_TIMEZONE = 'Asia/Kolkata';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -38,18 +41,32 @@ const SOURCES = [
     dateExpr: { $ifNull: ['$verifiedAt', '$createdAt'] },
     dateFields: ['verifiedAt', 'createdAt'],
   },
+  {
+    key: 'subscription',
+    model: () => SubscriptionPayment,
+    status: { completed: 'paid', pending: 'created', failed: 'failed', refunded: 'refunded', unconfirmed: '__none__' },
+    // stored in paise
+    amountExpr: { $divide: ['$amountPaise', 100] },
+    // set-up rows only record a mandate; the money is in the AUTOPAY_CHARGE / ORDER row, so counting both would double-count
+    extraMatch: { kind: { $ne: 'AUTOPAY_SETUP' } },
+    dateExpr: { $ifNull: ['$paidAt', '$createdAt'] },
+    dateFields: ['paidAt', 'createdAt'],
+  },
 ];
+const amountOf = (source) => source.amountExpr || '$amount';
 
 /**
  * The ACTIVE payment list = everything except UNCONFIRMED and archived records (those live in "Payment History").
  * A completed/SUCCESS payment is never hidden, so revenue is identical in both views.
  */
 const activeFilter = (source) => ({
+  ...(source.extraMatch || {}),
   removedAt: null, // an admin-removed record ("Remove from History") is in the Removed view only
   status: { $ne: source.status.unconfirmed },
   $or: [{ archivedAt: null }, { status: source.status.completed }],
 });
 const hiddenFilter = (source) => ({
+  ...(source.extraMatch || {}),
   removedAt: null,
   $or: [{ status: source.status.unconfirmed }, { archivedAt: { $ne: null }, status: { $ne: source.status.completed } }],
 });
@@ -70,10 +87,10 @@ const roundRupees = (n) => Math.round((Number(n) || 0) * 100) / 100;
 async function getPaymentStats({ view = 'all' } = {}) {
   const perSource = await Promise.all(SOURCES.map(async (source) => {
     // 'active' = the Payments page; 'all' = dashboard. Both leave out admin-removed records so every screen shows the same totals.
-    const pipeline = [{ $match: view === 'active' ? activeFilter(source) : { removedAt: null } }];
+    const pipeline = [{ $match: view === 'active' ? activeFilter(source) : { ...(source.extraMatch || {}), removedAt: null } }];
     const rows = await source.model().aggregate([
       ...pipeline,
-      { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
+      { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: amountOf(source) } } },
     ]);
     const out = { revenue: 0, completedCount: 0, pendingCount: 0, failedCount: 0, refundedCount: 0, unconfirmedCount: 0, totalCount: 0 };
     for (const row of rows) {
@@ -87,16 +104,29 @@ async function getPaymentStats({ view = 'all' } = {}) {
     }
     out.revenue = roundRupees(out.revenue);
     // records that are not in the active list (never revenue) — counted separately so the admin can find them in Payment History
-    out.unconfirmedCount = await source.model().countDocuments({ removedAt: null, status: source.status.unconfirmed });
+    out.unconfirmedCount = await source.model().countDocuments({ ...(source.extraMatch || {}), removedAt: null, status: source.status.unconfirmed });
     out.historyCount = await source.model().countDocuments(hiddenFilter(source));
     // admin-removed records: informational only (never part of the figures above)
-    const removed = await source.model().aggregate([{ $match: { removedAt: { $ne: null } } }, { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } }]);
+    const removed = await source.model().aggregate([{ $match: { ...(source.extraMatch || {}), removedAt: { $ne: null } } }, { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: amountOf(source) } } }]);
     out.removedCount = removed.reduce((n, r) => n + r.count, 0);
     out.removedVerifiedAmount = roundRupees(removed.filter((r) => normaliseStatus(source, r._id) === 'completed').reduce((n, r) => n + (r.amount || 0), 0));
     return [source.key, out];
   }));
 
   const bySource = Object.fromEntries(perSource);
+  // Monthly Subscription: tell apart what the student paid up front from what Razorpay collected automatically (and what failed)
+  const subSource = SOURCES.find((x) => x.key === 'subscription');
+  const kinds = await subSource.model().aggregate([
+    { $match: { ...subSource.extraMatch } },
+    { $group: { _id: { kind: '$kind', status: '$status' }, count: { $sum: 1 }, amount: { $sum: amountOf(subSource) } } },
+  ]);
+  const pick = (kind, status) => kinds.filter((r) => r._id.kind === kind && r._id.status === status).reduce((a, r) => ({ count: a.count + r.count, amount: a.amount + (r.amount || 0) }), { count: 0, amount: 0 });
+  bySource.subscription = {
+    ...bySource.subscription,
+    oneTime: { count: pick('ORDER', 'paid').count, revenue: roundRupees(pick('ORDER', 'paid').amount) },
+    recurring: { successfulCount: pick('AUTOPAY_CHARGE', 'paid').count, revenue: roundRupees(pick('AUTOPAY_CHARGE', 'paid').amount), failedRenewalCount: pick('AUTOPAY_CHARGE', 'failed').count },
+    activeAutoRenewals: await require('../models/Subscription').Subscription.countDocuments({ autoRenew: true }),
+  };
   const sum = (field) => perSource.reduce((s, [, v]) => s + v[field], 0);
   return {
     totalRevenue: roundRupees(sum('revenue')),
@@ -140,11 +170,11 @@ async function getRevenueTrend({ months = 6, now = new Date() } = {}) {
   const since = new Date(Date.UTC(firstY, firstM - 1, 1) - 24 * 3600 * 1000);
 
   const rows = (await Promise.all(SOURCES.map((source) => source.model().aggregate([
-    { $match: { removedAt: null, status: source.status.completed, $or: source.dateFields.map((f) => ({ [f]: { $gte: since } })) } },
+    { $match: { ...(source.extraMatch || {}), removedAt: null, status: source.status.completed, $or: source.dateFields.map((f) => ({ [f]: { $gte: since } })) } },
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m', date: source.dateExpr, timezone: REPORT_TIMEZONE } },
-        revenue: { $sum: '$amount' },
+        revenue: { $sum: amountOf(source) },
       },
     },
   ])))).flat();
@@ -178,8 +208,8 @@ const maskId = (value) => {
 };
 
 async function listPayments({ view = 'active' } = {}) {
-  const scope = (key) => (view === 'removed' ? { removedAt: { $ne: null } } : view === 'history' ? { removedAt: null } : activeFilter(SOURCES.find((s) => s.key === key)));
-  const [coursePayments, olympiadPayments] = await Promise.all([
+  const scope = (key) => { const src = SOURCES.find((x) => x.key === key); return view === 'removed' ? { ...(src.extraMatch || {}), removedAt: { $ne: null } } : view === 'history' ? { ...(src.extraMatch || {}), removedAt: null } : activeFilter(src); };
+  const [coursePayments, olympiadPayments, subscriptionPayments] = await Promise.all([
     Payment.find(scope('course'))
       .populate('student', 'name email phone')
       .populate('course', 'title')
@@ -191,7 +221,30 @@ async function listPayments({ view = 'active' } = {}) {
       .populate('exam', 'title standard')
       .sort({ createdAt: -1 })
       .lean(),
+    SubscriptionPayment.find(scope('subscription'))
+      .populate('student', 'name email phone')
+      .sort({ createdAt: -1 })
+      .lean(),
   ]);
+  const subSrc = SOURCES.find((x) => x.key === 'subscription');
+  const subscriptionRows = subscriptionPayments.map((p) => ({
+    _id: String(p._id),
+    source: 'subscription',
+    type: 'subscription',
+    student: payerOf(p),
+    standard: p.standard,
+    itemTitle: `Monthly Subscription · Std ${p.standard}`,
+    paymentKind: p.kind === 'AUTOPAY_CHARGE' ? 'recurring' : 'one-time',
+    amount: Math.round(p.amountPaise) / 100,
+    currency: p.currency || 'INR',
+    provider: 'Razorpay', orderId: maskId(p.razorpayOrderId || p.razorpaySubscriptionId), paymentId: maskId(p.razorpayPaymentId), verifiedVia: p.verifiedVia || null,
+    status: normaliseStatus(subSrc, p.status),
+    createdAt: p.createdAt,
+    paidAt: p.paidAt || null,
+    validity: p.periodStart && p.periodEnd ? { from: p.periodStart, to: p.periodEnd } : null,
+    invoiceNumber: p.invoiceNumber || null,
+    ...(p.failureReason ? { failureReason: p.failureReason } : {}),
+  }));
   const olySource = SOURCES.find((s) => s.key === 'olympiad');
   const olympiadRows = olympiadPayments.map((p) => ({
     _id: String(p._id),
@@ -215,7 +268,7 @@ async function listPayments({ view = 'active' } = {}) {
     provider: 'Razorpay', orderId: maskId(p.razorpayOrderId), paymentId: maskId(p.razorpayPaymentId),
     ...(p.removedAt ? { removedAt: p.removedAt, removalReason: p.removalReason || null } : {}),
   }));
-  return [...courseRows, ...olympiadRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return [...courseRows, ...olympiadRows, ...subscriptionRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
 module.exports = { getPaymentStats, getRevenueTrend, listPayments, REPORT_TIMEZONE, activeFilter, hiddenFilter };
