@@ -89,6 +89,10 @@ const evalExpr = (doc, expr) => {
       .formatToParts(d).map((p) => [p.type, p.value]));
     return format.replace('%Y', parts.year).replace('%m', parts.month).replace('%d', parts.day);
   }
+  if (expr && expr.$divide) { const [a, b] = expr.$divide.map((e) => (typeof e === 'number' ? e : evalExpr(doc, e))); return a / b; }
+  if (expr && typeof expr === 'object' && !(expr instanceof Date) && !Array.isArray(expr) && Object.keys(expr).every((k) => !k.startsWith('$'))) {
+    return Object.fromEntries(Object.entries(expr).map(([k, v]) => [k, evalExpr(doc, v)]));   // { kind: '$kind', status: '$status' } group keys
+  }
   throw new Error(`fakeDb: unsupported expression ${JSON.stringify(expr)}`);
 };
 
@@ -310,7 +314,7 @@ class FakeModel {
         const groups = new Map();
         for (const d of rows) {
           const id = evalExpr(d, idSpec);
-          const key = String(id);
+          const key = id && typeof id === 'object' ? JSON.stringify(id) : String(id);
           if (!groups.has(key)) groups.set(key, { _id: id, rows: [] });
           groups.get(key).rows.push(d);
         }
@@ -318,7 +322,7 @@ class FakeModel {
           const g = { _id };
           for (const [name, spec] of Object.entries(accs)) {
             const [op, arg] = Object.entries(spec)[0];
-            const nums = rs.map((r) => (typeof arg === 'number' ? arg : getPath(r, arg.slice(1))));
+            const nums = rs.map((r) => (typeof arg === 'number' ? arg : evalExpr(r, arg)));
             if (op === '$sum') g[name] = nums.reduce((s, n) => s + n, 0);
             else if (op === '$avg') g[name] = nums.reduce((s, n) => s + n, 0) / nums.length;
             else if (op === '$max') g[name] = Math.max(...nums);
