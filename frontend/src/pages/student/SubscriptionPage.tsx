@@ -86,7 +86,7 @@ const SubscriptionPage: React.FC = () => {
 
               <section aria-label="Plans" className="grid gap-4 sm:grid-cols-2">
                 <div className="relative rounded-2xl border-2 border-primary bg-surface p-5 shadow-sm" data-testid="plan-monthly">
-                  <span className="absolute -top-3 left-4 rounded-full bg-primary text-white text-xs font-bold px-3 py-1">Most Popular</span>
+                  <span style={{ backgroundColor: '#6C63F2', color: '#fff' }} className="absolute -top-3 left-4 inline-flex items-center whitespace-nowrap rounded-full text-xs font-bold px-3 py-1 shadow-sm">Most Popular</span>
                   <h3 className="font-heading font-bold text-lg text-text-primary mt-1">{plan.name}</h3>
                   <div className="mt-2"><PriceLine plan={plan} /></div>
                   <ul className="mt-3 space-y-1.5">{plan.features.map((f) => <Tick key={f}>{f}</Tick>)}</ul>

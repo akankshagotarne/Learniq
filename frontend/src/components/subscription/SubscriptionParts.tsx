@@ -49,7 +49,8 @@ export const ChooseStandardSheet: React.FC<{ initial: number | null; subs: Subsc
       <div className="grid grid-cols-5 gap-2 mt-4" role="radiogroup" aria-label="Standard">
         {NUMBERED_STANDARDS.map((n) => (
           <button key={n} type="button" role="radio" aria-checked={std === n} onClick={() => setStd(n)} data-testid={`sub-std-${n}`}
-            className={`relative h-11 rounded-xl text-sm font-semibold border transition ${std === n ? 'bg-primary text-white border-primary' : 'bg-surface-alt text-text-primary border-border-subtle hover:border-primary/50'}`}>
+            style={std === n ? { backgroundColor: '#6C63F2', color: '#fff', borderColor: '#6C63F2' } : undefined}
+            className={`relative h-11 rounded-xl text-sm font-semibold border transition ${std === n ? 'shadow-md' : 'bg-surface-alt text-text-primary border-border-subtle hover:border-primary/50'}`}>
             {n}
             {activeSet.has(n) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-surface" aria-label="active" />}
           </button>
@@ -154,7 +155,7 @@ export const MySubscriptionCard: React.FC<{
         <div className="mt-2">
           <p className={`text-sm font-semibold ${warn ? 'text-orange-600' : 'text-text-primary'}`}>{daysLabel(sub.daysRemaining)}</p>
           <div className="h-2 rounded-full bg-surface-alt mt-1.5 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={sub.totalDays} aria-valuenow={sub.daysRemaining}>
-            <div className={`h-full rounded-full ${warn ? 'bg-orange-500' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: warn ? '#f97316' : '#6C63F2' }} />
           </div>
         </div>
       )}
