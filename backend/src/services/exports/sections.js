@@ -253,15 +253,25 @@ const payments = async (query) => {
   const view = ['history', 'removed'].includes(query.view) ? query.view : 'active';
   const term = str(query.search, 100).toLowerCase();
   const status = str(query.status, 20).toLowerCase();
-  const item = (p) => (p.exam && p.exam.title) || (p.course && p.course.title) || (p.lecture && p.lecture.title) || '';
+  const item = (p) => (p.exam && p.exam.title) || (p.course && p.course.title) || (p.lecture && p.lecture.title) || p.itemTitle || '';
+  const typeOf = (p) => (p.source === 'olympiad' ? 'Olympiad' : p.source === 'subscription' ? 'Subscription' : 'Course');
+  const typeFilter = str(query.type, 20).toLowerCase();
+  const stdFilter = Number(query.standard);
+  const stdOf = (p) => (p.source === 'subscription' ? p.standard : p.exam ? Number(p.exam.standard) : null);
+  const from = query.from ? new Date(`${str(query.from, 10)}T00:00:00+05:30`) : null;                 // dates are IST calendar days
+  const to = query.to ? new Date(`${str(query.to, 10)}T23:59:59.999+05:30`) : null;
+  const at = (p) => new Date(p.paidAt || p.createdAt);
   let list = await listPayments({ view });
   list = list.filter((p) => (!status || status === 'all' || String(p.status).toLowerCase() === status)
+    && (!typeFilter || typeFilter === 'all' || typeOf(p).toLowerCase() === typeFilter)
+    && (!Number.isInteger(stdFilter) || stdFilter < 1 || stdOf(p) === stdFilter)
+    && (!from || Number.isNaN(from.getTime()) || at(p) >= from) && (!to || Number.isNaN(to.getTime()) || at(p) <= to)
     && (!term || String((p.student && p.student.name) || '').toLowerCase().includes(term) || item(p).toLowerCase().includes(term)));
   return {
     title: 'LearnIQ — Student Payments', sheetName: 'Payments', fileBase: 'learniq-payments',
-    filters: [{ label: 'Section', value: 'Admin › Payments' }, { label: 'View', value: view === 'active' ? 'Active' : view === 'history' ? 'History' : 'Removed' }, { label: 'Status', value: status && status !== 'all' ? statusWord(status) : 'All' }, { label: 'Search', value: str(query.search) }],
-    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('type', 'Type', 9), col('item', 'Course / exam', 26), col('amount', 'Amount (₹)', 11, 'number', { align: 'right' }), col('status', 'Status', 11), col('date', 'Date', 17, 'datetime')],
-    rows: list.slice(0, MAX_ROWS + 1).map((p) => ({ name: p.student ? p.student.name : 'Unknown', email: p.student ? maskEmail(p.student.email) : '', type: p.source === 'olympiad' ? 'Olympiad' : 'Course', item: item(p), amount: p.amount, status: p.status === 'UNCONFIRMED' ? 'Not confirmed' : statusWord(p.status), date: p.createdAt })),
+    filters: [{ label: 'Section', value: 'Admin › Payments' }, { label: 'View', value: view === 'active' ? 'Active' : view === 'history' ? 'History' : 'Removed' }, { label: 'Status', value: status && status !== 'all' ? statusWord(status) : 'All' }, { label: 'Type', value: typeFilter && typeFilter !== 'all' ? typeFilter : 'All' }, { label: 'Standard', value: Number.isInteger(stdFilter) && stdFilter >= 1 ? `Std ${stdFilter}` : 'All' }, { label: 'Search', value: str(query.search) }],
+    columns: [col('name', 'Student', 22), col('email', 'Email', 26), col('type', 'Type', 13), col('item', 'Course / exam / plan', 28), col('amount', 'Amount (₹)', 11, 'number', { align: 'right' }), col('status', 'Status', 11), col('date', 'Date', 17, 'datetime')],
+    rows: list.slice(0, MAX_ROWS + 1).map((p) => ({ name: p.student ? p.student.name : 'Unknown', email: p.student ? maskEmail(p.student.email) : '', type: typeOf(p), item: item(p), amount: p.amount, status: p.status === 'UNCONFIRMED' ? 'Not confirmed' : statusWord(p.status), date: p.createdAt })),
   };
 };
 
