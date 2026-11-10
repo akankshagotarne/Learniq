@@ -91,3 +91,15 @@ and no file access, so a folder there would be lost at every restart; a persiste
 run the script above from the administrator's computer (it writes to the same database). Without the variable the admin screen shows one
 "storage not configured" message, the import button stays disabled, and every other part of LearnIQ keeps working.
 Find the event by date instead of by id: `node src/scripts/importPapers.js --dir D:\LearnIQ-private --day 2026-10-31`.
+
+## 11 November 2026 event
+Same importer (`backend/src/config/nov11Event.js`, paper set `nov11-2026`, event day 2026-11-11). The private files go in the `nov11` sub-folder:
+
+    <OLYMPIAD_PAPER_DIR>/nov11/std1.json ... std10.json     (540 questions: 40/40/40 and 60 x 7; diagrams embedded as data:image/png URIs)
+
+    cd backend
+    node src/scripts/importPapers.js --dir D:\LearnIQ-private --day 2026-11-11            # dry run
+    node src/scripts/importPapers.js --dir D:\LearnIQ-private --day 2026-11-11 --apply    # import (idempotent)
+
+Questions only; event fees, registration and results times are never changed. Exam durations (60/60/60/90/90/120 x 5 minutes) are taken from
+the papers. The event stays in its current state (draft) until published.
