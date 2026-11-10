@@ -77,6 +77,7 @@ const windowState = (exam, now = new Date()) => {
  * The event comes from the exam record (never from an id supplied by the browser). Exams outside the event model are unaffected.
  */
 const interviewPolicy = require('../services/interviewPolicy');
+const eventSchedule = require('../services/eventSchedule');
 const publicLabel = (l) => { if (!l) return {}; const { eventState, ...rest } = l; return rest; }; // the event id / name / date a student or admin card shows
 
 const eventGuard = async (exam, purpose = 'view', now = new Date()) => {
@@ -522,7 +523,9 @@ const listExams = handler(async (req, res) => {
       // an exam that has not opened yet is Upcoming even while its registration is open (the student may register early, never start early)
       if (tab === 'available' && st.window === 'upcoming') tab = 'upcoming';
     }
-    out.push({ ...examPublic(exam), ...label, ...st, tab, ownStandard: cls.ownStandard });
+    // the event's interview window and result day: the exam page keeps a submitted exam under Available only until the END of the result day
+    const win = await eventSchedule.windowForExam(exam);
+    out.push({ ...examPublic(exam), ...label, ...st, tab, ownStandard: cls.ownStandard, interviewWindowState: eventSchedule.phase(win, now), interviewClosesAt: win.closesAt.toISOString(), resultsAnnounceAt: win.announceAt ? new Date(win.announceAt).toISOString() : null });
   }
   res.json({ success: true, exams: out, standardResolved: true, standard: studentStandard, serverNow: now.toISOString() });
 });
@@ -633,6 +636,9 @@ const componentBlocker = async (user, exam, component) => {
   if (component === 'INTERVIEW') {
     const ent = await examAccess.interviewEntitlementFor(user._id, exam._id);
     if (ent.entitled) return { code: 'ALREADY_PAID', message: 'Your interview is already unlocked. No credit or payment is needed.' };
+    // the interview window of this event is over: nothing can be bought for an interview that can no longer be attended
+    const ivWin = await eventSchedule.windowForExam(exam);
+    if (eventSchedule.phase(ivWin, new Date()) === 'closed') return { code: 'INTERVIEW_CLOSED', message: `The interview window closed on ${istDate(ivWin.closesAt)} at ${istTime(ivWin.closesAt)} IST. The interview can no longer be unlocked.` };
     const evt = exam.event ? await events.eventOfExam(exam) : null;
     if (evt && evt.state === 'cancelled') return { code: 'CLOSED', message: 'This Olympiad event has been cancelled.' };
     return null; // interview can be unlocked before or after the exam; unlocking never starts it

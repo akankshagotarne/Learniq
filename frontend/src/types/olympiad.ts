@@ -163,6 +163,9 @@ export type UnlockVia = 'PAYMENT' | 'CREDIT' | 'SUBSCRIPTION' | 'LEGACY_PACKAGE'
 export interface OlympiadExam {
   _id: string;
   eventId?: string;
+  /** this event's interview window and result-announcement time (server clock) */
+  interviewWindowState?: "upcoming" | "open" | "closed";
+  resultsAnnounceAt?: string | null;
   eventName?: string;
   eventDate?: string;
   title: string;
