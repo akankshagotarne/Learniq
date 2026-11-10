@@ -65,13 +65,13 @@ const olympiadExamSchema = new mongoose.Schema({
   negativeMarkValue: { type: Number, default: 0, min: 0 },
 
   // Optional per-exam overrides of the split prices (whole rupees). Absent = config/olympiadPricing.js defaults (Rs 10 each).
-  examFee: { type: Number, min: 1 },
+  examFee: { type: Number, min: 0 }, // 0 = free for all students
   interviewFee: { type: Number, min: 1 },
   fee: {
-    type: Number, required: true, // in rupees; Olympiads cost at least Rs 1, only the free Engineering mock test may be 0
+    type: Number, required: true, // in rupees; 0 = free for all students
     validate: {
-      validator(v) { return Number.isFinite(v) && v >= (this && this.examType === 'engineering' ? 0 : 1); },
-      message: 'fee must be at least 1 (0 is allowed only for the free engineering mock test).',
+      validator(v) { return Number.isFinite(v) && v >= 0; },
+      message: 'fee cannot be negative (0 makes the exam free for all students).',
     },
   },
   currency: { type: String, default: 'INR' },
@@ -230,7 +230,7 @@ const olympiadAttemptSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   exam: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadExam', required: true },
   // Paid Olympiad: the verified payment that unlocked this attempt. Free engineering test: the approved access request instead.
-  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest && !this.accessGrant && this.accessType !== 'subscription'; } },
+  payment: { type: mongoose.Schema.Types.ObjectId, ref: 'OlympiadPayment', required() { return !this.accessRequest && !this.accessGrant && this.accessType !== 'subscription' && this.accessType !== 'free'; } },
   // Monthly Subscription: the subscription that covered this attempt (no payment row, no credit)
   subscription: { type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' },
   // Administrator exception (models/ExamAccess.js): lets ONE student start ONE exam without a payment record
@@ -238,7 +238,7 @@ const olympiadAttemptSchema = new mongoose.Schema({
   accessRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'EngineeringRequest' },
 
   // How the attempt was unlocked: 'payment' | 'credit' | 'subscription' | 'grant'. Absent on records created before subscriptions.
-  accessType: { type: String, enum: ['payment', 'credit', 'subscription', 'grant'] },
+  accessType: { type: String, enum: ['payment', 'credit', 'subscription', 'grant', 'free'] },
 
   status: { type: String, enum: ['IN_PROGRESS', 'COMPLETED'], default: 'IN_PROGRESS' },
   submissionType: { type: String, enum: ['MANUAL', 'TIMER', 'SYSTEM', 'PROCTORING'] },
