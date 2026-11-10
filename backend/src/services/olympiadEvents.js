@@ -109,7 +109,7 @@ const parseExamConfig = (raw, base, errors, prefix, now) => {
   }
   if (src.fee !== undefined) {
     const f = src.fee;
-    if (typeof f !== 'number' || !Number.isFinite(f) || f < 1 || f > 100000 || Math.round(f * 100) !== f * 100) err('fee', 'The fee must be at least ₹1 (at most two decimals).'); else c.fee = f;
+    if (typeof f !== 'number' || !Number.isFinite(f) || f < 0 || f > 100000 || Math.round(f * 100) !== f * 100) err('fee', 'Enter a fee of ₹0 (free for all students) or more, with at most two decimals.'); else c.fee = f;
   }
   for (const k of ['totalQuestions', 'totalMarks']) {
     if (src[k] === undefined) continue;
@@ -146,7 +146,7 @@ const validateCreate = (body, now = new Date()) => {
   if (!errors['schedule.startDate'] && !schedule.startDate) errors['schedule.startDate'] = 'Enter the examination start date and time.';
   if (!errors['schedule.endDate'] && !schedule.endDate) errors['schedule.endDate'] = 'Enter the examination closing date and time.';
   if (!errors['schedule.durationMinutes'] && !schedule.durationMinutes) errors['schedule.durationMinutes'] = 'Enter the examination duration in minutes.';
-  if (!errors['schedule.fee'] && schedule.fee === undefined) errors['schedule.fee'] = 'Enter the registration fee (at least ₹1).';
+  if (!errors['schedule.fee'] && schedule.fee === undefined) errors['schedule.fee'] = 'Enter the exam fee (0 makes the exam free for all students).';
 
   const perStandard = {};
   if (b.standardConfig !== undefined) {
@@ -261,7 +261,8 @@ const validateEventEdit = (event, body, exams = []) => {
   for (const [field, label] of [['examFee', 'exam fee'], ['interviewFee', 'interview fee']]) {
     if (b[field] === undefined) continue;
     const n = b[field];
-    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 100000) errors[field] = `The ${label} must be a whole number of rupees from 1 to 100000.`;
+    const min = field === 'examFee' ? 0 : 1; // an exam fee of 0 = free for all students
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > 100000) errors[field] = `The ${label} must be a whole number of rupees from ${min} to 100000.`;
     else put(field, event[field] ?? null, n, n === (event[field] ?? null));
   }
   const sameAt = (a, c) => (a ? new Date(a).getTime() : null) === (c ? new Date(c).getTime() : null);
@@ -331,7 +332,7 @@ const eventView = (event, exams, counts, now = new Date()) => {
     registrationOpensAt: event.registrationOpensAt || null, registrationClosesAt: event.registrationClosesAt || null,
     registrationOpensAtIST: event.registrationOpensAt ? formatIST(event.registrationOpensAt) : '', registrationClosesAtIST: event.registrationClosesAt ? formatIST(event.registrationClosesAt) : '',
     examCount: exams.length, isLegacy: !!event.isLegacy,
-    examFee: event.examFee ?? null, interviewFee: event.interviewFee ?? null, totalFee: event.examFee && event.interviewFee ? event.examFee + event.interviewFee : null,
+    examFee: event.examFee ?? null, interviewFee: event.interviewFee ?? null, totalFee: event.examFee != null && event.interviewFee ? event.examFee + event.interviewFee : null,
     interviewOpensAt: event.interviewOpensAt || null, interviewClosesAt: event.interviewClosesAt || null,
     interviewOpensAtIST: event.interviewOpensAt ? formatIST(event.interviewOpensAt) : '', interviewClosesAtIST: event.interviewClosesAt ? formatIST(event.interviewClosesAt) : '',
     resultsPublishAt: event.resultsPublishAt || null, resultsPublishAtIST: event.resultsPublishAt ? formatIST(event.resultsPublishAt) : '',

@@ -146,6 +146,8 @@ const assertWindowOpen = (exam, purpose) => {
 
 // ── Free "approval" exams (the BE Engineering mock test): no payment; an administrator must approve the student's request ──
 const isApprovalExam = (exam) => exam.accessMode === 'approval';
+/** An Olympiad whose exam fee is 0 is free for every eligible student: no payment, credit or grant is needed to register or start. */
+const isFreeExam = (exam) => !isApprovalExam(exam) && !(Number(exam.examFee != null ? exam.examFee : exam.fee) > 0);
 const requestModel = () => require('../models/Engineering').EngineeringRequest;
 
 /** The student's access request for an approval exam, or null. */
@@ -376,7 +378,7 @@ const examPublic = (exam) => ({
   totalMarks: exam.totalMarks,
   negativeMarking: exam.negativeMarking,
   negativeMarkValue: exam.negativeMarkValue,
-  fee: priceFor('EXAM', exam), // what the student pays to unlock the EXAM (Rs 10 default); exam.fee stays the legacy bundle price
+  fee: isFreeExam(exam) ? 0 : priceFor('EXAM', exam), // what the student pays to unlock the EXAM (Rs 10 default); exam.fee stays the legacy bundle price
   interviewIncluded: exam._interviewIncluded !== false,
   prices: exam._interviewIncluded === false ? { EXAM: priceFor('EXAM', exam), currency: (exam && exam.currency) || 'INR' } : pricingFor(exam),   // an Exam Only event has no interview price
   currency: exam.currency,
@@ -443,7 +445,7 @@ const buildState = async (exam, userId, now = new Date()) => {
   const regBlock = evt && evt.state === 'published'
     ? (evt.registrationOpensAt && now < new Date(evt.registrationOpensAt) ? 'not_open' : (evt.registrationClosesAt && now >= new Date(evt.registrationClosesAt) ? 'closed' : null))
     : (evt && evt.state === 'cancelled' ? 'cancelled' : null);
-  const paid = !!success || !!grant || !!subscription; // entitled to start (payment, administrator exception OR an active subscription); paymentStatus below stays the truth about payments
+  const paid = !!success || !!grant || !!subscription || isFreeExam(exam); // entitled to start (payment, administrator exception OR an active subscription); paymentStatus below stays the truth about payments
   let state; let message = null;
 
   if (attempt && attempt.status === 'COMPLETED') state = 'completed';
@@ -627,7 +629,7 @@ const componentOf = (req) => {
 const componentBlocker = async (user, exam, component) => {
   // Exam Only event: no interview credit, payment order or entitlement can be created, whatever the client sends (HTTP 409)
   if (component === 'INTERVIEW' && !(await interviewPolicy.enabledForExam(exam))) return { code: interviewPolicy.NOT_INCLUDED_CODE, message: interviewPolicy.NOT_INCLUDED_MESSAGE };
-  if (isApprovalExam(exam) || !(exam.fee > 0)) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit or payment is needed.' };
+  if (isApprovalExam(exam) || (component === 'EXAM' && isFreeExam(exam))) return { code: 'NO_PAYMENT_REQUIRED', message: 'This examination is free. No credit or payment is needed.' };
   if (component === 'INTERVIEW') {
     const ent = await examAccess.interviewEntitlementFor(user._id, exam._id);
     if (ent.entitled) return { code: 'ALREADY_PAID', message: 'Your interview is already unlocked. No credit or payment is needed.' };
@@ -967,6 +969,8 @@ const startExam = handler(async (req, res) => {
   let unlock; // what lets this student start: a verified payment (Olympiad) or an approved request (free engineering test)
   if (isApprovalExam(exam)) {
     unlock = { accessRequest: (await resolveAccess(exam, req.user))._id };
+  } else if (isFreeExam(exam)) {
+    unlock = { accessType: 'free' }; // fee 0 = free for all students: nothing to pay, nothing deducted
   } else {
     const ent = await examAccess.entitlementFor(req.user._id, exam._id);
     if (!ent.entitled) {

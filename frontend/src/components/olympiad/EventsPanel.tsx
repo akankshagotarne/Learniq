@@ -28,6 +28,7 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
   const [name, setName] = useState(''); const [description, setDescription] = useState('');
   const [standards, setStandards] = useState<number[]>([]);
   const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [duration, setDuration] = useState('60'); const [fee, setFee] = useState('20');
+  const feeLabel = fee.trim() !== '' && Number(fee) === 0 ? 'Free' : fee.trim() !== '' && Number(fee) > 0 ? `₹${fee}` : '—';
   const [regOpen, setRegOpen] = useState(''); const [regClose, setRegClose] = useState('');
   const [copyFrom, setCopyFrom] = useState(''); const [copyQuestions, setCopyQuestions] = useState(false);
   const [mode, setMode] = useState<ExaminationMode>('EXAM_ONLY'); // a new event is Exam Only unless chosen otherwise
@@ -45,7 +46,7 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
     if (!end) local.endDate = 'Choose when the exam closes.';
     if (start && end && fromISTInput(end) <= fromISTInput(start)) local.endDate = 'The closing time must be after the opening time.';
     if (!(Number(duration) > 0)) local.durationMinutes = 'Enter the duration in minutes.';
-    if (!(Number(fee) > 0)) local.fee = 'Enter the registration fee.';
+    if (fee.trim() === '' || !Number.isFinite(Number(fee)) || Number(fee) < 0) local.fee = 'Enter the exam fee (0 makes the exam free for all students).';
     if (withInterview) { // nothing interview-related is validated (or sent) for an Exam Only event
       if (ivFee && !(Number.isInteger(Number(ivFee)) && Number(ivFee) > 0)) local.interviewFee = 'Enter the interview fee in whole rupees.';
       if (!!ivOpen !== !!ivClose) local.interviewClosesAt = 'Set both the interview opening and closing time, or neither.';
@@ -100,7 +101,7 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
           <label className="block min-w-0 sm:col-span-2"><span className={labelCls}>Exam opens (IST)</span><input type="datetime-local" className={inputCls} value={start} onChange={e => setStart(e.target.value)} data-testid="ev-start" />{errors.startDate && <p className={errCls}>{errors.startDate}</p>}</label>
           <label className="block min-w-0 sm:col-span-2"><span className={labelCls}>Exam closes (IST)</span><input type="datetime-local" className={inputCls} value={end} onChange={e => setEnd(e.target.value)} data-testid="ev-end" />{errors.endDate && <p className={errCls}>{errors.endDate}</p>}</label>
           <label className="block min-w-0"><span className={labelCls}>Duration (min)</span><input inputMode="numeric" className={inputCls} value={duration} onChange={e => setDuration(e.target.value)} />{errors.durationMinutes && <p className={errCls}>{errors.durationMinutes}</p>}</label>
-          <label className="block min-w-0"><span className={labelCls}>Fee (₹)</span><input inputMode="numeric" className={inputCls} value={fee} onChange={e => setFee(e.target.value)} />{errors.fee && <p className={errCls}>{errors.fee}</p>}</label>
+          <label className="block min-w-0"><span className={labelCls}>Fee (₹)</span><input inputMode="numeric" className={inputCls} value={fee} onChange={e => setFee(e.target.value)} data-testid="ev-fee" />{Number(fee) === 0 && fee.trim() !== '' && !errors.fee && <p className="mt-1 text-xs text-emerald-600" data-testid="ev-free-note">Fee 0 - this exam will be free for all students.</p>}{errors.fee && <p className={errCls}>{errors.fee}</p>}</label>
           <label className="block min-w-0 sm:col-span-2"><span className={labelCls}>Registration opens (optional)</span><input type="datetime-local" className={inputCls} value={regOpen} onChange={e => setRegOpen(e.target.value)} /></label>
           <label className="block min-w-0 sm:col-span-2"><span className={labelCls}>Registration closes (optional)</span><input type="datetime-local" className={inputCls} value={regClose} onChange={e => setRegClose(e.target.value)} />{errors.registrationClosesAt && <p className={errCls}>{errors.registrationClosesAt}</p>}</label>
         </div>
@@ -110,10 +111,10 @@ const CreateDialog: React.FC<{ events: OlympiadEventRow[]; onClose: () => void; 
             <label className="block min-w-0"><span className={labelCls}>Interview fee (₹)</span><input inputMode="numeric" className={inputCls} value={ivFee} onChange={e => setIvFee(e.target.value)} data-testid="ev-interview-fee-new" />{errors.interviewFee && <p className={errCls}>{errors.interviewFee}</p>}</label>
             <label className="block min-w-0 sm:col-span-1"><span className={labelCls}>Interview opens (IST)</span><input type="datetime-local" className={inputCls} value={ivOpen} onChange={e => setIvOpen(e.target.value)} />{errors.interviewOpensAt && <p className={errCls}>{errors.interviewOpensAt}</p>}</label>
             <label className="block min-w-0 sm:col-span-2"><span className={labelCls}>Interview closes (IST)</span><input type="datetime-local" className={inputCls} value={ivClose} onChange={e => setIvClose(e.target.value)} />{errors.interviewClosesAt && <p className={errCls}>{errors.interviewClosesAt}</p>}</label>
-            <p className="sm:col-span-4 text-xs text-text-secondary" data-testid="fee-summary">Exam fee ₹{Number(fee) > 0 ? fee : '—'}{ivFee ? <> · Interview fee ₹{ivFee} · <b>Total ₹{(Number(fee) || 0) + (Number(ivFee) || 0)}</b></> : ' · Interview fee: the standard interview price applies'}. The exam and the interview are paid separately.</p>
+            <p className="sm:col-span-4 text-xs text-text-secondary" data-testid="fee-summary">Exam fee {feeLabel}{ivFee ? <> · Interview fee ₹{ivFee} · <b>Total ₹{(Number(fee) || 0) + (Number(ivFee) || 0)}</b></> : ' · Interview fee: the standard interview price applies'}. The exam and the interview are paid separately.</p>
           </div>
         )}
-        {!withInterview && <p className="text-xs text-text-secondary" data-testid="fee-summary">Exam fee ₹{Number(fee) > 0 ? fee : '—'}. No interview fee, schedule or eligibility applies to this event.</p>}
+        {!withInterview && <p className="text-xs text-text-secondary" data-testid="fee-summary">Exam fee {feeLabel}. No interview fee, schedule or eligibility applies to this event.</p>}
         <div className="rounded-xl border border-border-subtle p-3 space-y-2">
           <label className="block"><span className={labelCls}>Copy settings from an earlier event (optional)</span>
             <select className={inputCls} value={copyFrom} onChange={e => { setCopyFrom(e.target.value); if (!e.target.value) setCopyQuestions(false); }} data-testid="ev-copy">
@@ -150,7 +151,7 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
     eventsApi.detail(id).then(r => {
       setEv(r.event); setMode(r.event.interviewEnabled === false ? 'EXAM_ONLY' : 'EXAM_INTERVIEW'); setName(r.event.name); setDescription(r.event.description || '');
       setRegOpen(toInput(r.event.registrationOpensAt)); setRegClose(toInput(r.event.registrationClosesAt));
-      setExamFee(r.event.examFee ? String(r.event.examFee) : ''); setInterviewFee(r.event.interviewFee ? String(r.event.interviewFee) : '');
+      setExamFee(r.event.examFee != null ? String(r.event.examFee) : ''); setInterviewFee(r.event.interviewFee ? String(r.event.interviewFee) : '');
       setIvOpen(toInput(r.event.interviewOpensAt ?? null)); setIvClose(toInput(r.event.interviewClosesAt ?? null)); setResAt(toInput(r.event.resultsPublishAt ?? null));
     }).catch(e => setErr(olympiadErrorMessage(e, 'Could not load this event.')));
   }, [id]);
@@ -164,7 +165,7 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
     if (description.trim() !== (ev.description || '')) body.description = description.trim();
     if (regOpen !== toInput(ev.registrationOpensAt)) body.registrationOpensAt = regOpen ? fromISTInput(regOpen) : null;
     if (regClose !== toInput(ev.registrationClosesAt)) body.registrationClosesAt = regClose ? fromISTInput(regClose) : null;
-    if (examFee !== (ev.examFee ? String(ev.examFee) : '') && examFee) body.examFee = Number(examFee);
+    if (examFee !== (ev.examFee != null ? String(ev.examFee) : '') && examFee !== '') body.examFee = Number(examFee);
     if (mode !== savedMode) body.interviewEnabled = withInterview;
     if (withInterview) { // an Exam Only event sends (and shows) no interview field at all
       if (interviewFee !== (ev.interviewFee ? String(ev.interviewFee) : '') && interviewFee) body.interviewFee = Number(interviewFee);
@@ -196,7 +197,7 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
             <label className="block"><span className={labelCls}>Registration closes (IST)</span><input type="datetime-local" className={inputCls} value={regClose} onChange={e => setRegClose(e.target.value)} />{fieldErrors.registrationClosesAt && <p className={errCls}>{fieldErrors.registrationClosesAt}</p>}</label>
             <ExaminationConfiguration value={mode} onChange={m => { setMode(m); setImpact(null); }} disabled={saving} error={fieldErrors.interviewEnabled} />
             <div className={`grid gap-2 ${withInterview ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <label className="block"><span className={labelCls}>Exam fee (₹)</span><input type="number" min={1} className={inputCls} value={examFee} onChange={e => setExamFee(e.target.value)} data-testid="ev-exam-fee" />{fieldErrors.examFee && <p className={errCls}>{fieldErrors.examFee}</p>}</label>
+              <label className="block"><span className={labelCls}>Exam fee (₹)</span><input type="number" min={0} className={inputCls} value={examFee} onChange={e => setExamFee(e.target.value)} data-testid="ev-exam-fee" />{fieldErrors.examFee && <p className={errCls}>{fieldErrors.examFee}</p>}</label>
               {withInterview && <label className="block"><span className={labelCls}>Interview fee (₹)</span><input type="number" min={1} className={inputCls} value={interviewFee} onChange={e => setInterviewFee(e.target.value)} data-testid="ev-interview-fee" />{fieldErrors.interviewFee && <p className={errCls}>{fieldErrors.interviewFee}</p>}</label>}
             </div>
             {withInterview && <>
@@ -213,7 +214,7 @@ const DetailDialog: React.FC<{ id: string; editable: boolean; onClose: () => voi
             <dt className="text-text-muted">Registration</dt><dd>{ev.registrationOpensAtIST || 'Open now'} → {ev.registrationClosesAtIST || 'until the exam closes'}</dd>
             {ev.cancelReason && (<><dt className="text-text-muted">Cancelled</dt><dd>{ev.cancelReason}</dd></>)}
             <dt className="text-text-muted">Examination</dt><dd data-testid="ev-mode">{ev.interviewEnabled === false ? 'Exam Only' : 'Exam + Interview'}</dd>
-            {ev.interviewEnabled !== false && ev.examFee && ev.interviewFee ? (<><dt className="text-text-muted">Fees</dt><dd data-testid="ev-fees">Exam ₹{ev.examFee} / Interview ₹{ev.interviewFee} / Total ₹{ev.examFee + ev.interviewFee}</dd></>) : null}
+            {ev.interviewEnabled !== false && ev.examFee != null && ev.interviewFee ? (<><dt className="text-text-muted">Fees</dt><dd data-testid="ev-fees">Exam {ev.examFee === 0 ? 'Free' : `₹${ev.examFee}`} / Interview ₹{ev.interviewFee} / Total ₹{ev.examFee + ev.interviewFee}</dd></>) : null}
             {ev.interviewEnabled !== false && ev.interviewOpensAtIST && (<><dt className="text-text-muted">Interview</dt><dd>{ev.interviewOpensAtIST} → {ev.interviewClosesAtIST}</dd></>)}
             {ev.resultsPublishAtIST && (<><dt className="text-text-muted">Results</dt><dd>{ev.resultsPublishAtIST}</dd></>)}
             <dt className="text-text-muted">Registered</dt><dd>{String(ev.students ?? '—')}</dd><dt className="text-text-muted">Submitted</dt><dd>{String(ev.submissions ?? '—')}</dd>
@@ -329,8 +330,8 @@ const EventsPanel: React.FC<{ selectedId: string; onSelect: (id: string) => void
             </div>
             <p className="text-xs text-text-secondary mt-2">Opens {e.startDateIST} · Closes {e.endDateIST} · {e.registration === 'draft' ? 'Not published - students cannot see it' : e.registration === 'cancelled' ? 'Cancelled' : `Registration ${e.registration === 'open' ? 'open' : e.registration === 'closed' ? 'closed' : 'not open yet'}`} · {e.examCount} exam{e.examCount === 1 ? '' : 's'}</p>
             <p className="text-xs text-text-secondary">Registered students {String(e.students ?? 0)} · Registrations {String(e.registrations ?? 0)} · Submitted {String(e.submissions ?? 0)}{e.interviewEnabled !== false && e.interviewEligible !== undefined ? ` · Interview eligible ${e.interviewEligible}` : ''}</p>
-            {e.interviewEnabled === false && e.examFee ? <p className="text-xs text-text-secondary" data-testid="event-fees">Exam fee ₹{e.examFee}{e.registrationClosesAtIST ? ` · Registration closes ${e.registrationClosesAtIST}` : ''}</p> : null}
-            {e.interviewEnabled !== false && e.examFee && e.interviewFee ? <p className="text-xs text-text-secondary" data-testid="event-fees">Fees: Exam ₹{e.examFee} / Interview ₹{e.interviewFee} / Total ₹{e.examFee + e.interviewFee}{e.registrationClosesAtIST ? ` · Registration closes ${e.registrationClosesAtIST}` : ''}</p> : null}
+            {e.interviewEnabled === false && e.examFee != null ? <p className="text-xs text-text-secondary" data-testid="event-fees">Exam fee {e.examFee === 0 ? 'Free' : `₹${e.examFee}`}{e.registrationClosesAtIST ? ` · Registration closes ${e.registrationClosesAtIST}` : ''}</p> : null}
+            {e.interviewEnabled !== false && e.examFee != null && e.interviewFee ? <p className="text-xs text-text-secondary" data-testid="event-fees">Fees: Exam {e.examFee === 0 ? 'Free' : `₹${e.examFee}`} / Interview ₹{e.interviewFee} / Total ₹{e.examFee + e.interviewFee}{e.registrationClosesAtIST ? ` · Registration closes ${e.registrationClosesAtIST}` : ''}</p> : null}
             {e.interviewEnabled !== false && e.interviewOpensAtIST ? <p className="text-xs text-text-secondary" data-testid="event-interview-schedule">Interview {e.interviewOpensAtIST} → {e.interviewClosesAtIST}{e.resultsPublishAtIST ? ` · Results ${e.resultsPublishAtIST}` : ''}</p> : null}
             <div className="flex flex-wrap gap-2 mt-3">
               <button type="button" className="btn-secondary text-xs px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5" onClick={() => setDialog({ id: e._id, editable: false })}><Eye className="w-3.5 h-3.5" /> View</button>
