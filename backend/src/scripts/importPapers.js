@@ -1,9 +1,9 @@
 /**
- * Import the question papers (Standards 1-10) of a dated Olympiad event (24 Oct or 31 Oct 2026) into that event. The set is chosen by the event date.
+ * Import the question papers (Standards 1-10) of a dated Olympiad event (24 Oct, 31 Oct or 11 Nov 2026) into that event. The set is chosen by the event date.
  *
  *   node src/scripts/importPapers.js                    # dry run (default): prints what WOULD change, writes nothing
  *   node src/scripts/importPapers.js --apply            # imports + applies the agreed event settings (fees, deadline, interview, results)
- *   node src/scripts/importPapers.js --dir <private folder>   # base folder; 24 Oct: std1.json.. directly in it, 31 Oct: in its oct31 sub-folder (or set OLYMPIAD_PAPER_DIR); never inside the repository
+ *   node src/scripts/importPapers.js --dir <private folder>   # base folder; 24 Oct: std1.json.. directly in it, 31 Oct: oct31 sub-folder, 11 Nov: nov11 sub-folder (or set OLYMPIAD_PAPER_DIR); never inside the repository
  *   node src/scripts/importPapers.js --event <id>       # pick the event when more than one qualifies
  *   node src/scripts/importPapers.js --day 2026-10-31   # find the event by its exam date (exactly one must match; its name, id and state are printed)
  *   node src/scripts/importPapers.js --standards 1,2,3  # limit to some standards
