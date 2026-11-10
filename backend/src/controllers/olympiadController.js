@@ -1707,7 +1707,7 @@ module.exports = {
   teacherListExams, teacherAttempts,
   startOlympiadSweeper, autoSubmitExpiredAttempts,
   // used by the proctoring adapters (services/proctoring/adapters.js) - the Olympiad rules stay in this file
-  _proctoring: { loadExam, assertEligibleStudent, assertCanAccessExam, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt, isApprovalExam, resolveAccess },
+  _proctoring: { loadExam, assertEligibleStudent, assertCanAccessExam, assertWindowOpen, expireIfNeeded, applyAnswers, finalizeAttempt, isApprovalExam, isFreeExam, resolveAccess },
   // exported for tests
   _internals: { evaluate, windowState, finalizeAttempt, markPaymentSuccess, ensureEvaluated, resultSummary, responsesToObject, buildState, examPublic },
 };
