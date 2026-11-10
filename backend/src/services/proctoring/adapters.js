@@ -125,6 +125,7 @@ const olympiadAdapter = {
         await o.resolveAccess(exam, user);
         return { eligible: true, resume: false, exam };
       }
+      if (o.isFreeExam(exam)) return { eligible: true, resume: false, exam }; // fee 0 = free for all students
       const paid = (await require('../examAccess').entitlementFor(user._id, exam._id)).entitled; // verified payment OR an administrator exception
       if (!paid) return { eligible: false, code: 'PAYMENT_REQUIRED', message: `Please unlock the examination (₹10 or 1 credit) before starting.`, exam };
       return { eligible: true, resume: false, exam };

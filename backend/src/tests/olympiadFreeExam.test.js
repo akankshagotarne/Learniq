@@ -40,3 +40,13 @@ test('the Olympiad model accepts fee 0 and examFee 0 but not negatives', () => {
   assert.match(msg(bad({ fee: -1 })) || '', /fee/);
   assert.match(msg(bad({ fee: 10, examFee: -1 })) || '', /examFee/);
 });
+
+test('proctoring eligibility treats a fee-0 Olympiad as free (no PAYMENT_REQUIRED)', async () => {
+  const o = require('../controllers/olympiadController')._proctoring;
+  assert.equal(typeof o.isFreeExam, 'function');
+  assert.equal(o.isFreeExam({ fee: 0 }), true);
+  assert.equal(o.isFreeExam({ fee: 20 }), false);
+  assert.equal(o.isFreeExam({ fee: 20, examFee: 0 }), true);
+  assert.equal(o.isFreeExam({ fee: 0, examFee: 50 }), false);
+  assert.equal(o.isFreeExam({ fee: 0, accessMode: 'approval' }), false); // engineering mock keeps its approval flow
+});
