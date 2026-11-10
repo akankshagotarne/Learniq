@@ -56,7 +56,10 @@ const OlympiadInterviewCard: React.FC<Props> = ({ exam, interview, creditBalance
       <p className="text-xs text-text-muted mt-1">Standard {exam.standard} · {exam.title}</p>
       <p className="text-[11px] text-text-secondary mt-1" data-testid="interview-included-line"><b>Interview Included</b> · {exam.interviewVia === 'SUBSCRIPTION' ? <span data-testid="included-in-plan">Included in your plan</span> : <>Interview fee {formatRupees(price)}</>} · <span data-testid="interview-payment-status">{unlocked ? 'Interview Payment Successful' : 'Interview Payment Pending'}</span></p>
 
-      {!unlocked && (
+      {!unlocked && exam.interviewWindowState === 'closed' && (
+        <p className="mt-3 text-xs font-semibold text-text-secondary" data-testid="interview-window-closed">Interview Window Closed - the interview can no longer be unlocked for this event.</p>
+      )}
+      {!unlocked && exam.interviewWindowState !== 'closed' && (
         <div className="mt-3 space-y-2" data-testid="interview-unlock-options">
           <p className="text-[11px] text-text-secondary">
             {examSubmitted

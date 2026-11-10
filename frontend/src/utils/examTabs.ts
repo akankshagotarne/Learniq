@@ -23,13 +23,24 @@ const tabFromState = (state: string): ExamTab | null => {
   return AVAILABLE_STATES.includes(state) ? 'available' : null;
 };
 
+const IST_MS = 5.5 * 3600 * 1000;
+/** true once the END (23:59:59.999 IST) of the day on which the event's results are announced has passed */
+const pastResultDay = (exam: { resultsAnnounceAt?: string | null; interviewWindowState?: string }, now: number): boolean => {
+  const at = exam.resultsAnnounceAt ? Date.parse(exam.resultsAnnounceAt) : NaN;
+  if (Number.isNaN(at)) return exam.interviewWindowState === 'closed'; // no result day known: the closed interview window ends it
+  const dayEnd = Math.floor((at + IST_MS) / 86400000) * 86400000 + 86400000 - IST_MS;
+  return now >= dayEnd;
+};
+
 export const olympiadTab = (
-  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean; interviewIncluded?: boolean },
+  exam: { state: string; accessMode?: string; tab?: ExamTab; interviewUnlocked?: boolean; interviewIncluded?: boolean; resultsAnnounceAt?: string | null; interviewWindowState?: string },
   interview?: InterviewInfo,
+  now: number = Date.now(),
 ): ExamTab | null => {
   const tab = exam.tab || tabFromState(exam.state);
   if (tab !== 'completed') return tab;
   if (exam.interviewIncluded === false) return 'completed'; // Exam Only event: a submitted exam is simply completed - there is no interview to wait for
+  if (exam.accessMode !== 'approval' && pastResultDay(exam, now)) return 'completed'; // the event is over (result day ended): it lives under Completed only
   const needsInterview = !!interview && exam.accessMode !== 'approval' && interview.stage !== undefined && interview.stage !== 'LOCKED';
   if (needsInterview && !interview!.workflowComplete) return 'available';
   // the interview is a separate purchase: a submitted exam whose interview is still LOCKED (not bought yet) stays Available so it can be unlocked
